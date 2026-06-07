@@ -1,0 +1,5 @@
+# Allocation Rules
+Use adaptive distributions.
+Consider total points, songs, score density, fit weighting, and points-to-songs ratio.
+Do not force symmetry.
+Ask for compressed, balanced, or top-heavy if unclear.

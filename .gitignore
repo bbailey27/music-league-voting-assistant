@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editor / IDE
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# Round exports and analysis output (keep folders, ignore contents)
+rounds/*
+!rounds/.gitkeep
+analysis/*
+!analysis/.gitkeep

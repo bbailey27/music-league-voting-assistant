@@ -1,0 +1,8 @@
+# Parsing Rules
+Numeric parsing ALWAYS occurs before evaluation.
+755→75.5, 745→74.5, 735→73.5, 725→72.5, 715→71.5.
+73= is treated as 73+ (common typing error).
+? indicates uncertainty only.
+7?→70.0 with uncertainty flag.
+'-' by itself means below consideration/not worth scoring.
+Never cluster by string similarity.

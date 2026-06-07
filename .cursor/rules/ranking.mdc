@@ -1,0 +1,6 @@
+# Ranking Rules
+Sort by numeric score first.
+Uncertainty never changes baseline ordering.
+Compare uncertain songs against adjacent tiers only when near a cutoff.
+Keep equal scores in the same tier whenever practical.
+This preference applies primarily to music-score ranking and does not override meaningful fit differences.
