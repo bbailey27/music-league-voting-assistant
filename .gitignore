@@ -9,6 +9,9 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
+# Node
+node_modules/
+
 # Editor / IDE
 .idea/
 *.swp

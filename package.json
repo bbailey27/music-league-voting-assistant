@@ -1,0 +1,14 @@
+{
+  "name": "music-league-voting-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic Music League round parser + draft vote allocator.",
+  "scripts": {
+    "parse": "node scripts/parse-round.mjs",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "linkedom": "^0.18.5"
+  }
+}
