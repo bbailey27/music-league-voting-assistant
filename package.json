@@ -6,6 +6,7 @@
   "description": "Deterministic Music League round parser + draft vote allocator.",
   "scripts": {
     "parse": "node scripts/parse-round.mjs",
+    "render-fit": "node scripts/render-fit-html.mjs",
     "lint": "eslint ."
   },
   "dependencies": {

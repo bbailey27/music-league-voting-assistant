@@ -91,6 +91,29 @@ That's expected — treat the allocation as a starting point and rebalance. A mo
 - a **raw-order table** for entering votes back into Music League in song order,
 - lists of songs that need a score, were disqualified, or need review.
 
+## The fit report (HTML)
+
+For lyric/theme rounds, the fit research lives in a JSON sidecar
+(`analysis/<roundname>-fit.json`) that the agent produces — that JSON is the
+source of truth. Render it to a readable, mobile-friendly HTML report:
+
+```bash
+node scripts/render-fit-html.mjs analysis/<roundname>-fit.json [--out <path>] [--order fit|raw]
+# or: npm run render-fit -- analysis/<roundname>-fit.json
+```
+
+The HTML (not a markdown table) is the going-forward fit format: each candidate
+is a **card** with a narrow identity column (raw-order # / title / artist
+stacked) so the rationale/notes get the full width instead of being squeezed by
+a wide table. Output is self-contained (inline CSS, no network), light/dark
+aware, and collapses to a single column on mobile — handy for the eventual
+client-side app.
+
+- `--order fit` (default): sort cards by `fitScore` (raw-order # still shown on each).
+- `--order raw`: keep Music League submission order.
+- Optional `highlights` (string array) and `combine` (`{ note, options[] }`)
+  fields in the JSON render as extra sections when present.
+
 ## Repo layout
 
 - `scripts/parse-round.mjs` — the deterministic parser + allocator.
