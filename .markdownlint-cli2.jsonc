@@ -1,0 +1,13 @@
+{
+  // Shared by markdownlint-cli2 (CLI) and the VS Code markdownlint extension,
+  // so editor squiggles and `just lint` agree.
+  "config": {
+    "default": true,
+    // Long prose lines and wide tables are fine in this repo.
+    "MD013": false,
+  },
+  "globs": ["**/*.md"],
+  // node_modules + generated output; .cursor holds tool-generated plans;
+  // tests/regressions are terse one-line fixtures, not prose docs.
+  "ignores": ["node_modules", "rounds", "analysis", ".cursor", "tests"],
+}

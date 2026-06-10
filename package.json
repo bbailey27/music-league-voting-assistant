@@ -5,9 +5,15 @@
   "type": "module",
   "description": "Deterministic Music League round parser + draft vote allocator.",
   "scripts": {
+    "ml": "node scripts/ml.mjs",
     "parse": "node scripts/parse-round.mjs",
     "render-fit": "node scripts/render-fit-html.mjs",
-    "lint": "eslint ."
+    "lint": "npm run lint:js && npm run lint:md",
+    "lint:js": "eslint .",
+    "lint:md": "markdownlint-cli2",
+    "fix": "npm run fix:js && npm run fix:md",
+    "fix:js": "eslint . --fix",
+    "fix:md": "markdownlint-cli2 --fix"
   },
   "dependencies": {
     "linkedom": "^0.18.5"

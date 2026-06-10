@@ -3,6 +3,7 @@
 ? may mean up or down.
 
 Do not assume:
+
 - midpoint
 - upward bias
 - downward bias

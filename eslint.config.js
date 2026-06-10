@@ -1,18 +1,15 @@
 import js from '@eslint/js';
-import globals from 'globals';
 
 export default [
-  {
-    ignores: ['node_modules/**', 'analysis/**', 'rounds/**'],
-  },
+  { ignores: ['node_modules/**', 'rounds/**', 'analysis/**'] },
   js.configs.recommended,
   {
-    files: ['**/*.{js,mjs,cjs}'],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: 'module',
       globals: {
-        ...globals.node,
+        process: 'readonly',
+        console: 'readonly',
       },
     },
   },

@@ -1,6 +1,7 @@
 # Comment Interpretation
 
 Comments may belong to:
+
 1. Submitter
 2. User
 
@@ -9,6 +10,7 @@ Do not assume ownership if unclear.
 Preserve user comments verbatim in outputs whenever practical.
 
 Comments may contain:
+
 - reactions
 - fit analysis
 - score notes
@@ -22,6 +24,7 @@ Examples:
 These are valid scoring evidence and should not be discarded.
 
 Terms such as:
+
 - red boxed
 - yellow boxed
 - beat me to it
