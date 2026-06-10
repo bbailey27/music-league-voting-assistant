@@ -71,8 +71,23 @@ function baseNames(dir, suffix) {
     .sort();
 }
 
+// A round's input can be a saved HTML export or pasted round text.
 function roundNames() {
-  return baseNames(ROUNDS_DIR, '.html');
+  return [
+    ...new Set([
+      ...baseNames(ROUNDS_DIR, '.html'),
+      ...baseNames(ROUNDS_DIR, '.txt'),
+    ]),
+  ].sort();
+}
+
+// The file to feed the parser: prefer the richer HTML export, fall back to text.
+function inputPathFor(name) {
+  const html = join(ROUNDS_DIR, `${name}.html`);
+  const txt = join(ROUNDS_DIR, `${name}.txt`);
+  if (existsSync(html)) return html;
+  if (existsSync(txt)) return txt;
+  return html; // default for messaging when neither exists yet
 }
 
 function fitBaseNames() {
@@ -89,12 +104,16 @@ function roundBases() {
 // ---------------------------------------------------------------------------
 function pipelineState(name) {
   const htmlPath = join(ROUNDS_DIR, `${name}.html`);
+  const txtPath = join(ROUNDS_DIR, `${name}.txt`);
   const mdPath = join(ANALYSIS_DIR, `${name}.md`);
   const jsonPath = join(ANALYSIS_DIR, `${name}.json`);
   const fitJsonPath = join(ANALYSIS_DIR, `${name}-fit.json`);
   const fitHtmlPath = join(ANALYSIS_DIR, `${name}-fit.html`);
 
   const hasHtml = existsSync(htmlPath);
+  const hasTxt = existsSync(txtPath);
+  const hasInput = hasHtml || hasTxt;
+  const inputPath = hasHtml ? htmlPath : txtPath;
   const hasParse = existsSync(mdPath) && existsSync(jsonPath);
   const hasFitJson = existsSync(fitJsonPath);
   const hasFitHtml = existsSync(fitHtmlPath);
@@ -120,11 +139,15 @@ function pipelineState(name) {
   return {
     name,
     htmlPath,
+    txtPath,
+    inputPath,
     mdPath,
     jsonPath,
     fitJsonPath,
     fitHtmlPath,
     hasHtml,
+    hasTxt,
+    hasInput,
     hasParse,
     hasFitJson,
     hasFitHtml,
@@ -136,8 +159,11 @@ function pipelineState(name) {
 // Next *scriptable* step, or a manual/advisory reminder. Blank-score boxes
 // never gate this — they only surface as a warning.
 function nextStep(st) {
-  if (!st.hasHtml) {
-    return { kind: 'manual', label: `export the round HTML to ${st.htmlPath}` };
+  if (!st.hasInput) {
+    return {
+      kind: 'manual',
+      label: `export the round to ${st.htmlPath} (or paste round text to ${st.txtPath})`,
+    };
   }
   if (!st.hasParse) {
     return { kind: 'parse', label: `parse the round → ${st.mdPath} + ${st.jsonPath}` };
@@ -181,7 +207,7 @@ function runScript(scriptName, args) {
 // ---------------------------------------------------------------------------
 function cmdParse(name, flags) {
   const base = resolveOrExit(name, roundNames(), 'round');
-  process.exit(runScript('parse-round.mjs', [join(ROUNDS_DIR, `${base}.html`), ...flags]));
+  process.exit(runScript('parse-round.mjs', [inputPathFor(base), ...flags]));
 }
 
 function cmdFit(name, flags) {
@@ -198,7 +224,7 @@ function cmdRun(name) {
 
   switch (step.kind) {
     case 'parse':
-      process.exit(runScript('parse-round.mjs', [st.htmlPath]));
+      process.exit(runScript('parse-round.mjs', [st.inputPath]));
       break;
     case 'render':
       process.exit(runScript('render-fit-html.mjs', [st.fitJsonPath]));
@@ -223,8 +249,13 @@ function checkbox(done, stale = false) {
 function cmdStatusOne(name) {
   const st = pipelineState(name);
   const step = nextStep(st);
+  const inputLabel = st.hasHtml
+    ? st.htmlPath + (st.hasTxt ? ' (+ .txt)' : '')
+    : st.hasTxt
+      ? st.txtPath
+      : st.htmlPath;
   console.log(`Round: ${name}`);
-  console.log(`  ${checkbox(st.hasHtml)} HTML export    ${st.htmlPath}`);
+  console.log(`  ${checkbox(st.hasInput)} Round input    ${inputLabel}`);
   console.log(`  ${checkbox(st.hasParse)} Parse          ${st.mdPath} + ${st.jsonPath}`);
   console.log(
     `  ${checkbox(st.hasFitJson)} Fit research   ${st.fitJsonPath}   (thematic rounds only)`
@@ -247,7 +278,7 @@ function cmdStatusAll() {
     const st = pipelineState(name);
     const step = nextStep(st);
     const marks =
-      checkbox(st.hasHtml) +
+      checkbox(st.hasInput) +
       checkbox(st.hasParse) +
       checkbox(st.hasFitJson) +
       checkbox(st.hasFitHtml, st.hasFitHtml && !st.fitHtmlFresh);
