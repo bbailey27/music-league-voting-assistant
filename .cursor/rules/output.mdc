@@ -4,3 +4,4 @@ Include ranked table.
 Preserve submitter comments and user comments verbatim whenever practical.
 Highlight cutoff songs, uncertainty cases, fit/music disagreements, and songs that depend heavily on interpretation.
 Fit output is the generated HTML report (`scripts/render-fit-html.mjs` rendered from the fit JSON sidecar), not a markdown table.
+When an allocation exists (`draftVotes` set), end both the HTML and the markdown companion with a raw-order vote-transfer table: just `#` / title / artist / points + total, for copying back into Music League. The HTML renders this automatically.

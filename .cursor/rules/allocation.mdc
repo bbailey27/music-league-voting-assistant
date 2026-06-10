@@ -1,5 +1,22 @@
 # Allocation Rules
+
 Use adaptive distributions.
 Consider total points, songs, score density, fit weighting, and points-to-songs ratio.
 Do not force symmetry.
 Ask for compressed, balanced, or top-heavy if unclear.
+
+## Tiering
+
+Allocate by tiers, not by raw blended decimals. Group near-ties into one tier and give them
+equal points; never split a near-tie. Equal music with a small fit gap (≈≤3) stays in the same
+tier. Keep the spread modest (top tier ≤ ~2-3× a lower tier) but avoid flat equality.
+
+## Fit-weighted rounds
+
+1. Qualifier gate first: below the fit cutoff (usually "good fit" = solid+) earns no points,
+   regardless of music. A loved-but-poor-fit song only takes a leftover point.
+2. combined = wFit×fit + wMusic×music (record weights; fit-heavy by default).
+3. Tier qualifiers by fit band, then music within a band; small fit gaps do not override equal
+   music scores.
+4. A song carried only by fit (music lagging its tier) may be bumped down one tier — document
+   the call.

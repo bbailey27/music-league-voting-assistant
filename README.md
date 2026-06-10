@@ -110,9 +110,13 @@ aware, and collapses to a single column on mobile — handy for the eventual
 client-side app.
 
 - `--order fit` (default): sort cards by `fitScore` (raw-order # still shown on each).
+- `--order combined`: sort by `combinedScore` (the music+fit blend), when music scores have been merged in.
 - `--order raw`: keep Music League submission order.
 - Optional `highlights` (string array) and `combine` (`{ note, options[] }`)
   fields in the JSON render as extra sections when present.
+- When songs carry `draftVotes`, the report ends with a **vote-transfer table**: raw
+  submission order with just `#` / title / artist / points + total, for copying votes
+  back into Music League.
 
 ## Repo layout
 

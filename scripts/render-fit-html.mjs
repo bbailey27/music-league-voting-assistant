@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Render a fit-research JSON sidecar into a self-contained, mobile-friendly HTML report.
-// Usage: node scripts/render-fit-html.mjs <fit.json> [--out <path>] [--order fit|raw]
+// Usage: node scripts/render-fit-html.mjs <fit.json> [--out <path>] [--order fit|combined|raw]
 //
 // The JSON is the source of truth (same file the agent produces during fit research).
 // This script only presents it: each candidate is a card with a narrow identity column
@@ -106,7 +106,7 @@ ${rows}
 </section>`;
 }
 
-function renderCard(s) {
+function renderCard(s, combineLabel) {
   const hue = tierHue(s.fitTier);
   const themes = Array.isArray(s.themesHit) ? s.themesHit : [];
   const themeChips = themes.length
@@ -121,6 +121,18 @@ function renderCard(s) {
   if (s.basis) meta.push(`<span class="meta-item">basis: ${esc(s.basis)}</span>`);
   if (s.submitterAssist) meta.push('<span class="meta-item">submitter-assist</span>');
 
+  const scores = [`<span class="score" title="fit score">fit ${formatScore(s.fitScore)}</span>`];
+  if (s.musicScore != null)
+    scores.push(`<span class="score music" title="your music score">music ${formatScore(s.musicScore)}</span>`);
+  if (s.combinedScore != null)
+    scores.push(
+      `<span class="score combined" title="${esc(combineLabel || 'music+fit blend')}">combined ${formatScore(s.combinedScore)}</span>`
+    );
+  if (s.draftVotes != null)
+    scores.push(
+      `<span class="score votes${s.draftVotes > 0 ? ' has-votes' : ''}" title="draft upvotes">${formatScore(s.draftVotes)} ▲</span>`
+    );
+
   return `<article class="card" style="--tier-hue:${hue}">
   <div class="identity">
     <span class="rank">#${esc(s.rawOrderIndex)}</span>
@@ -130,11 +142,12 @@ function renderCard(s) {
   <div class="body">
     <div class="card-head">
       <span class="tier">${esc(s.fitTier)}</span>
-      <span class="score">${formatScore(s.fitScore)}</span>
+      ${scores.join('')}
       <div class="themes">${themeChips}</div>
     </div>
     ${flagChips ? `<div class="flags">${flagChips}</div>` : ''}
     ${s.rationale ? `<p class="rationale">${esc(s.rationale)}</p>` : ''}
+    ${s.musicComment ? `<p class="music-note"><span class="label">your note</span> ${esc(s.musicComment)}</p>` : ''}
     ${meta.length ? `<div class="meta">${meta.join('')}</div>` : ''}
   </div>
 </article>`;
@@ -144,15 +157,31 @@ function renderCandidates(data, order) {
   const songs = Array.isArray(data.songs) ? data.songs.slice() : [];
   if (order === 'raw') {
     songs.sort((a, b) => (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0));
+  } else if (order === 'combined') {
+    songs.sort(
+      (a, b) =>
+        (b.combinedScore ?? b.fitScore ?? 0) - (a.combinedScore ?? a.fitScore ?? 0) ||
+        (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0)
+    );
   } else {
     songs.sort(
       (a, b) => (b.fitScore ?? 0) - (a.fitScore ?? 0) || (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0)
     );
   }
-  const heading = order === 'raw' ? 'Candidates (raw order)' : 'Candidates (by fit)';
+  const heading =
+    order === 'raw'
+      ? 'Candidates (raw order)'
+      : order === 'combined'
+        ? 'Candidates (by combined score)'
+        : 'Candidates (by fit)';
+  const w = data.combineWeights;
+  const combineLabel =
+    w && w.fit != null && w.music != null
+      ? `${Math.round(w.fit * 100)}% fit / ${Math.round(w.music * 100)}% music`
+      : 'music+fit blend';
   return `<section class="candidates">
   <h2>${heading}</h2>
-  ${songs.map(renderCard).join('\n')}
+  ${songs.map((s) => renderCard(s, combineLabel)).join('\n')}
 </section>`;
 }
 
@@ -165,6 +194,36 @@ function renderHighlights(data) {
   <ul>
 ${lis}
   </ul>
+</section>`;
+}
+
+function renderTransfer(data) {
+  const songs = Array.isArray(data.songs) ? data.songs.slice() : [];
+  if (!songs.length) return '';
+  // Only worth showing once an allocation exists.
+  if (!songs.some((s) => s.draftVotes != null)) return '';
+  songs.sort((a, b) => (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0));
+  const total = songs.reduce((sum, s) => sum + (Number(s.draftVotes) || 0), 0);
+  const rows = songs
+    .map(
+      (s) => `<tr${s.draftVotes > 0 ? ' class="has-votes"' : ''}>
+      <td class="num">${esc(s.rawOrderIndex)}</td>
+      <td>${esc(s.title)}</td>
+      <td class="muted">${esc(s.artist)}</td>
+      <td class="num votes">${formatScore(s.draftVotes ?? 0)}</td>
+    </tr>`
+    )
+    .join('\n');
+  return `<section class="transfer">
+  <h2>Vote transfer (raw order)</h2>
+  <p class="muted">Songs in Music League submission order with the draft upvotes — for entering back into the app.</p>
+  <table>
+    <thead><tr><th class="num">#</th><th>Title</th><th>Artist</th><th class="num">Votes</th></tr></thead>
+    <tbody>
+${rows}
+    </tbody>
+    <tfoot><tr><td></td><td></td><td class="num">Total</td><td class="num">${formatScore(total)}</td></tr></tfoot>
+  </table>
 </section>`;
 }
 
@@ -249,9 +308,18 @@ th { color: var(--muted); font-weight: 600; }
 .identity .artist { color: var(--muted); font-size: .9rem; overflow-wrap: anywhere; }
 
 .body { min-width: 0; }
-.card-head { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; margin-bottom: .5rem; }
-.card-head .score { font-weight: 700; font-variant-numeric: tabular-nums; }
+.card-head { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; margin-bottom: .5rem; }
+.card-head .score {
+  font-weight: 700; font-variant-numeric: tabular-nums; font-size: .8rem;
+  padding: .1rem .45rem; border-radius: 6px; border: 1px solid var(--line); color: var(--muted);
+}
+.card-head .score.combined { color: var(--fg); background: hsl(var(--tier-hue) 60% 50% / .14); border-color: hsl(var(--tier-hue) 60% 50% / .3); }
+.card-head .score.votes { color: var(--muted); }
+.card-head .score.votes.has-votes { color: #fff; background: hsl(var(--tier-hue) 65% 42%); border-color: hsl(var(--tier-hue) 65% 42%); }
+@media (prefers-color-scheme: dark) { .card-head .score.votes.has-votes { color: #0d0f12; background: hsl(var(--tier-hue) 65% 65%); border-color: hsl(var(--tier-hue) 65% 65%); } }
 .themes { display: flex; flex-wrap: wrap; gap: .3rem; }
+.music-note { margin: .25rem 0 .5rem; color: var(--muted); font-size: .9rem; }
+.music-note .label { text-transform: uppercase; letter-spacing: .04em; font-size: .7rem; font-weight: 700; margin-right: .35rem; }
 .flags { display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: .5rem; }
 .flag {
   display: inline-block; padding: .1rem .45rem; border-radius: 6px; font-size: .75rem;
@@ -262,6 +330,11 @@ th { color: var(--muted); font-weight: 600; }
 .meta { display: flex; flex-wrap: wrap; gap: .75rem; color: var(--muted); font-size: .82rem; }
 
 .highlights li, .combine li { margin: .3rem 0; }
+
+.transfer td.votes { font-weight: 700; }
+.transfer tr.has-votes td.votes { color: hsl(145 60% 38%); }
+@media (prefers-color-scheme: dark) { .transfer tr.has-votes td.votes { color: hsl(145 60% 62%); } }
+.transfer tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: none; }
 
 @media (max-width: 560px) {
   .card { grid-template-columns: 1fr; gap: .5rem; }
@@ -287,6 +360,7 @@ ${renderScale(data)}
 ${renderCandidates(data, order)}
 ${renderHighlights(data)}
 ${renderCombine(data)}
+${renderTransfer(data)}
 </main>
 </body>
 </html>
@@ -299,11 +373,11 @@ ${renderCombine(data)}
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.file) {
-    console.error('Usage: node scripts/render-fit-html.mjs <fit.json> [--out <path>] [--order fit|raw]');
+    console.error('Usage: node scripts/render-fit-html.mjs <fit.json> [--out <path>] [--order fit|combined|raw]');
     process.exit(1);
   }
-  if (!['fit', 'raw'].includes(args.order)) {
-    console.error(`Invalid --order "${args.order}" (use fit or raw)`);
+  if (!['fit', 'raw', 'combined'].includes(args.order)) {
+    console.error(`Invalid --order "${args.order}" (use fit, combined, or raw)`);
     process.exit(1);
   }
 
