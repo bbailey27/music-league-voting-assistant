@@ -1485,7 +1485,7 @@ function renderTierStructure(L, t) {
   L.push('');
 }
 
-export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mode, tradeoffs }) {
+export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mode, tradeoffs, ownSongs = [] }) {
   const scored = songs.filter((s) => s.score != null).sort(rankedSort);
   const disqualified = songs.filter((s) => s.isDisqualified);
   const needsInput = songs.filter((s) => s.needsUserInput);
@@ -1540,7 +1540,14 @@ export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mo
   L.push('');
   L.push('| Order | Title | Votes | My score |');
   L.push('|---|---|---|---|');
-  for (const s of songs) {
+  // Interleave the user's own (unscored) submission so every raw index is present —
+  // the user enters votes by position, so a hidden gap risks a misaligned ballot.
+  const rawOrderRows = [...songs, ...ownSongs].sort((a, b) => a.rawOrderIndex - b.rawOrderIndex);
+  for (const s of rawOrderRows) {
+    if (s.isOwn) {
+      L.push(`| ${s.rawOrderIndex} | ${cell(s.title)} | — | (your song — not scored) |`);
+      continue;
+    }
     let raw;
     if (s.score != null) raw = formatScore(s.score) + (flagsOf(s) ? ' ' + flagsOf(s) : '');
     else if (s.needsUserInput) raw = '(needs score)';
@@ -1590,7 +1597,7 @@ export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mo
   return L.join('\n');
 }
 
-export function buildJsonPayload({ round, budget, songs, totalSongs, ownSkipped, mode, tradeoffs }) {
+export function buildJsonPayload({ round, budget, songs, totalSongs, ownSkipped, mode, tradeoffs, ownSongs = [] }) {
   return {
     round,
     mode,
@@ -1601,6 +1608,12 @@ export function buildJsonPayload({ round, budget, songs, totalSongs, ownSkipped,
       allocated: songs.reduce((a, s) => a + (s.finalVotes || 0), 0),
       downAllocated: songs.reduce((a, s) => a + (s.finalDownvotes || 0), 0),
     },
+    ownSongs: ownSongs.map((s) => ({
+      rawOrderIndex: s.rawOrderIndex,
+      title: s.title,
+      artist: s.artist,
+      isOwn: true,
+    })),
     tradeoffs: Array.isArray(tradeoffs) ? tradeoffs : [],
     songs: songs.map((s) => ({
       rawOrderIndex: s.rawOrderIndex,

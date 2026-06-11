@@ -19,6 +19,25 @@ export function decodeEntities(s) {
     .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)));
 }
 
+// Recover round markup that was double-wrapped by a rich-text editor.
+//
+// When someone opens the round page's *View Source* and pastes it into
+// TextEdit / Notes / Mail, macOS re-encodes the real HTML as escaped text and
+// lays each source line into its own `<td class="td1"><p>…</p></td>` cell
+// (the file announces itself with `Generator: Cocoa HTML Writer`). The genuine
+// `vote.html` markup survives intact inside those cells, just entity-escaped and
+// line-split. This rebuilds the original source string by reading each cell's
+// decoded text content; returns null when the document isn't such a wrapper or
+// doesn't contain a song list to recover.
+export function recoverEscapedSource(document) {
+  const cells = [...document.querySelectorAll('td.td1 > p')];
+  if (cells.length === 0) return null;
+  const text = cells.map((p) => (p.textContent || '').replace(/\u00a0/g, ' ')).join('\n');
+  // Only claim recovery when the rebuilt text actually looks like a round.
+  if (!/id="song-\d|class="song"/.test(text)) return null;
+  return text;
+}
+
 // Read element text, converting <br> to newlines (for the submitter quote).
 function richText(el) {
   if (!el) return '';
@@ -65,17 +84,12 @@ export function parseRoundDocument(document, mode) {
   const totalSongs = songNodes.length;
   let ownSkipped = 0;
   const songs = [];
+  const ownSongs = [];
 
   for (const node of songNodes) {
-    const xdata = node.getAttribute('x-data') || '';
-    if (/mine:\s*true/.test(xdata)) {
-      ownSkipped++;
-      continue; // skip the user's own submission entirely
-    }
-
     const idAttr = node.getAttribute('id') || '';
     const idMatch = idAttr.match(/song-(\d+)/);
-    const rawOrderIndex = idMatch ? Number(idMatch[1]) : songs.length;
+    const rawOrderIndex = idMatch ? Number(idMatch[1]) : songs.length + ownSongs.length;
 
     const titleEl = node.querySelector('h6');
     const meta = titleEl ? titleEl.parentElement : node;
@@ -83,6 +97,17 @@ export function parseRoundDocument(document, mode) {
     const artist = decodeEntities(
       meta.querySelector('span.d-block.text-truncate')?.textContent || ''
     ).trim();
+
+    const xdata = node.getAttribute('x-data') || '';
+    if (/mine:\s*true/.test(xdata)) {
+      ownSkipped++;
+      // The user's own submission never gets scored or allocated, but record its
+      // index/title so the raw-order table can still show the slot — otherwise the
+      // skipped index is an invisible gap the user can misalign votes against.
+      ownSongs.push({ rawOrderIndex, title, artist, isOwn: true });
+      continue;
+    }
+
     const album = decodeEntities(
       meta.querySelector('span.text-body-secondary')?.textContent || ''
     ).trim();
@@ -117,5 +142,6 @@ export function parseRoundDocument(document, mode) {
   }
 
   songs.sort((a, b) => a.rawOrderIndex - b.rawOrderIndex);
-  return { round, budget, songs, totalSongs, ownSkipped };
+  ownSongs.sort((a, b) => a.rawOrderIndex - b.rawOrderIndex);
+  return { round, budget, songs, totalSongs, ownSkipped, ownSongs };
 }

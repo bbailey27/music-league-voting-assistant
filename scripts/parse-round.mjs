@@ -12,7 +12,7 @@ import { basename, join, extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseHTML } from 'linkedom';
 import { allocate, buildMarkdown, buildJsonPayload, mergeFitJson, enrichProfileWithBudget } from './score-core.mjs';
-import { parseRoundDocument } from './extract-html.mjs';
+import { parseRoundDocument, recoverEscapedSource } from './extract-html.mjs';
 import { parseRoundText } from './parse-text.mjs';
 
 // ---------------------------------------------------------------------------
@@ -140,10 +140,19 @@ function buildGate(args) {
   return undefined;
 }
 
-// Parse a saved HTML round via linkedom, then the shared DOM extractor.
+// Parse a saved HTML round via linkedom, then the shared DOM extractor. When the
+// page yields no songs, retry against markup recovered from a rich-text-editor
+// wrapper (View Source pasted into TextEdit/Notes re-encodes the real round).
 function parseRoundHtml(html, mode) {
   const { document } = parseHTML(html);
-  return parseRoundDocument(document, mode);
+  const parsed = parseRoundDocument(document, mode);
+  if (parsed.songs.length) return parsed;
+  const recovered = recoverEscapedSource(document);
+  if (recovered) {
+    const { document: recoveredDoc } = parseHTML(recovered);
+    return parseRoundDocument(recoveredDoc, mode);
+  }
+  return parsed;
 }
 
 // ---------------------------------------------------------------------------
