@@ -1,0 +1,17 @@
+---
+description: Always save finalized plans into the repo's .cursor/plans/ folder
+alwaysApply: true
+---
+
+# Save plans in the repo
+
+When you produce a plan (e.g. via the plan/CreatePlan flow), also persist it
+into this repo at `.cursor/plans/` so it is version-controlled alongside the code.
+
+- Write the plan to `.cursor/plans/<slug>.plan.md` (use the `*.plan.md` suffix to
+  match the existing files in that folder).
+- Use a short, descriptive kebab-case slug for `<slug>`.
+- Keep YAML frontmatter consistent with the other plans (`name`, `overview`,
+  `status`, `isProject`).
+- If a plan tool wrote the file elsewhere (e.g. a global Cursor projects dir),
+  copy it into `.cursor/plans/` here as well — the repo copy is the source of truth.
