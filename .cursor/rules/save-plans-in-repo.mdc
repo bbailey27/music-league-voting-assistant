@@ -15,3 +15,11 @@ into this repo at `.cursor/plans/` so it is version-controlled alongside the cod
   `status`, `isProject`).
 - If a plan tool wrote the file elsewhere (e.g. a global Cursor projects dir),
   copy it into `.cursor/plans/` here as well — the repo copy is the source of truth.
+
+## This is allowed in plan mode
+
+Writing the plan `.md` into `.cursor/plans/` is a **markdown edit**, which plan
+mode permits — do it as part of producing the plan. Do **not** skip this rule on
+the assumption that plan mode is read-only; only non-markdown edits and other
+system changes are off-limits there. If you're unsure, write the markdown plan
+file rather than deferring it.
