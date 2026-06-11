@@ -17,10 +17,17 @@ const PLACEHOLDERS = new Set([
   'What did you think of this song?',
   'What did you think of your own song?',
 ]);
-const FOOTER_RE = /^(\d+)\s*\/\s*1000$/; // user-comment length anchor
-const BUDGET_RE = /^\d+\s+of\s+(\d+)$/; // "0 of 25" -> upvote bank size
+// Live Text often OCRs the placeholder as "...think about this song?" (about vs
+// of), so match it loosely too.
+const PLACEHOLDER_RE = /^what did you think .*\bthis song\?$/i;
+const isPlaceholder = (t) => PLACEHOLDERS.has(t) || PLACEHOLDER_RE.test(t);
+const FOOTER_RE = /^(\d+)\s*\/\s*1000$/; // user-comment length anchor ("4/1000")
+const BUDGET_RE = /^\d+\s+of\s+(\d+)\b/i; // "0 of 25" / "00 OF 10 %" -> bank size
 const ROUND_RE = /^round\s+\d+$/i;
 const INT_RE = /^\d+$/;
+const STITCH_RE = /screenshots?\s+stitched/i; // "3 Screenshots Stitched"
+const APPSTORE_RE = /available on the app store/i;
+const VOTE_BUTTON_RE = /^[+-]$/; // a lone +/- vote button line
 
 // Join block lines into a single comment, preserving internal blank lines (which
 // become paragraph breaks) while trimming surrounding whitespace/indent.
@@ -151,7 +158,7 @@ function parseBlock(blockLines, mode, rawOrderIndex) {
   const regionEnd = footerIdx >= 0 ? footerIdx : blockLines.length;
   const region = blockLines
     .slice(metaEnd + 1, regionEnd)
-    .filter((l) => !PLACEHOLDERS.has(l.trim()));
+    .filter((l) => !isPlaceholder(l.trim()));
 
   let userComment = '';
   let submitterComment;
@@ -216,60 +223,79 @@ function parseStrict(lines, mode) {
 }
 
 // ---------------------------------------------------------------------------
-// Lenient / Live-Text mode: anchors absent. Group visible lines into songs and
-// flag everything for review since the structure can't be trusted.
+// Lenient / Live-Text mode: the "Album art" delimiter is gone but the
+// "N / 1000" comment-length footer survives, so anchor on it. Segment songs on
+// the footers, walk back to recover metadata, and use the footer count as a
+// length checksum to pick the user-comment line. Everything is flagged for
+// review since the surrounding structure still can't be fully trusted.
 // ---------------------------------------------------------------------------
 function parseLenient(lines, mode) {
   const { budget, round } = parseHeader(lines);
 
-  // Drop known chrome/anchor lines, then split into groups on blank-line gaps.
-  const cleaned = lines.filter((l) => {
-    const t = l.trim();
-    if (t === ALBUM_ART || t === OWN_MARKER) return false;
-    if (PLACEHOLDERS.has(t)) return false;
-    if (FOOTER_RE.test(t)) return false;
-    return true;
+  // Trim, drop blank + phone/stitch-app chrome, but keep structural lines.
+  const cleaned = lines
+    .map((l) => l.trim())
+    .filter((t) => t !== '')
+    .filter((t) => t !== ALBUM_ART && t !== OWN_MARKER)
+    .filter((t) => !STITCH_RE.test(t) && !APPSTORE_RE.test(t));
+
+  // Find where the song list starts: just after the round prompt / the
+  // "...description to help" helper line that follows it.
+  let songStart = 0;
+  for (let i = 0; i < cleaned.length; i++) {
+    if (/description to help$/i.test(cleaned[i])) songStart = i + 1;
+    else if (songStart === 0 && ROUND_RE.test(cleaned[i])) songStart = i + 2; // skip prompt line
+  }
+  const region = cleaned
+    .slice(songStart)
+    .filter((t) => !BUDGET_RE.test(t) && !ROUND_RE.test(t));
+
+  const footers = [];
+  region.forEach((t, i) => {
+    const m = t.match(FOOTER_RE);
+    if (m) footers.push({ i, len: Number(m[1]) });
   });
 
-  const groups = [];
-  let group = [];
-  for (const raw of cleaned) {
-    if (raw.trim() === '') {
-      if (group.length) {
-        groups.push(group);
-        group = [];
-      }
-    } else {
-      group.push(raw.trim());
-    }
-  }
-  if (group.length) groups.push(group);
-
-  // A plausible song group has a title + at least one more line. Anything that
-  // looks like header chrome (single short lines before the first multi-line
-  // group) is ignored.
   const songs = [];
   let order = 0;
-  for (const g of groups) {
-    if (g.length < 2) continue; // skip stray single lines (badges, headings)
 
-    const title = g[0];
-    const artist = g[1] || '';
-    const album = g.length >= 3 ? g[2] : '';
+  const emit = (raw, commentLen, noFooter) => {
+    const block = raw.filter((t) => !isPlaceholder(t) && !VOTE_BUTTON_RE.test(t));
+    if (block.length < 2 && commentLen !== 0) return; // not a real song block
 
-    // A trailing line that scores (has a numeric token) is the user comment.
     let userComment = '';
-    for (let i = g.length - 1; i >= 1; i--) {
-      if (/\d/.test(g[i]) && scoreComment(g[i], mode).score != null) {
-        userComment = g[i];
-        break;
+    let reason = 'lenient/live-text parse — verify title/artist/score';
+    if (commentLen && commentLen > 0) {
+      // Checksum: the user-comment line's length equals the footer count.
+      // Search from the footer backward so we pick the trailing comment.
+      for (let i = block.length - 1; i >= 2; i--) {
+        if (block[i].length === commentLen) {
+          userComment = block[i];
+          break;
+        }
       }
+      if (!userComment) {
+        for (let i = block.length - 1; i >= 2; i--) {
+          if (/\d/.test(block[i]) && scoreComment(block[i], mode).score != null) {
+            userComment = block[i];
+            break;
+          }
+        }
+        reason = `comment-length footer (${commentLen}) matched no line — verify`;
+      }
+    } else if (noFooter) {
+      reason = 'no "N / 1000" footer (likely cut off in the screenshot) — verify';
     }
+
+    const title = block[0] || '';
+    const artist = block[1] || '';
+    const album = block[2] && block[2] !== userComment ? block[2] : '';
+    const commentIdx = userComment ? block.indexOf(userComment) : block.length;
+    const submitterComment = joinTrim(block.slice(album ? 3 : 2, commentIdx));
 
     const signals = scoreComment(userComment, mode);
     signals.needsReview = true; // lenient parse: always verify
-    signals.reviewReason =
-      signals.reviewReason || 'lenient/live-text parse — verify title/artist/score';
+    signals.reviewReason = signals.reviewReason || reason;
 
     songs.push({
       rawOrderIndex: order++,
@@ -278,12 +304,19 @@ function parseLenient(lines, mode) {
       album,
       userAllocatedVotes: null,
       userComment,
-      submitterComment: '',
+      submitterComment,
       spotifyUri: null,
       ...signals,
       finalVotes: 0,
     });
+  };
+
+  let start = 0;
+  for (const f of footers) {
+    emit(region.slice(start, f.i), f.len, false);
+    start = f.i + 1;
   }
+  if (start < region.length) emit(region.slice(start), null, true); // trailing, footer cut off
 
   return { round, budget, songs, totalSongs: songs.length, ownSkipped: 0 };
 }
