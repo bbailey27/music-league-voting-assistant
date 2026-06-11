@@ -18,6 +18,44 @@ nearly reversed) doesn't get silently re-litigated every few rounds.
 
 ---
 
+## 2026-06-11 — Own submission shown in the raw-order table
+
+**Change.** The HTML extractor still keeps the user's own song (`mine: true`) out of
+scoring/allocation, but now records it in a new `ownSongs` list, and the markdown
+raw-order table interleaves it at its real index as `(your song — not scored)`.
+`buildJsonPayload` mirrors it under `ownSongs`.
+
+**Why.** The user enters votes by raw position; dropping the own song left an
+invisible index gap (e.g. 17 → 19), risking a misaligned ballot. Showing the slot
+(with no votes) makes the index sequence complete and self-checking.
+
+**Refs.** `e588936`; affects the raw-order output in `buildMarkdown`
+(`scripts/score-core.mjs`) and `parseRoundDocument` (`scripts/extract-html.mjs`);
+test in `tests/extract-html.test.mjs`.
+
+---
+
+## 2026-06-11 — Recover round markup from a rich-text View-Source paste
+
+**Change.** The HTML parse path now retries when a saved `.html` yields no songs:
+if the document is a "Cocoa HTML Writer" wrapper (View Source of the round pasted
+into TextEdit/Notes/Mail, which re-encodes the real markup as entity-escaped text
+split across `<td class="td1">` cells), `recoverEscapedSource` rebuilds the
+original `vote.html` source from the decoded cell text and re-parses it. Ordinary
+saved rounds are unaffected (recovery only fires after a zero-song parse and only
+when the rebuilt text contains a song list).
+
+**Why.** A real `lfm-stats` capture arrived in this wrapped form and parsed to
+zero songs. The genuine markup (budget, `song-` divs, `data-comment`, `uri`
+inputs) survives intact inside the wrapper, so recovering it is lossless for
+scoring rather than asking for a re-export.
+
+**Refs.** `e588936`; affects `spec/score-parsing.md` (HTML input handling);
+tests in `tests/extract-html.test.mjs`, fixture
+`tests/regressions/cocoa-viewsource-wrapper.html`.
+
+---
+
 ## 2026-06-11 — Forced tie-splits land where a modifier resolves them
 
 **Change.** When the budget can't divide evenly across whole tiers, the leftover
