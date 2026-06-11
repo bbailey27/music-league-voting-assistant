@@ -8,6 +8,8 @@
     "ml": "node scripts/ml.mjs",
     "parse": "node scripts/parse-round.mjs",
     "render-fit": "node scripts/render-fit-html.mjs",
+    "render-final": "node scripts/render-final-html.mjs",
+    "test": "node --test tests/*.test.mjs",
     "lint": "npm run lint:js && npm run lint:md",
     "lint:js": "eslint .",
     "lint:md": "markdownlint-cli2",

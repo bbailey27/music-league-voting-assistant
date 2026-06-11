@@ -9,6 +9,10 @@ parse name *flags:
 fit name *flags:
     node scripts/ml.mjs fit "{{name}}" {{flags}}
 
+# Render the final draft-vote report → analysis/NAME.html (cards; merges fit when present)
+final name *flags:
+    node scripts/ml.mjs final "{{name}}" {{flags}}
+
 # Run the next scriptable step for a round (parse or render-fit), or print the manual reminder
 run name:
     node scripts/ml.mjs run "{{name}}"

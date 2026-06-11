@@ -6,11 +6,12 @@
 // Usage:
 //   node scripts/ml.mjs parse  <name> [--mode objective|subjective] [--no-json]
 //   node scripts/ml.mjs fit    <name> [--out <path>] [--order fit|combined|raw]
+//   node scripts/ml.mjs final  <name> [--out <path>] [--order votes|score|raw]
 //   node scripts/ml.mjs run    <name>        (alias: next) — runs the next scriptable step
 //   node scripts/ml.mjs status [name]        — pipeline checklist + next step (no name = all rounds)
 //
-// The two real scripts (parse-round.mjs, render-fit-html.mjs) are spawned as-is;
-// this dispatcher only resolves names and decides what to run.
+// The real scripts (parse-round.mjs, render-fit-html.mjs, render-final-html.mjs)
+// are spawned as-is; this dispatcher only resolves names and decides what to run.
 
 import { readdirSync, existsSync, statSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -172,8 +173,8 @@ function nextStep(st) {
     return {
       kind: 'advisory',
       label:
-        `if this is a thematic/lyric round, do fit research → ${st.fitJsonPath}; ` +
-        `otherwise you're done after parse`,
+        `music-only round: done — open ${st.mdPath} for draft votes; ` +
+        `thematic rounds only: fit research → ${st.fitJsonPath}`,
     };
   }
   if (!st.hasFitHtml || !st.fitHtmlFresh) {
@@ -215,6 +216,20 @@ function cmdFit(name, flags) {
   process.exit(
     runScript('render-fit-html.mjs', [join(ANALYSIS_DIR, `${base}-fit.json`), ...flags])
   );
+}
+
+// Render the final draft-vote report (analysis/NAME.html) from the parse JSON,
+// layering in the fit sidecar when the round had fit research.
+function cmdFinal(name, flags) {
+  const base = resolveOrExit(name, roundBases(), 'round');
+  const jsonPath = join(ANALYSIS_DIR, `${base}.json`);
+  if (!existsSync(jsonPath)) {
+    console.error(`No parse JSON at ${jsonPath}. Run "ml parse ${base}" first.`);
+    process.exit(1);
+  }
+  const fitJsonPath = join(ANALYSIS_DIR, `${base}-fit.json`);
+  const fitArgs = existsSync(fitJsonPath) ? ['--fit', fitJsonPath] : [];
+  process.exit(runScript('render-final-html.mjs', [jsonPath, ...fitArgs, ...flags]));
 }
 
 function cmdRun(name) {
@@ -291,6 +306,7 @@ function usage() {
   console.log(`Usage:
   ml parse  <name> [--mode objective|subjective] [--no-json]
   ml fit    <name> [--out <path>] [--order fit|combined|raw]
+  ml final  <name> [--out <path>] [--order votes|score|raw]
   ml run    <name>     (alias: next) — run the next scriptable step
   ml status [name]     — pipeline checklist + next step (no name = all rounds)
 
@@ -312,6 +328,9 @@ function main() {
     case 'fit':
       if (!name) return usage();
       return cmdFit(name, flags);
+    case 'final':
+      if (!name) return usage();
+      return cmdFinal(name, flags);
     case 'run':
     case 'next':
       if (!name) return usage();
