@@ -207,6 +207,7 @@ client-side app.
 - `rounds/` — your round HTML exports, `<roundname>.html` (git-ignored).
 - `analysis/` — generated `<roundname>.md` / `.json` and `<roundname>-fit.json` / `.html` (git-ignored).
 - `spec/` — the scoring/allocation rules in prose (`score-parsing`, `point-allocation`,
-  `comments`, `uncertainty`, `fit-evaluation`).
+  `comments`, `uncertainty`, `fit-evaluation`, `fit-guidance`). `decisions.md` is the
+  running log of how/why those rules changed.
 - `tests/regressions/` — captured failure cases to guard against.
 - `.cursor/rules/` — agent guidance mirroring the specs.
