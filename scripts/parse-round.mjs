@@ -14,6 +14,7 @@ import { parseHTML } from 'linkedom';
 import { allocate, buildMarkdown, buildJsonPayload, mergeFitJson, enrichProfileWithBudget } from './score-core.mjs';
 import { parseRoundDocument, recoverEscapedSource } from './extract-html.mjs';
 import { parseRoundText } from './parse-text.mjs';
+import { matchFlag, takePositional } from './cli-args.mjs';
 import {
   roundIdFromInput,
   musicPaths,
@@ -41,29 +42,57 @@ function parseArgs(argv) {
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--no-json') args.json = false;
-    else if (a === '--lenient') args.lenient = true;
-    else if (a === '--mode') args.mode = argv[++i];
-    else if (a.startsWith('--mode=')) args.mode = a.slice('--mode='.length);
-    else if (a === '--shape') args.shape = argv[++i];
-    else if (a.startsWith('--shape=')) args.shape = a.slice('--shape='.length);
-    else if (a === '--fit') args.fit = argv[++i];
-    else if (a.startsWith('--fit=')) args.fit = a.slice('--fit='.length);
-    else if (a === '--rank') args.rank = argv[++i];
-    else if (a.startsWith('--rank=')) args.rank = a.slice('--rank='.length);
-    else if (a === '--gate') args.gate = argv[++i];
-    else if (a.startsWith('--gate=')) args.gate = a.slice('--gate='.length);
-    else if (a === '--cutoff') args.cutoff = argv[++i];
-    else if (a.startsWith('--cutoff=')) args.cutoff = a.slice('--cutoff='.length);
-    else if (a === '--weights') args.weights = argv[++i];
-    else if (a.startsWith('--weights=')) args.weights = a.slice('--weights='.length);
-    else if (a === '--pin') args.pin.push(argv[++i]);
-    else if (a.startsWith('--pin=')) args.pin.push(a.slice('--pin='.length));
-    else if (a === '--tier-count') args.tierCount = argv[++i];
-    else if (a.startsWith('--tier-count=')) args.tierCount = a.slice('--tier-count='.length);
-    else if (a === '--bucket-count') args.bucketCount = argv[++i];
-    else if (a.startsWith('--bucket-count=')) args.bucketCount = a.slice('--bucket-count='.length);
-    else if (!a.startsWith('--') && !args.file) args.file = a;
+    if (a === '--no-json') {
+      args.json = false;
+      continue;
+    }
+    if (a === '--lenient') {
+      args.lenient = true;
+      continue;
+    }
+    const flags = [
+      ['mode', (v) => {
+        args.mode = v;
+      }],
+      ['shape', (v) => {
+        args.shape = v;
+      }],
+      ['fit', (v) => {
+        args.fit = v;
+      }],
+      ['rank', (v) => {
+        args.rank = v;
+      }],
+      ['gate', (v) => {
+        args.gate = v;
+      }],
+      ['cutoff', (v) => {
+        args.cutoff = v;
+      }],
+      ['weights', (v) => {
+        args.weights = v;
+      }],
+      ['pin', (v) => {
+        args.pin.push(v);
+      }],
+      ['tier-count', (v) => {
+        args.tierCount = v;
+      }],
+      ['bucket-count', (v) => {
+        args.bucketCount = v;
+      }],
+    ];
+    let matched = false;
+    for (const [name, setter] of flags) {
+      const next = matchFlag(argv, i, name, setter);
+      if (next != null) {
+        i = next;
+        matched = true;
+        break;
+      }
+    }
+    if (matched) continue;
+    if (takePositional(a, args)) continue;
   }
   return args;
 }

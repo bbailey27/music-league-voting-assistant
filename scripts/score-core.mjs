@@ -96,15 +96,7 @@ export function scoreComment(rawComment, mode) {
   const decPart = m[2]; // e.g. ".5"
   const mods = m[3] || '';
 
-  if (decPart) {
-    out.score = parseFloat(intPart + decPart); // literal decimal, no scaling
-  } else if (intPart.length === 1) {
-    out.score = Number(intPart) * 10; // 7 -> 70
-  } else if (intPart.length === 2) {
-    out.score = Number(intPart); // 73 -> 73
-  } else {
-    out.score = Number(intPart) / 10; // 755 -> 75.5
-  }
+  out.score = scaleScoreToken(intPart, decPart);
 
   if (mods.includes('+') || mods.includes('=')) out.plus = true; // '=' is a typo for '+'
   if (mods.includes('-')) out.minus = true;
@@ -119,6 +111,14 @@ export function scoreComment(rawComment, mode) {
   if (mode === 'thematic' && out.fitScore == null && out.gate == null) out.needsResearch = true;
 
   return out;
+}
+
+// Turn a digit token (with optional decimal part) into a 0–100-ish score.
+function scaleScoreToken(intPart, decPart) {
+  if (decPart) return parseFloat(intPart + decPart); // literal decimal, no scaling
+  if (intPart.length === 1) return Number(intPart) * 10; // 7 -> 70
+  if (intPart.length === 2) return Number(intPart); // 73 -> 73
+  return Number(intPart) / 10; // 755 -> 75.5
 }
 
 // Tiebreak rank: playlistAdd >= '+' > plain > '-'. Higher wins.
@@ -192,13 +192,7 @@ function parseFitTokens(comment) {
   if (num) {
     const int = num[1];
     const dec = num[2];
-    out.fitScore = dec
-      ? parseFloat(int + dec)
-      : int.length === 1
-        ? Number(int) * 10
-        : int.length === 2
-          ? Number(int)
-          : Number(int) / 10;
+    out.fitScore = scaleScoreToken(int, dec);
   }
 
   const armed = /\bfit\b/i.test(comment) || /\bfit\d/i.test(comment);
@@ -268,11 +262,11 @@ export function estimateCenter(values) {
 
 // Bell shape parameters: width = overall spread, skew = upward bias (>0).
 const SHAPE_PRESETS = {
-  balanced: { width: 1, skew: 0 },
+  bell: { width: 1, skew: 0 },
   compressed: { width: 0.6, skew: 0 },
   'top-heavy': { width: 1.15, skew: 0.4 },
-  bell: { width: 1, skew: 0 },
 };
+SHAPE_PRESETS.balanced = SHAPE_PRESETS.bell; // CLI alias (--shape balanced)
 
 // Resolve bell params for a shape, auto-picking from the round's own numbers.
 function shapeParams(shape, { ratio, spread }) {

@@ -250,8 +250,7 @@ function cmdRun(name) {
 
   switch (step.kind) {
     case 'parse':
-      process.exit(runScript('parse-round.mjs', [st.inputPath]));
-      break;
+      return process.exit(runScript('parse-round.mjs', [st.inputPath]));
     case 'merge':
       console.log(`${base}: ${step.label}`);
       warnMissingScores(st);
@@ -259,8 +258,7 @@ function cmdRun(name) {
     case 'scores':
       return process.exit(runScript('render-fit-html.mjs', [st.scores.json, '--out', st.scores.html]));
     case 'fit':
-      process.exit(runScript('render-fit-html.mjs', [st.fit.json, '--out', st.fit.html]));
-      break;
+      return process.exit(runScript('render-fit-html.mjs', [st.fit.json, '--out', st.fit.html]));
     case 'manual':
     case 'advisory':
       console.log(`${base}: ${step.label}`);

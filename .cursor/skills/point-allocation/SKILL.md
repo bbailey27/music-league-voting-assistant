@@ -151,16 +151,16 @@ Dense/oversubscribed rounds (below ~1:1) naturally push more songs to 0 — expe
 
 ## One-off scripts (`story-rankings.mjs` pattern)
 
-For rounds the profile engine doesn't model (multi-axis creative prompts), write a **standalone deterministic script** in `scripts/`:
+For rounds the profile engine doesn't model (multi-axis creative prompts), write a **standalone deterministic script** in `scripts/one-off/`:
 
 1. **Hard-code inputs** — song list with axis scores as constants (no LLM, no randomness).
 2. **Define axes + weights** — e.g. continuation / grammar / music with named presets.
 3. **Composite** — weighted sum per preset.
-4. **Allocate** — mirror the continuous-tier model: top slice up, bottom slice down, middle neutral; spend both banks exactly (see HARD CONSTRAINTS). For bespoke multi-axis rounds, use `story-rankings.mjs` as a one-off template.
+4. **Allocate** — mirror the continuous-tier model: top slice up, bottom slice down, middle neutral; spend both banks exactly (see HARD CONSTRAINTS). For bespoke multi-axis rounds, use `scripts/one-off/story-rankings.mjs` as a one-off template.
 5. **Print multiple presets** — let user pick; document floors/caps in header comments.
 6. **Optional flags** — e.g. `--concentrated` for tier-stacking variant.
 
-Run: `node scripts/story-rankings.mjs` / `node scripts/story-rankings.mjs --concentrated`
+Run: `node scripts/one-off/story-rankings.mjs` / `node scripts/one-off/story-rankings.mjs --concentrated`
 
 Not wired to `ml.mjs` — intentional one-off. For repeatable logic, extend `score-core.mjs` + tests instead.
 
