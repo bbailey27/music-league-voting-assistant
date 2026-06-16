@@ -74,10 +74,27 @@ export function parseRoundDocument(document, mode) {
   // Round metadata from <title>: "Music League | <league> | <round>"
   const titleText = decodeEntities(document.querySelector('title')?.textContent || '').trim();
   const titleParts = titleText.split('|').map((p) => p.trim()).filter(Boolean);
+  let prompt = titleParts.length >= 3 ? titleParts.slice(2).join(' | ') : null;
+  let description = null;
+
+  // Round card on the vote page: h5 title + p[data-description] clarifications.
+  const promptEl = document.querySelector('h5.card-title');
+  if (promptEl) {
+    const cardPrompt = decodeEntities(promptEl.textContent || '').trim();
+    if (cardPrompt) prompt = cardPrompt;
+    const descEl = promptEl.parentElement?.querySelector('p.card-text[data-description]');
+    if (descEl) {
+      description = decodeEntities(
+        descEl.getAttribute('data-description') || descEl.textContent || ''
+      ).trim();
+    }
+  }
+
   const round = {
     title: titleText,
     league: titleParts.length >= 2 ? titleParts[1] : null,
-    prompt: titleParts.length >= 3 ? titleParts.slice(2).join(' | ') : null,
+    prompt,
+    description: description || null,
   };
 
   const songNodes = [...document.querySelectorAll('div.song[id^="song-"]')];

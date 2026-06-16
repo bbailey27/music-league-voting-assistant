@@ -61,3 +61,24 @@ test('recoverEscapedSource returns null for an ordinary saved round', () => {
   const { document } = parseHTML('<html><body><div class="song" id="song-0"></div></body></html>');
   assert.equal(recoverEscapedSource(document), null);
 });
+
+test('parseRoundDocument extracts round prompt and description from the vote card', () => {
+  const html = readFileSync(join(here, 'fixtures', 'sample-round', 'sample-round.html'), 'utf8');
+  const { document } = parseHTML(html);
+  const parsed = parseRoundDocument(document, 'subjective');
+
+  assert.equal(parsed.round.prompt, 'Under the stars');
+  assert.match(parsed.round.description, /night sky, moon, or stars/);
+  assert.equal(parsed.songs.length, 3);
+  assert.equal(parsed.ownSongs.length, 1);
+  assert.equal(parsed.budget.upvoteBankSize, 6);
+});
+
+test('buildMarkdown surfaces the round description for fit context', () => {
+  const html = readFileSync(join(here, 'fixtures', 'sample-round', 'sample-round.html'), 'utf8');
+  const { document } = parseHTML(html);
+  const parsed = parseRoundDocument(document, 'subjective');
+  const md = buildMarkdown({ ...parsed, mode: 'subjective', tradeoffs: [] });
+  assert.match(md, /## Round description/);
+  assert.match(md, /night sky, moon, or stars/);
+});

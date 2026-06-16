@@ -42,6 +42,8 @@ function parseHeader(headerLines) {
   let upvoteBankSize = null;
   let prompt = null;
   let league = null;
+  let description = null;
+  let roundLineIdx = -1;
 
   for (let i = 0; i < headerLines.length; i++) {
     const t = headerLines[i].trim();
@@ -50,7 +52,7 @@ function parseHeader(headerLines) {
       if (b) upvoteBankSize = Number(b[1]);
     }
     if (prompt == null && ROUND_RE.test(t)) {
-      // Prompt is the next non-empty line after "ROUND N".
+      roundLineIdx = i;
       for (let j = i + 1; j < headerLines.length; j++) {
         if (headerLines[j].trim()) {
           prompt = headerLines[j].trim();
@@ -58,6 +60,23 @@ function parseHeader(headerLines) {
         }
       }
     }
+  }
+
+  if (roundLineIdx >= 0 && prompt) {
+    const descLines = [];
+    let started = false;
+    for (let j = roundLineIdx + 2; j < headerLines.length; j++) {
+      const t = headerLines[j].trim();
+      if (!t) {
+        if (started) break;
+        continue;
+      }
+      if (/description to help$/i.test(t) || t === ALBUM_ART || ROUND_RE.test(t)) break;
+      if (BUDGET_RE.test(t) || STITCH_RE.test(t) || APPSTORE_RE.test(t)) break;
+      descLines.push(t);
+      started = true;
+    }
+    if (descLines.length) description = descLines.join('\n');
   }
 
   // League: the last line of the first run of short, leading-space "badge" lines
@@ -82,7 +101,7 @@ function parseHeader(headerLines) {
   };
   const title =
     league && prompt ? `Music League | ${league} | ${prompt}` : prompt || league || null;
-  return { budget, round: { title, league, prompt } };
+  return { budget, round: { title, league, prompt, description } };
 }
 
 // ---------------------------------------------------------------------------

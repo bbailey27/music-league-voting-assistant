@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Render a fit-research JSON sidecar into a self-contained, mobile-friendly HTML report.
-// Usage: node scripts/render-fit-html.mjs <fit.json> [--out <path>] [--order fit|combined|raw]
+// Usage: node scripts/render-fit-html.mjs <fit.json> [--out <path>] [--order fit|combined|music|raw]
 //
 // The JSON is the source of truth (same file the agent produces during fit research).
 // This script only presents it: each candidate is a card with a narrow identity column
@@ -163,6 +163,16 @@ function renderCandidates(data, order) {
         (b.combinedScore ?? b.fitScore ?? 0) - (a.combinedScore ?? a.fitScore ?? 0) ||
         (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0)
     );
+  } else if (order === 'music') {
+    // Music-score order: best for gate rounds where fit is an unweighted pass and
+    // the music score drives the ranking — funded songs first within a tie so the
+    // vote boundary is easy to eyeball. Songs without a music score sort last.
+    songs.sort(
+      (a, b) =>
+        (b.musicScore ?? -Infinity) - (a.musicScore ?? -Infinity) ||
+        (b.draftVotes ?? 0) - (a.draftVotes ?? 0) ||
+        (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0)
+    );
   } else {
     songs.sort(
       (a, b) => (b.fitScore ?? 0) - (a.fitScore ?? 0) || (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0)
@@ -173,7 +183,9 @@ function renderCandidates(data, order) {
       ? 'Candidates (raw order)'
       : order === 'combined'
         ? 'Candidates (by combined score)'
-        : 'Candidates (by fit)';
+        : order === 'music'
+          ? 'Candidates (by music score)'
+          : 'Candidates (by fit)';
   const w = data.combineWeights;
   const combineLabel =
     w && w.fit != null && w.music != null
@@ -373,11 +385,11 @@ ${renderTransfer(data)}
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.file) {
-    console.error('Usage: node scripts/render-fit-html.mjs <fit.json> [--out <path>] [--order fit|combined|raw]');
+    console.error('Usage: node scripts/render-fit-html.mjs <fit.json> [--out <path>] [--order fit|combined|music|raw]');
     process.exit(1);
   }
-  if (!['fit', 'raw', 'combined'].includes(args.order)) {
-    console.error(`Invalid --order "${args.order}" (use fit, combined, or raw)`);
+  if (!['fit', 'raw', 'combined', 'music'].includes(args.order)) {
+    console.error(`Invalid --order "${args.order}" (use fit, combined, music, or raw)`);
     process.exit(1);
   }
 
@@ -397,7 +409,11 @@ async function main() {
   const html = renderDocument(data, args.order);
 
   const outPath =
-    args.out || join(dirname(args.file), `${basename(args.file, extname(args.file))}.html`);
+    args.out ||
+    join(
+      dirname(args.file),
+      basename(args.file, extname(args.file)) === 'scores' ? 'scores.html' : 'fit.html'
+    );
   await mkdir(dirname(outPath), { recursive: true });
   await writeFile(outPath, html, 'utf8');
   console.log(`Wrote ${outPath}`);

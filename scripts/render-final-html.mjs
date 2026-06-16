@@ -190,6 +190,7 @@ function renderHead(model) {
 
   return `<header class="report-head">
   <h1>${titleLine} <span class="muted">— draft votes</span></h1>
+  ${r.description ? `<p class="lead">${esc(r.description)}</p>` : ''}
   <div class="facts">${facts.join('')}</div>
   <p class="counts muted">${songs.length} songs · ${scored.length} scored · ${disqualified.length} disqualified · ${needsInput.length} need a score · ${needsReview.length} need review</p>
 </header>`;
@@ -362,6 +363,7 @@ body {
 h1 { font-size: 1.5rem; margin: 0 0 .5rem; }
 h2 { font-size: 1.05rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 2rem 0 .75rem; }
 .muted { color: var(--muted); }
+.lead { font-size: 1.05rem; line-height: 1.45; margin: .5rem 0 1rem; }
 
 .facts { display: flex; flex-wrap: wrap; gap: .4rem; margin: .25rem 0 .5rem; }
 .fact { font-size: .82rem; color: var(--muted); padding: .15rem .55rem; border: 1px solid var(--line); border-radius: 999px; }
@@ -518,7 +520,11 @@ async function main() {
   const html = renderDocument(model, args.order);
 
   const outPath =
-    args.out || join(dirname(args.file), `${basename(args.file, extname(args.file))}.html`);
+    args.out ||
+    join(
+      dirname(args.file),
+      basename(args.file, extname(args.file)) === 'music' ? 'music.html' : 'report.html'
+    );
   await mkdir(dirname(outPath), { recursive: true });
   await writeFile(outPath, html, 'utf8');
   console.log(`Wrote ${outPath}`);

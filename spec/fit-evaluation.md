@@ -121,9 +121,9 @@ not by music — music is only a secondary tiebreak.
 
 ## Output
 
-Fit research is written to the JSON sidecar (`analysis/<roundname>-fit.json`), which is the source of truth — one object per song (tier, fitScore, themesHit, flags, confidence, basis, submitterAssist, rationale) plus round metadata and the fit scale. The JSON may also carry optional `highlights` (string array) and `combine` (`{ note, options[] }`) narrative fields.
+Fit research is written to **`analysis/<roundname>/fit.json`** (fit-only — no `draftVotes`). After merge, the deliverable is **`analysis/<roundname>/scores.json`**. See [analysis-artifacts.md](analysis-artifacts.md).
 
-The deterministic merge step (`parse-round.mjs --fit <fit.json>` / `mergeFitJson`) joins this file with the parsed music scores by `rawOrderIndex`/title, computes `combinedScore`, runs the allocator, and writes `musicScore` / `combinedScore` / `draftVotes` back into it — so the LLM never needs to supply `draftVotes`.
+The deterministic merge step (`parse-round.mjs --fit <fit.json>` / `mergeFitJson`) joins `fit.json` with the parsed music scores by `rawOrderIndex`/title, computes `combinedScore`, runs the allocator, and writes **`scores.json`** with `musicScore` / `combinedScore` / `draftVotes` — `fit.json` stays fit-only; the LLM never supplies `draftVotes`.
 
 The human-readable fit report is the **generated HTML**, not a markdown table: run `scripts/render-fit-html.mjs` on the JSON. The HTML uses a stacked card layout (raw-order # / title / artist in a narrow identity column) so the rationale/notes get full width.
 

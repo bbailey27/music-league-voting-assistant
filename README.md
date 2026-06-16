@@ -6,7 +6,7 @@ The parsing and scoring are **deterministic** (a Node script — no LLM, no gues
 The agent/you only step in to rebalance points or research tricky "fit" calls.
 
 - **Input:** a saved Music League round HTML file.
-- **Output:** a readable markdown report + a canonical JSON sidecar in `analysis/`.
+- **Output:** per-round folder under `analysis/<roundname>/` — see [spec/analysis-artifacts.md](spec/analysis-artifacts.md).
 
 ## Setup (one-time)
 
@@ -40,30 +40,37 @@ on the round (e.g. `tarot` or `2026-06-09`). It always runs the next step for yo
    just run tarot
    ```
 
-   This writes the deterministic report + JSON sidecar:
+   This writes the music-only report + JSON:
 
    ```text
-   analysis/<roundname>.md        ranked table + raw-order vote table
-   analysis/<roundname>.json      canonical data (source for the fit step)
+   analysis/<roundname>/music.md        ranked table + raw-order vote table (+ round description)
+   analysis/<roundname>/music.json      canonical data (source for the fit step)
    ```
 
-   For a plain (non-thematic) round, **you're done** — open the `.md` and enter votes.
+   For a plain (non-thematic) round, **you're done** — open `music.md` and enter votes.
 
 3. **(Thematic/lyric rounds only) Fit research.** This is the one manual/agent step
    `run` won't do for you. The agent researches how each song fits the prompt and
-   writes a JSON sidecar:
+   writes:
 
    ```text
-   analysis/<roundname>-fit.json
+   analysis/<roundname>/fit.json
    ```
 
-4. **Render the fit report.** Run the next step again — now it renders HTML:
+4. **Merge fit + music, then render.** Merge (manual or agent):
 
    ```bash
-   just run tarot                 # → analysis/<roundname>-fit.html
+   node scripts/parse-round.mjs rounds/<roundname>.html --fit analysis/<roundname>/fit.json
    ```
 
-   Open that self-contained, mobile-friendly HTML to review fit + enter votes.
+   That writes **`scores.json`** (deliverable — merged `draftVotes`; `fit.json` stays fit-only).
+   Then:
+
+   ```bash
+   just run tarot                 # → scores.html when scores.json exists
+   just scores tarot              # force re-render deliverable HTML
+   just fit tarot                 # fit-only HTML from fit.json
+   ```
 
 Check where any round stands at any time:
 
@@ -77,12 +84,12 @@ just status tarot                # full checklist + next step for one round
 `just` recipes forward to the dispatcher (`scripts/ml.mjs`); extra flags pass straight
 through to the underlying scripts.
 
-| Command                     | Does                                                                              |
-| --------------------------- | --------------------------------------------------------------------------------- |
-| `just run <name>`           | Run the next scriptable step (parse, or render fit HTML).                         |
-| `just status [name]`        | Pipeline checklist + next step (no name = every round).                           |
-| `just parse <name> [flags]` | Force the parse step. Flags: `--mode objective\|subjective`, `--no-json`.         |
-| `just fit <name> [flags]`   | Render the fit JSON to HTML. Flags: `--out <path>`, `--order fit\|combined\|raw`. |
+- **`just run <name>`** — run the next scriptable step (parse, render scores/fit HTML).
+- **`just status [name]`** — pipeline checklist + next step (no name = every round).
+- **`just parse <name> [flags]`** — force parse; flags: `--mode objective|subjective`, `--no-json`.
+- **`just fit <name> [flags]`** — render fit-only HTML from `fit.json`.
+- **`just scores <name> [flags]`** — render deliverable HTML from `scores.json`.
+- **`just final <name> [flags]`** — render scores or music HTML (whichever applies).
 
 - `--mode objective` (default): a comment with words but no number is **disqualified**.
 - `--mode subjective`: a words-only comment is flagged **needs review** instead.
@@ -99,8 +106,13 @@ npm run ml -- run tarot          # same dispatcher, no just needed
 npm run ml -- status
 
 node scripts/parse-round.mjs rounds/2026-06-09-tarot-hanged-man.html [--mode ...] [--no-json]
-node scripts/render-fit-html.mjs analysis/2026-06-09-tarot-hanged-man-fit.json [--out ...] [--order ...]
+node scripts/parse-round.mjs rounds/2026-06-09-tarot-hanged-man.html --fit analysis/2026-06-09-tarot-hanged-man/fit.json
+node scripts/render-fit-html.mjs analysis/2026-06-09-tarot-hanged-man/scores.json [--out ...] [--order ...]
 ```
+
+Docs and tests use the synthetic fixture at `tests/fixtures/sample-round/` instead of live round files.
+
+Retired rounds may live in `rounds/archive/` or `analysis/archive/` (ignored by parsing; check there when looking up old rounds).
 
 ### Linting
 
@@ -163,7 +175,7 @@ That's expected — treat the allocation as a starting point and rebalance. A mo
 
 ## The report
 
-`analysis/<roundname>.md` contains:
+`analysis/<roundname>/music.md` contains:
 
 - a header with mode, budget, and counts (scored / disqualified / needs-score / needs-review),
 - a **ranked table** (Rank · Title · Artist · Score · Votes · Flags · Comment),
@@ -172,14 +184,13 @@ That's expected — treat the allocation as a starting point and rebalance. A mo
 
 ## The fit report (HTML)
 
-For lyric/theme rounds, the fit research lives in a JSON sidecar
-(`analysis/<roundname>-fit.json`) that the agent produces (workflow step 3) —
-that JSON is the source of truth. `just run <name>` renders it to HTML once it
-exists; to (re)render explicitly:
+For lyric/theme rounds, fit research lives in **`analysis/<roundname>/fit.json`**
+(the agent produces it in workflow step 3). Merge with music scores to produce
+**`scores.json`** / **`scores.html`** — the deliverable. Fit-only review:
 
 ```bash
 just fit tarot [--out <path>] [--order fit|combined|raw]
-# without just: node scripts/render-fit-html.mjs analysis/<roundname>-fit.json [...]
+just scores tarot   # deliverable HTML from scores.json
 ```
 
 The HTML (not a markdown table) is the going-forward fit format: each candidate
@@ -201,11 +212,15 @@ client-side app.
 ## Repo layout
 
 - `scripts/ml.mjs` — friendly dispatcher (fuzzy names, `run`/`status`, next-step inference).
-- `scripts/parse-round.mjs` — the deterministic parser + allocator (HTML → `.md` + `.json`).
-- `scripts/render-fit-html.mjs` — renders a fit JSON sidecar to a self-contained HTML report.
-- `justfile` — `run` / `status` / `parse` / `fit` recipes forwarding to `scripts/ml.mjs`.
-- `rounds/` — your round HTML exports, `<roundname>.html` (git-ignored).
-- `analysis/` — generated `<roundname>.md` / `.json` and `<roundname>-fit.json` / `.html` (git-ignored).
+- `scripts/paths.mjs` — shared analysis folder + artifact naming.
+- `scripts/parse-round.mjs` — deterministic parser + allocator (HTML → `music.*`; `--fit` → `scores.json`).
+- `scripts/render-fit-html.mjs` — renders `fit.json` or `scores.json` to HTML.
+- `scripts/one-off/` — round-specific drivers (not the main pipeline).
+- `justfile` — `run` / `status` / `parse` / `fit` / `scores` recipes forwarding to `scripts/ml.mjs`.
+- `rounds/` — flat round HTML exports (git-ignored); optional `rounds/archive/`.
+- `analysis/` — per-round folders `analysis/<roundname>/` (git-ignored); optional `analysis/archive/`.
+- `spec/analysis-artifacts.md` — naming convention for music / fit / scores files.
+- `tests/fixtures/sample-round/` — synthetic round for docs and tests.
 - `spec/` — the scoring/allocation rules in prose (`score-parsing`, `point-allocation`,
   `comments`, `uncertainty`, `fit-evaluation`, `fit-guidance`). `decisions.md` is the
   running log of how/why those rules changed.

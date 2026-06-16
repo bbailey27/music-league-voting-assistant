@@ -8,12 +8,17 @@
 // scoring signals.
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { basename, join, extname } from 'node:path';
+import { extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseHTML } from 'linkedom';
 import { allocate, buildMarkdown, buildJsonPayload, mergeFitJson, enrichProfileWithBudget } from './score-core.mjs';
 import { parseRoundDocument, recoverEscapedSource } from './extract-html.mjs';
 import { parseRoundText } from './parse-text.mjs';
+import {
+  roundIdFromInput,
+  musicPaths,
+  scoresPaths,
+} from './paths.mjs';
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -207,12 +212,15 @@ async function main() {
       console.error(`Could not parse fit JSON from ${args.fit}: ${err.message}`);
       process.exit(1);
     }
+    const roundId = roundIdFromInput(args.file);
     const { tradeoffs } = mergeFitJson(parsed, fitData, {
       ...enrichProfileWithBudget(profile, parsed.budget),
       rankBy: args.rank || 'combined',
     });
-    await writeFile(args.fit, JSON.stringify(fitData, null, 2), 'utf8');
-    console.log(`Updated ${args.fit} with draftVotes`);
+    const scoresOut = scoresPaths(roundId).json;
+    await mkdir(scoresPaths(roundId).dir, { recursive: true });
+    await writeFile(scoresOut, JSON.stringify(fitData, null, 2), 'utf8');
+    console.log(`Wrote ${scoresOut} (merged scores + draftVotes; fit-only source unchanged: ${args.fit})`);
     if (tradeoffs.length) {
       console.log(`\n${tradeoffs.length} tradeoff(s) need your call:`);
       for (const t of tradeoffs) console.log(`  • ${t.question}`);
@@ -230,18 +238,16 @@ async function main() {
   const ctx = { ...parsed, mode: args.mode, tradeoffs };
   const md = buildMarkdown(ctx);
 
-  const base = basename(args.file, extname(args.file));
-  const outDir = 'analysis';
-  await mkdir(outDir, { recursive: true });
-  const mdPath = join(outDir, `${base}.md`);
-  await writeFile(mdPath, md, 'utf8');
-  console.log(`Wrote ${mdPath}`);
+  const roundId = roundIdFromInput(args.file);
+  const paths = musicPaths(roundId);
+  await mkdir(paths.dir, { recursive: true });
+  await writeFile(paths.md, md, 'utf8');
+  console.log(`Wrote ${paths.md}`);
 
   if (args.json) {
-    const jsonPath = join(outDir, `${base}.json`);
     const payload = buildJsonPayload(ctx);
-    await writeFile(jsonPath, JSON.stringify(payload, null, 2), 'utf8');
-    console.log(`Wrote ${jsonPath}`);
+    await writeFile(paths.json, JSON.stringify(payload, null, 2), 'utf8');
+    console.log(`Wrote ${paths.json}`);
   }
 }
 

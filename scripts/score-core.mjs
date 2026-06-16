@@ -1496,6 +1496,12 @@ export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mo
   const L = [];
   L.push(`# ${round.prompt || round.title || 'Round'} — draft votes`);
   L.push('');
+  if (round.description) {
+    L.push('## Round description');
+    L.push('');
+    L.push(round.description);
+    L.push('');
+  }
   L.push(`- League: ${round.league ?? 'n/a'}`);
   L.push(`- Mode: \`${mode}\``);
   L.push(

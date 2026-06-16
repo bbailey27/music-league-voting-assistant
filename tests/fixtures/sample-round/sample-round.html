@@ -1,0 +1,26 @@
+<html data-x-template="vote.html"><head><title>Music League | Sample League | Under the stars</title></head>
+<body>
+<div class="songs" x-data="{ upvoteBankSize: 6, maxUpvotesPerSong: 3, downvotesEnabled: false }">
+<div class="card"><div class="card-body">
+  <span class="card-text text-body-tertiary">ROUND 1</span>
+  <h5 class="card-title">Under the stars</h5>
+  <p class="card-text" data-description="Songs that mention the night sky, moon, or stars. Instrumentals count if the title fits.">Songs that mention the night sky, moon, or stars. Instrumentals count if the title fits.</p>
+</div></div>
+<div id="song-0" class="song" data-comment="78 strong fit" data-weight="0">
+  <h6>Starlight</h6><span class="d-block text-truncate">Nova Ray</span>
+  <span class="text-body-secondary">Night Drive</span>
+  <input name="uri" value="spotify:track:STAR1">
+</div>
+<div id="song-1" class="song" data-comment="72" data-weight="0">
+  <h6>City Glow</h6><span class="d-block text-truncate">The Avenues</span>
+  <input name="uri" value="spotify:track:CITY1">
+</div>
+<div id="song-2" class="song" data-comment="65 fit moderate" data-weight="0">
+  <h6>Midnight Bus</h6><span class="d-block text-truncate">Lane Four</span>
+  <input name="uri" value="spotify:track:BUS1">
+</div>
+<div id="song-3" class="song" data-comment="" data-weight="0" x-data="{ mine: true }">
+  <h6>My Submission</h6><span class="d-block text-truncate">Me</span>
+</div>
+</div>
+</body></html>
