@@ -5,6 +5,38 @@ Deterministic and profile-driven, not formulaic guesswork. The allocator in
 turns ranked songs into integer votes. This spec defines the model and the named,
 testable rules it enforces; the LLM never does allocation, only fit research.
 
+## Pre-allocation gate: resolve blocking inputs FIRST
+
+**Before proposing, running, or presenting any allocation/distribution, surface
+everything that needs user intervention and lead with it.** Allocation silently
+treats unresolved inputs as 0/excluded, so a gap hidden below the distribution can
+quietly drop a song that should have placed. The
+parser already emits these signals (and `music.md` lists them under _Needs my
+score_ / _Needs review_ / _Disqualified_ / _Needs your call_); the rule is to treat
+them as **blocking** and report them up top.
+
+Block on (highest-impact first):
+
+1. **Blank score boxes** (`needsUserInput`) — **never invent a score.** A blank is
+   excluded from ranking, so it sits at 0 in every curve. This is the single
+   highest-impact gap: a blank on a song that plausibly scores near the field (and
+   especially one that passes fit) would otherwise place. List every blank and ask
+   for a score (or an explicit "leave it 0") **before** allocating.
+2. **Parse-health flags** — anything suggesting the capture itself is off: HTML
+   recovered from an escaped/rich-text paste, the lenient text fallback firing, an
+   unusually high `needsUserInput` count (stale export — re-save after autosave +
+   reload), or `0` songs. Confirm the parse looks right before trusting scores.
+3. **Review flags** (`needsReview`) — `?` near a tier boundary, words-only comments
+   in subjective mode, and similar judgment calls. Resolve or explicitly defer.
+
+A bare `-` disqualification (`isDisqualified`) is **not** a blocker: it is the
+user's own deliberate "won't place / low" note and already means 0 as intended —
+do not flag it for intervention.
+
+Only once these are surfaced (and blanks resolved or deferred) should you present
+distributions. Borderline/fuzzy-boundary swaps are a separate, lower-priority
+conversation that happens **after** the blocking gate is clear.
+
 ## Inputs
 
 - **budget** = upvote bank size (`upvoteBankSize`); **cap** = max upvotes per

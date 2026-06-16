@@ -18,6 +18,25 @@ nearly reversed) doesn't get silently re-litigated every few rounds.
 
 ---
 
+## 2026-06-15 — Pre-allocation gate: surface blockers before allocating
+
+**Change.** Added a named **Pre-allocation gate** rule (`spec/point-allocation.md`,
+plus the `music-league-workspace`, `parse-scores-pipeline`, and `round-fit-research`
+skills): before proposing or presenting any allocation, the agent must lead with
+blocking inputs and resolve blank scores before showing distributions. Full rule
+and the list of blockers live in the spec section.
+
+**Why.** On the Pride round a blank score box (Old Town Road — a fit-passing song)
+was mentioned only as a parse statistic, not as a blocking callout, and allocation
+silently kept it at 0 across every proposed curve. The flag data was already in
+`music.md`; what was missing was a workflow rule making it a blocking lead rather
+than a footnote under the distribution.
+
+**Refs.** `working tree`; affects `spec/point-allocation.md` (new _Pre-allocation
+gate_ section) and the three skills above.
+
+---
+
 ## 2026-06-11 — Own submission shown in the raw-order table
 
 **Change.** The HTML extractor still keeps the user's own song (`mine: true`) out of

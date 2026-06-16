@@ -2,7 +2,7 @@
 name: round-fit-research
 description: >-
   Performs thematic Music League fit research from round HTML/parse JSON and writes
-  analysis/<round>-fit.json with fit tiers, scores, and rationale. Use when a round
+  analysis/<round>/fit.json with fit tiers, scores, and rationale. Use when a round
   needs fit evaluation, lyric/theme scoring, pass/maybe/fail gates, or fit HTML prep.
 disable-model-invocation: true
 ---
@@ -15,12 +15,12 @@ Manual/agent step between parse and merge. Deterministic code never judges fit �
 
 After parse, `just status <name>` advises fit research for **thematic/lyric/subjective** rounds. Plain music-only rounds skip this.
 
-Check `analysis/<name>.json` for songs flagged `needsResearch` (thematic mode, music scored, no fit token yet).
+Check `analysis/<name>/music.json` for songs flagged `needsResearch` (thematic mode, music scored, no fit token yet).
 
 ## Workflow
 
 1. **Read round context** from `rounds/<name>.html` or parse JSON:
-   - Prompt: `<title>` third segment or text header after `ROUND N`
+   - Prompt + **description** from the vote-page card (`h5.card-title` + `p[data-description]`) or parse JSON `round.prompt` / `round.description`
    - `themeKeywords` — distill from prompt (also useful in JSON header)
    - Each `div.song` (skip `mine: true`): title, artist, album, submitter quote, **your** `data-comment`
 2. **Check guidance profiles** in [`spec/fit-guidance.md`](../../../spec/fit-guidance.md):
@@ -52,15 +52,21 @@ Check `analysis/<name>.json` for songs flagged `needsResearch` (thematic mode, m
    - Submitter quotes strengthen interpretation but do not auto-upgrade tier
    - Preserve user comments verbatim; manual fit tokens in comments win over LLM
    - A confirmed guidance profile refines (never overrides) these rules and manual fit tokens
-5. **Write** `analysis/<name>-fit.json` — schema in [fit-json-schema.md](fit-json-schema.md)
-6. **Merge + allocate:**
+5. **Write** `analysis/<name>/fit.json` — schema in [fit-json-schema.md](fit-json-schema.md)
+6. **Pre-allocation gate — surface blockers FIRST.** Before merging/allocating,
+   lead with blank scores (`needsUserInput` — never invent one), parse-health
+   flags, and `needsReview` items; resolve blanks (or get an explicit "leave 0")
+   first. Full rule:
+   [`spec/point-allocation.md` → Pre-allocation gate](../../../spec/point-allocation.md#pre-allocation-gate-resolve-blocking-inputs-first).
+7. **Merge + allocate:**
    ```bash
-   node scripts/parse-round.mjs rounds/<name>.html --fit analysis/<name>-fit.json
+   node scripts/parse-round.mjs rounds/<name>.html --fit analysis/<name>/fit.json
    ```
    Resolve any printed tradeoffs (see **point-allocation**). Allocation must spend both vote banks exactly and never mix up+down on one song.
-7. **Render:**
+8. **Render:**
    ```bash
-   just fit <name>
+   just scores <name>    # deliverable
+   just fit <name>       # fit-only review
    ```
 
 ## Fit scores: anchors, not buckets
