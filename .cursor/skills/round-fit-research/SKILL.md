@@ -29,22 +29,7 @@ Check `analysis/<name>/music.json` for songs flagged `needsResearch` (thematic m
      may apply, **propose it, describe its lens concretely, and confirm with the
      user** — these are suggested, never auto-applied.
    - Record any applied profile in the fit JSON `guidanceProfiles[]` + `method`.
-3. **Clarify before scoring** — see [`spec/fit-evaluation.md` → Clarify before scoring](../../../spec/fit-evaluation.md#clarify-before-scoring).
-   **Make no assumptions about priorities.** Run one short clarification pass before
-   judging any song:
-   - Confirm prompt type & whether it is a gate round.
-   - Surface the **trait/criteria list** and ask which the user wants to have more
-     or less influence — pin down each trait's level using the **influence
-     vocabulary** (`primary` / `co-primary`/`even` / `secondary` / `bonus` /
-     `tiebreak-only` / `soft-penalty-if-present` / `ignore` / `hard-gate`). A vague
-     "A matters more than B" must be resolved into one of these (lower co-primary?
-     a `secondary` close-2nd that leans lower but stacks and is field-relative?
-     bonus? tiebreak only? penalize B when present? ignore B?).
-   - For gate rounds, clarify the pass/fail boundary, or score the clear ones and
-     **bring borderline cases up at the end for the user to pick**.
-   - **Music weight:** if this is a fit-research-only prompt, **don't** ask about
-     music weight yet. If music scores are already parsed and allocation comes
-     right after research, clarify the fit-vs-music weight in the same pass.
+3. **Clarify before scoring** — follow [`spec/fit-evaluation.md` → Clarify before scoring](../../../spec/fit-evaluation.md#clarify-before-scoring) (prompt type, trait list, influence vocabulary, guidance profiles, gate boundary, music-weight timing).
 4. **Apply rules** from `spec/fit-evaluation.md`, `spec/uncertainty.md`, `spec/comments.md`:
    - Objective prompts: correctness dominates; explanation cannot validate invalid entries
    - Conceptual prompts: evaluate fit and music separately; apply the confirmed trait influence
@@ -136,7 +121,9 @@ Key selectors (see `extract-html.mjs`):
 
 **JSON is source of truth** — not a markdown fit table.
 
-Human review uses generated HTML (`analysis/<name>-fit.html`): card layout with tier hue, themes, rationale, combined scores, and vote-transfer table after merge.
+Human review uses generated HTML (`analysis/<name>/fit.html` fit-only;
+`analysis/<name>/scores.html` after merge): card layout with tier hue, themes,
+rationale, combined scores, and vote-transfer table when allocated.
 
 Optional top-level narrative: `highlights[]`, `combine: { note, options[] }`.
 

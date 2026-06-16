@@ -7,14 +7,7 @@ nearly reversed) doesn't get silently re-litigated every few rounds.
 
 ## How to maintain this
 
-- Newest entry first.
-- One entry per committed behavior change (or a notable clarification that
-  reshaped a rule). In-session false starts that never landed don't need an
-  entry; a decision that changed committed behavior does.
-- Keep each entry short: **Change** (what), **Why** (the reasoning / the user
-  call behind it), **Overruled** (only when it reverses or supersedes an earlier
-  decision), **Refs** (commit hash once committed, or `working tree` if not yet;
-  plus the spec section it affects).
+See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for format and when to add entries.
 
 ---
 
@@ -32,8 +25,27 @@ silently kept it at 0 across every proposed curve. The flag data was already in
 `music.md`; what was missing was a workflow rule making it a blocking lead rather
 than a footnote under the distribution.
 
-**Refs.** `working tree`; affects `spec/point-allocation.md` (new _Pre-allocation
+**Refs.** `ddd5282`; affects `spec/point-allocation.md` (new _Pre-allocation
 gate_ section) and the three skills above.
+
+---
+
+## 2026-06-15 — Per-round analysis folders; split fit research from the deliverable
+
+**Change.** Analysis outputs moved from flat `analysis/<round>-fit.json` (and
+`analysis/<round>.md`) to per-round folders with named artifacts:
+`analysis/<roundname>/{music.md,music.json,fit.json,fit.html,scores.json,scores.html}`.
+`parse-round --fit` now writes `scores.json`; `fit.json` stays fit-only research.
+`scripts/paths.mjs` centralizes discovery and artifact names; `archive/` is ignored.
+The full layout lives in `spec/analysis-artifacts.md`.
+
+**Why.** The flat `-fit.json` mixed fit-only research with post-merge `draftVotes`
+and collided as rounds accumulated, so there was no reliable way to tell the fit
+step's input apart from the merged deliverable. Per-round folders give each round a
+predictable home and keep `fit.json` (research) separate from `scores.json` (output).
+
+**Refs.** `c038e98`; affects `scripts/paths.mjs`, `scripts/parse-round.mjs`,
+`scripts/ml.mjs`, `scripts/render-fit-html.mjs`, and `spec/analysis-artifacts.md`.
 
 ---
 
@@ -92,6 +104,8 @@ candidate avoids it, and then it still surfaces as a `tier-split` tradeoff.
 
 **Refs.** `fd58e78`; `scripts/score-core.mjs`,
 `spec/point-allocation.md` → "Forced splits land where a modifier resolves them".
+
+---
 
 ## 2026-06-11 — Tradeoff tables: aligned columns + precise raw-scores column
 
@@ -239,7 +253,7 @@ fit-vs-music balance be set (or deferred) per round.
 
 ## 2026-06-09 — Fit report is generated HTML; the JSON sidecar is the source of truth
 
-**Change.** Fit research is written to `analysis/<round>-fit.json` (one object per
+**Change.** Fit research is written to `analysis/<roundname>/fit.json` (one object per
 song + round metadata), and the human-readable report is generated HTML
 (`render-fit-html.mjs`), not a hand-written markdown table. Once an allocation
 exists, every output ends with a copy-back vote-transfer table.

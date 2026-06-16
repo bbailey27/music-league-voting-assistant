@@ -74,7 +74,7 @@ Helpers used by only one module stay un-exported there; helpers used across modu
 2. Snapshot the public API:
    `node -e "import('./scripts/score-core.mjs').then(m=>console.log(Object.keys(m).sort().join('\n')))" > /tmp/ml-exports-before.txt`
 3. Golden end-to-end outputs (analysis/ is gitignored, so snapshot to /tmp): regenerate every round's artifacts and copy them aside.
-   - For each `rounds/*.{html,txt}`: `node scripts/parse-round.mjs <file>` (and `--fit analysis/<base>-fit.json` where a fit sidecar exists), plus `node scripts/render-final-html.mjs` / `render-fit-html.mjs`.
+   - For each `rounds/*.{html,txt}`: `node scripts/parse-round.mjs <file>` (and `--fit analysis/<roundname>/fit.json` where a fit sidecar exists), plus `node scripts/render-final-html.mjs` / `render-fit-html.mjs`.
    - `cp -r analysis /tmp/ml-before`
 
 ## Phase 1 — the split (score-core)

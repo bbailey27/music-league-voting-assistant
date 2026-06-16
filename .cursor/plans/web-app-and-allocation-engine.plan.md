@@ -148,7 +148,7 @@ The allocator's fit side reads one **canonical fit signal** per song, regardless
 Two producers feed that shape:
 
 1. **Manual** — `scoreComment` in [scripts/score-core.mjs](scripts/score-core.mjs) is extended to pull fit tokens out of your comment alongside the music number (today it only reads the music score + `+/-/?/play`). Grounded in notations you already use (tarot comments, [spec/comments.md](spec/comments.md)).
-2. **LLM file** — the existing fit JSON (`analysis/<round>-fit.json`), already schema'd in [spec/fit-evaluation.md](spec/fit-evaluation.md). Merge joins by `rawOrderIndex`/title.
+2. **LLM file** — the existing fit JSON (`analysis/<roundname>/fit.json`), already schema'd in [spec/fit-evaluation.md](spec/fit-evaluation.md). Merge joins by `rawOrderIndex`/title.
 
 Precedence when both exist (decided): manual wins for a song you scored deliberately; the LLM fills only songs left fit-silent.
 

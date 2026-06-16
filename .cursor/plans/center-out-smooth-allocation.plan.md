@@ -188,7 +188,7 @@ and defaults to C2.
 
 ## Potential refinements (R3 / R4 — deferred)
 
-See [`future-unscoped-plans.plan.md`](future-unscoped-plans.plan.md) "Potential
+See [`future-plans.plan.md`](future-plans.plan.md) "Potential
 refinements (allocation)". Try R1 + R2 first and revisit only if needed:
 
 - **R3 — semantic anchors at 75 / 80 as first-class boundaries** (75 = "actively

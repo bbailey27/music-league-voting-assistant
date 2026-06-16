@@ -84,10 +84,10 @@ typical (low) ratios they fall out naturally; see _Standing shape preference_.
 
 **0 is the neutral band; downvotes extend the tier spectrum below it.** Without
 downvotes the point curve runs from 0 upward — positive tiers only, anchored on
-the opinion centre. When `downvotesEnabled`, allocation is **one continuous
+the opinion center. When `downvotesEnabled`, allocation is **one continuous
 ranked tier spectrum**: the top slice receives positive upvote tiers (best songs →
 most upvotes), the bottom slice receives negative downvote tiers (worst songs →
-most downvotes), and the middle earns neither. The same mode-centred bell
+most downvotes), and the middle earns neither. The same mode-centered bell
 machinery shapes magnitudes on both sides of zero; downvotes are not a separate
 ad-hoc pass bolted onto upvotes.
 
@@ -108,7 +108,7 @@ budget`, monotonic and capped.
 - **Boundaries land on real gaps.** Tier boundaries are placed by
   **Ckmeans.1d.dp** (Wang & Song, 2011) — optimal univariate _k_-means by dynamic
   programming, the provably-optimal successor to Jenks natural breaks — which
-  minimises within-tier variance, i.e. cuts at the largest score gaps. The unit of
+  minimizes within-tier variance, i.e. cuts at the largest score gaps. The unit of
   clustering is the **atomic `tierKey` group** (equal-opinion songs, see below), so
   equal scores can never be split across a boundary.
 - **The budget decides how many levels appear.** Candidate clusterings are built
@@ -127,7 +127,7 @@ budget`, monotonic and capped.
 After the bell/clustering attempt, songs **≤ 1 score apart must never end > 1
 point apart.** A `>1`-point jump may only land on a **real gap** (`> 1` score). The
 allocator enforces this during tier selection (a candidate whose boundary forces a
-big jump on a tiny gap is rejected in favour of a smoother clustering), and because
+big jump on a tiny gap is rejected in favor of a smoother clustering), and because
 tiers are contiguous clusters with descending values, monotonicity is structural —
 a higher score can never earn fewer points. This is why a clustered field gets a
 graduated `3/2/2/1/0`-style curve (every step ≤ 1) instead of a `3/3/0/0`-style
@@ -137,15 +137,12 @@ cliff: the cliff would put 1-apart songs 3 points apart.
 
 When the split is genuinely a judgment call (several clusterings are close, or a
 small score range leaves it open), the allocator emits a **`tier-structure`
-tradeoff** listing the distinct candidate curves. Options are deduped on the
-**final point distribution**, not the tier count — two different bucket counts that
-land on the same number of tiers but a **different distribution** (e.g. "4 tiers
-(bucket-count 5) — 3×2 / 2×2 / 1×4 / 0×2" vs "4 tiers (bucket-count 8) — 3×3 / 2×2 /
-1×1 / 0×4") are a real tradeoff and both shown. Each option's `value` is the
-**bucket count (K)** that uniquely reproduces that curve; the label names the tier
-count and bucket count separately (so the two aren't conflated). Picking one
-re-runs with `--bucket-count` pinned; `--tier-count <n>` remains the friendly knob
-for "give me n point tiers, your choice of split."
+tradeoff** listing distinct candidate curves. Options dedupe on the **final point
+distribution**, not tier count — two bucket counts that yield the same tier count
+but different distributions both appear. Each option's `value` is the **bucket
+count (K)**; the label names tier count and bucket count separately. Pick one and
+re-run with `--bucket-count`; `--tier-count <n>` is the friendly "n point tiers"
+knob.
 
 Each option also carries structured `tiers`
 (`{ points, count, scoreHi, scoreLo, scores }`) so the report renders it as a
@@ -194,20 +191,18 @@ their own.
   the allocator does **not** force a fixed number of them. Where the curve bottoms
   out doesn't matter; if keeping a graduated, multi-tier shape means the lowest
   tier lands at `2` rather than `0` (only in very point-rich rounds), that's fine.
-- **Score gaps gate where tiers open up.** Boundaries fall on the natural gaps
-  (clustering), and the **smoothness rule** forbids a `>1`-point jump between songs
-  `≤1` score apart. So a tightly-clustered or all-mediocre field (e.g. everything
-  `70–74`) can't fork into a `3/3/0/0` cliff — it gets a graduated `3/2/2/1/0`-style
-  curve (or collapses to `2`s-and-`0`s when points are scarce). A wide spread, whose
-  gaps are real, earns taller, more separated tiers from the same budget.
+- **Score gaps gate where tiers open up.** Boundaries fall on natural gaps
+  (clustering); see _Smoothness_ for the hard rule on point jumps between close
+  scores. A tightly-clustered field gets a graduated curve instead of a cliff; a
+  wide spread earns taller, more separated tiers from the same budget.
 - **As points open up, build taller tiers** (`3`s, `4`s…) where the spread
   supports it — don't spread the extra points flatly across everyone. `auto`
   widens the bell as the points-to-songs ratio grows, and more points let the
   clustering open more (still-smooth) levels rather than nudging everyone up by one.
 - **Allocation is monotonic and tier-clean.** A higher score never earns fewer
-  points than a lower one (tiers are contiguous clusters with descending values),
-  and equal-score units get **equal** points unless an indivisible remainder forces
-  a one-point split.
+  points than a lower one (contiguous clusters with descending values — see
+  _Smoothness_), and equal-score units get **equal** points unless an indivisible
+  remainder forces a one-point split.
 
 Manual analogue (how the owner does it by hand): start near the tier split, give
 the upper half `1`, then use the leftover to promote a few `2`s (or, if points are

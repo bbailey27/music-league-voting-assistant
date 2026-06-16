@@ -5,29 +5,10 @@ alwaysApply: true
 
 # Maintain the decision log
 
-`spec/decisions.md` is the running history of **why** the scoring/allocation
-behavior is the way it is. Keep it current.
+When committed/spec behavior changes, add a **newest-first** entry to
+`spec/decisions.md` in the same pass — don't defer.
 
-## Add an entry when a decision is finalized
+Format: `## <YYYY-MM-DD> — <title>` · **Change** · **Why** · **Overruled** (if any) ·
+**Refs** (`working tree` until committed, then short hash + spec section).
 
-When a change reshapes committed/spec behavior (a new rule, a changed default, a
-reversal), add a **newest-first** entry to `spec/decisions.md` in the same pass —
-don't defer it. Use the existing format:
-
-- `## <YYYY-MM-DD> — <short title>`
-- **Change.** What the behavior is now.
-- **Why.** The reasoning or the user call behind it.
-- **Overruled.** Only when it reverses/supersedes an earlier entry.
-- **Refs.** `working tree` until committed, plus the spec section it affects.
-
-Skip in-session false starts that never landed; log only decisions that changed
-committed or spec behavior.
-
-## Backfill the commit hash when committed
-
-A new entry starts with `Refs: working tree`. When that work is committed, replace
-`working tree` with the short commit hash (e.g. `working tree` → `a1b2c3d`). After
-creating a commit that includes a logged decision, update its entry's `Refs` to the
-new hash. Do not invent a hash before the commit exists.
-
-(Per `no-auto-commit`, still only commit when the user explicitly asks.)
+Skip in-session false starts. Per `no-auto-commit`, only commit when the user asks.

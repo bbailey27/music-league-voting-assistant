@@ -9,8 +9,7 @@ Do **not** run `git commit` (or `git commit --amend`) on your own initiative.
 Only commit when the user explicitly asks you to in their request.
 
 - Finishing a task, fixing tests, or "wrapping up" is **not** permission to commit.
-- Do not offer to commit as a default next step, and do not stage-and-commit
-  "to be helpful." Leave changes in the working tree for the user to review.
+- Leave changes in the working tree for the user to review.
 - Other git operations that don't create commits (`status`, `diff`, `log`,
   `add`) are fine when useful.
 

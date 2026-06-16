@@ -1,9 +1,4 @@
-// Shared scoring, allocation, and reporting core.
-//
-// Input parsers (HTML, text, …) all emit the same canonical song list and then
-// hand it to this module, so scoring stays identical no matter how the round
-// was captured. Scoring reads the USER comment only; the submitter quote block
-// is preserved for context but never parsed for scoring signals.
+// Shared scoring, allocation, and reporting core for all input parsers.
 
 // ---------------------------------------------------------------------------
 // Small text helpers
@@ -166,7 +161,7 @@ export function fitTierForScore(score) {
   return best;
 }
 
-// Controlled vocabulary for manual fit notation. Tier words are only honoured
+// Controlled vocabulary for manual fit notation. Tier words are only honored
 // when the comment is "armed" with the literal word `fit`, so ordinary prose
 // like "solid track" is never mistaken for a fit grade.
 const FIT_TIER_SYNONYMS = [
@@ -247,9 +242,9 @@ export function rankValue(s, profile = {}) {
   }
 }
 
-// Approximate centre of a score distribution: the mode of the rounded values
+// Approximate center of a score distribution: the mode of the rounded values
 // (a bell's peak), falling back to the median when nothing repeats. We anchor
-// on the centre — not the lowest number — because genuinely-bad songs are
+// on the center — not the lowest number — because genuinely-bad songs are
 // written as '-'/words, so the lowest *number* present is really mid-ish.
 export function estimateCenter(values) {
   if (!values.length) return 0;
@@ -299,9 +294,9 @@ function shapeParams(shape, { ratio, spread }) {
   return { width, skew };
 }
 
-// Centre-anchored two-sided weights: a song at the centre weighs 1 (≈ the
-// average points/song once normalised), better songs weigh more, worse weigh
-// less toward 0. Because most scores cluster near the centre, most songs land
+// Center-anchored two-sided weights: a song at the center weighs 1 (≈ the
+// average points/song once normalized), better songs weigh more, worse weigh
+// less toward 0. Because most scores cluster near the center, most songs land
 // on the average tier — "mostly 1s, a few 2s and 0s" at a 1:1 ratio.
 function bellWeights(values, center, { width, skew }) {
   const max = Math.max(...values);
@@ -401,7 +396,7 @@ export function enrichProfileWithBudget(profile, budget) {
   };
 }
 
-// Opinion-curve centre shared by upvote tiers (above) and downvote tiers (below).
+// Opinion-curve center shared by upvote tiers (above) and downvote tiers (below).
 function opinionCenter(songs, profile) {
   const vals = songs
     .filter((s) => !s.needsUserInput)
@@ -448,7 +443,7 @@ function spectrumTargets(songs, profile, upBudget, upCap, downBudget, downCap) {
 }
 
 // ---------------------------------------------------------------------------
-// Allocation: profile-driven. Default shape is the mode-centred bell ('auto').
+// Allocation: profile-driven. Default shape is the mode-centered bell ('auto').
 // Returns { candidates, tradeoffs }; songs are mutated with finalVotes /
 // finalDownvotes (positive counts; downvotes are the negative tail of one tier
 // spectrum — never mixed with upvotes on the same song).
@@ -591,7 +586,7 @@ function allocateDownvotes(songs, budget, cap, profile, tradeoffs, downSet) {
   spillDownRemainder(songs, totalBudget, cap, profile, tradeoffs, new Set(pool), downSet);
 }
 
-// Weights below the shared opinion centre — mirrors bellWeights above centre.
+// Weights below the shared opinion center — mirrors bellWeights above center.
 function downBellWeights(values, center, params) {
   const { width, skew } = params;
   const below = values.map((v) => Math.max(0, center - v));
@@ -877,7 +872,7 @@ function allocateRelative(cands, budget, cap) {
 
 // Optimal 1-D clustering by dynamic programming (Ckmeans.1d.dp; Wang & Song,
 // 2011) — the provably-optimal successor to Jenks natural breaks. Partitions the
-// (descending-sorted) weighted values into K contiguous clusters minimising the
+// (descending-sorted) weighted values into K contiguous clusters minimizing the
 // within-cluster sum of squares, so boundaries fall on the largest gaps. Weights
 // are the member counts of each atomic unit. Returns contiguous index ranges
 // [lo, hi] (top to bottom) plus the achieved within-cluster SS. O(K·n²), n ≤ ~30.

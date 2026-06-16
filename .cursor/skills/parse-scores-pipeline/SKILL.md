@@ -33,20 +33,8 @@ Open `analysis/<name>/music.md` for ranked + raw-order vote tables. `just status
 
 ## Flow
 
-```
-rounds/<name>.html|.txt
-        │
-        ▼
-  parse-round.mjs  ──►  analysis/<name>/music.md + music.json
-        │
-        │  (thematic, after fit.json exists)
-        ▼
-  parse-round.mjs --fit analysis/<name>/fit.json  ──►  analysis/<name>/scores.json
-        │
-        ▼
-  render-fit-html.mjs  ──►  analysis/<name>/scores.html (deliverable)
-  render-fit-html.mjs on fit.json  ──►  analysis/<name>/fit.html (fit-only)
-```
+Pipeline tree and artifact paths: **round-artifacts** skill and
+[`spec/analysis-artifacts.md`](../../../spec/analysis-artifacts.md).
 
 `extract-html.mjs` and `parse-text.mjs` are libraries — always invoked via `parse-round.mjs`.
 

@@ -31,8 +31,8 @@ on the round (e.g. `tarot` or `2026-06-09`). It always runs the next step for yo
    ```
 
    `<roundname>` is your choice (dated slugs work well); every later file is derived
-   from it. See [Getting a usable HTML export](#getting-a-usable-html-export-important)
-   for why the reload matters.
+   from it. Reload after autosave so comments appear as `data-comment` (see
+   [Getting a usable HTML export](#getting-a-usable-html-export-important)).
 
 2. **Parse it.** Run the next step:
 
@@ -91,11 +91,7 @@ through to the underlying scripts.
 - **`just scores <name> [flags]`** — render deliverable HTML from `scores.json`.
 - **`just final <name> [flags]`** — render scores or music HTML (whichever applies).
 
-- `--mode objective` (default): a comment with words but no number is **disqualified**.
-- `--mode subjective`: a words-only comment is flagged **needs review** instead.
-- **Fuzzy names** match exact → case-insensitive substring → subsequence. An ambiguous
-  query (e.g. `2026` when two rounds match) lists the candidates instead of guessing.
-- Blank score boxes (an incomplete export) show as a `⚠` warning, never a blocker.
+- **`--mode`**, **fuzzy names**, and **blank score boxes** — same rules as [Workflow](#workflow) step 1 and [How comments are scored](#how-comments-are-scored-your-comment-only) below.
 
 ### Without `just`
 
@@ -123,12 +119,9 @@ markdownlint extension, so editor warnings and the CLI agree.
 
 ## Getting a usable HTML export (important)
 
-Your scores live in the comment box, which is bound in-memory (Alpine `x-model`).
-A plain "Save Page As" / DOM copy **does not** capture unsaved text — only comments that
-have been **saved to the server and reloaded** appear in the HTML (as `data-comment`).
-
-So before exporting: let the page autosave, **reload it**, confirm your comments are
-pre-filled, then save the HTML. Otherwise most songs will come through as "needs a score".
+See **Workflow step 1** — autosave, reload, confirm pre-filled comments, then save the
+HTML. Unsaved in-memory comments (`x-model`) are not captured; only server-saved comments
+appear as `data-comment`.
 
 ## What the parser reads (per song)
 
@@ -159,19 +152,27 @@ From each `div.song`, skipping your own submissions (`mine: true`):
 
 ## How the draft allocation works
 
-Tiers come **solely from the spread of scores in that round** — there are no fixed
-thresholds. Among eligible songs (scored, not disqualified, not awaiting a score):
-`weight = score − lowest score present`, the budget is distributed by largest-remainder
-on those weights, and each song is clamped to the per-song cap.
+Tiers come from the **spread of scores in that round** — no fixed thresholds. Among
+eligible songs (scored, not disqualified, not awaiting a score), the allocator matches
+your **opinion curve** (score distribution) to a **point curve** (budget ÷ eligible
+songs), anchored on the **mode** (most common score), not the floor — disqualified
+entries are excluded entirely.
 
-- **Tiebreaks** (equal scores / same boundary): higher score, then `play ≥ + > plain > -`.
-- **Uncertainty:** a `?` song sitting right at a point boundary is surfaced under
-  "Needs review" rather than being auto-pushed down.
+1. **1-D clustering** (Ckmeans.1d.dp) finds natural score gaps; equal scores stay in
+   the same tier (`tierKey`).
+2. A **mode-centered bell** sets tier point targets; **`auto`** widens the curve as the
+   points-to-songs ratio grows.
+3. **Smoothness rule:** songs ≤1 score apart never end >1 point apart; big jumps only
+   on real gaps (>1 score).
+4. Budget is spent exactly via monotonic waterfill; per-song caps enforced.
 
-Known limitation: when a round is densely scored and **oversubscribed** (more candidates
-than points), the simple draft spreads `1`s across the top and can't form higher tiers.
-That's expected — treat the allocation as a starting point and rebalance. A modal-centered
-"bell curve" allocation that concentrates points is planned but not yet implemented.
+- **Tiebreaks** (equal scores): higher score, then `play ≥ + > plain > -`.
+- **Uncertainty:** `?` at a tier boundary surfaces under "Needs review."
+- **Ambiguous splits:** may emit `tier-structure` tradeoffs; pin with `--tier-count` or
+  `--bucket-count`.
+
+Dense or oversubscribed rounds naturally push more songs to 0 — treat the output as a
+starting point and rebalance. Full model: [spec/point-allocation.md](spec/point-allocation.md).
 
 ## The report
 
@@ -185,29 +186,16 @@ That's expected — treat the allocation as a starting point and rebalance. A mo
 ## The fit report (HTML)
 
 For lyric/theme rounds, fit research lives in **`analysis/<roundname>/fit.json`**
-(the agent produces it in workflow step 3). Merge with music scores to produce
-**`scores.json`** / **`scores.html`** — the deliverable. Fit-only review:
+(workflow step 3). Merge with music scores to produce **`scores.json`** /
+**`scores.html`** — the deliverable.
 
 ```bash
 just fit tarot [--out <path>] [--order fit|combined|raw]
 just scores tarot   # deliverable HTML from scores.json
 ```
 
-The HTML (not a markdown table) is the going-forward fit format: each candidate
-is a **card** with a narrow identity column (raw-order # / title / artist
-stacked) so the rationale/notes get the full width instead of being squeezed by
-a wide table. Output is self-contained (inline CSS, no network), light/dark
-aware, and collapses to a single column on mobile — handy for the eventual
-client-side app.
-
-- `--order fit` (default): sort cards by `fitScore` (raw-order # still shown on each).
-- `--order combined`: sort by `combinedScore` (the music+fit blend), when music scores have been merged in.
-- `--order raw`: keep Music League submission order.
-- Optional `highlights` (string array) and `combine` (`{ note, options[] }`)
-  fields in the JSON render as extra sections when present.
-- When songs carry `draftVotes`, the report ends with a **vote-transfer table**: raw
-  submission order with just `#` / title / artist / points + total, for copying votes
-  back into Music League.
+Card layout, sort orders, optional `highlights`/`combine`, and the vote-transfer table
+are documented in [spec/fit-evaluation.md](spec/fit-evaluation.md) → Output.
 
 ## Repo layout
 

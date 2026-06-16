@@ -48,7 +48,7 @@ just parse <name> --bucket-count 4       # force K=4 score clusters (lower-level
 
 ```bash
 node scripts/parse-round.mjs rounds/<name>.html \
-  --fit analysis/<name>-fit.json \
+  --fit analysis/<name>/fit.json \
   --rank combined \
   --weights 0.6:0.4 \
   --shape auto \
@@ -94,40 +94,15 @@ Enforced structurally — depends on `rankBy`:
 
 ## Opinion curve ↔ point curve
 
-- Anchor on **mode/center** of numeric scores, not the floor (`-`/words excluded entirely)
-- **Owner default shape (see `spec/point-allocation.md` → _Standing shape
-  preference_):**
-  - **The curve is the point.** Keep a graduated bell; don't flatten either end —
-    not all-1s (raises the field floor, dilutes the vote) and not everything parked
-    at the cap. Don't fill the zero band with `1`s when you could promote a couple
-    of `2`s and leave some `0`s.
-  - **Zeros are a consequence, not a quota.** At typical (low) ratios a proper bell
-    just _has_ zeros; the allocator doesn't force a fixed count. Where it bottoms
-    out doesn't matter — a graduated multi-tier shape beats manufacturing a `0`.
-  - **Tiers are drawn by 1-D clustering on natural gaps** (Ckmeans.1d.dp over the
-    equal-opinion `tierKey` units); the budget then fills them via the monotonic
-    waterfill. Tier count is a **soft** choice (smoothest, most-graduated feasible
-    clustering), not a hard cap — clustered fields with scarce points stay coarse,
-    but the same field with generous points opens more tiers to keep close songs
-    close.
-  - **Smoothness is the one hard rule.** Songs `≤1` score apart never end `>1`
-    point apart; a `>1` jump may only land on a real gap. So a meh field gets a
-    graduated `3/2/2/1/0`, never a `3/3/0/0` cliff.
-  - **Monotonic + tier-clean.** Higher score never earns fewer points (contiguous
-    clusters, descending values); equal-score units get equal points unless an
-    indivisible remainder forces a 1-point split.
-  - **Taller top as points open up** (`3`s/`4`s) where the spread supports it, not
-    a flat spread of the extra points. `auto` widens its bell as the ratio grows.
-  - Prefer plain `auto`; reach for `--tier-count` / `--pin` / other shapes only
-    when a field needs it. When the tier count is ambiguous the allocator surfaces a
-    `tier-structure` choice — accept one to pin it.
-  - **Two tiering knobs:** `--tier-count <n>` sets the number of **final point
-    tiers** (distinct point values; `0–2 points` = 3 tiers). `--bucket-count <n>`
-    is the lower-level knob — it forces **K**, the number of score clusters; budget
-    - smoothness still decide how many point values result (`--bucket-count` wins if
-      both are set).
-- Upvote bank spent **exactly** (see HARD CONSTRAINTS); per-song cap (`maxUpvotesPerSong`) enforced
-- `userAllocatedVotes` (`data-weight`) is a **floor** — overflow surfaces tradeoff
+Authoritative model: [`spec/point-allocation.md`](../../../spec/point-allocation.md) —
+_Allocation model_, _How the tiers are drawn_, _Smoothness_, _Standing shape preference_.
+
+Quick reference:
+
+- Mode-centered bell (`auto` default); `--tier-count` = final point tiers;
+  `--bucket-count` = score clusters (wins if both set)
+- Ckmeans.1d.dp clustering + smoothness rule (≤1 score apart → ≤1 point apart)
+- Upvote bank spent exactly; `userAllocatedVotes` is a floor
 
 ## Covers / duplicate recordings
 
@@ -160,16 +135,17 @@ Printed by CLI after parse/merge; listed in markdown "Needs your call". Re-run w
 
 Map natural language → profile:
 
-| User wants                                     | Try                                                                                                                                   |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| "Spread points more" / "more separation"       | `--shape auto` (owner default: taller tiers as the ratio grows) or `--shape balanced` for a neutral bell                              |
-| "Concentrate on favorites" / "top-heavy"       | `--shape top-heavy`                                                                                                                   |
-| "Flat / conservative" / "mostly 1s"            | `--shape compressed` (tight tiers — mostly 1s + a couple 2s + some 0s)                                                                |
-| "Fewer / more tiers" / pick a tier structure   | `--tier-count <n>` (final point tiers; or accept a surfaced `tier-structure` option); `--bucket-count <n>` to force the cluster count |
-| "More zeros" / "stop raising the floor"        | `--shape auto` already carves zeros from the curve; for tighter, use `--shape compressed` or `--pin`                                  |
-| "Fit matters more" / "music should count more" | `--rank combined --weights <fit>:<music>` (e.g. `0.6:0.4` to give music more pull while staying fit-led)                              |
-| "Off-theme gets nothing"                       | `--cutoff fit:68` or `--gate passFail`                                                                                                |
-| "Reward borderline fits when budget allows"    | `--gate passFailMaybe` + resolve `maybe-band` tradeoff                                                                                |
+| User wants                                     | Try                                              |
+| ---------------------------------------------- | ------------------------------------------------ |
+| More separation / taller tiers                 | `--shape auto` or `--shape balanced`             |
+| Concentrate on favorites                       | `--shape top-heavy`                              |
+| Flat / mostly 1s                               | `--shape compressed`                             |
+| Fewer / more tiers                             | `--tier-count <n>` or accept `tier-structure`    |
+| Force cluster count                            | `--bucket-count <n>`                             |
+| Fit vs music balance                           | `--rank combined --weights <fit>:<music>`        |
+| Off-theme gets nothing                         | `--cutoff fit:68` or `--gate passFail`           |
+| Reward borderline fits                         | `--gate passFailMaybe` + `maybe-band` tradeoff     |
+| Pin a song                                     | `--pin <index>:<votes>`                          |
 
 Dense/oversubscribed rounds (below ~1:1) naturally push more songs to 0 — expected and on-preference; rebalance manually or adjust shape only if a field calls for it.
 

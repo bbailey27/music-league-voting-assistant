@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Render the FINAL draft-vote output (the analysis/<round>.md equivalent) as a
+// Render the FINAL draft-vote output (the analysis/<roundname>/music.md equivalent) as a
 // self-contained, card-based HTML page. The ranked markdown table gets too wide
 // once you want scores, modifiers, comments AND fit reasoning side by side, so
 // each song becomes a card instead.
@@ -12,7 +12,7 @@
 //   <analysis.json>  the deterministic parse output (buildJsonPayload) — the
 //                    authoritative source for round/mode/budget/your scores +
 //                    modifiers + comments + tradeoffs.
-//   --fit <fit.json> optional LLM fit sidecar (analysis/<round>-fit.json). When
+//   --fit <fit.json> optional LLM fit sidecar (analysis/<roundname>/fit.json). When
 //                    present we re-run the deterministic merge+allocate from
 //                    score-core (mergeFitJson) so the votes, combined scores and
 //                    "needs your call" tradeoffs shown here are internally

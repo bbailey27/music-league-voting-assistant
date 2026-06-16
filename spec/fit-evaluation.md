@@ -24,73 +24,43 @@ Submitter explanations can strengthen a subjective interpretation but do not aut
 
 ## Clarify before scoring
 
-**No assumptions about priorities.** Before scoring a round's songs, confirm the
-points below. If any is unspecified and is **not** settled by a confirmed
-[guidance profile](fit-guidance.md) or an explicit user instruction for this
-round, **ask the user before scoring** — do not invent a priority order.
+**No assumptions about priorities.** Before scoring, confirm the points below. If any
+is unset and not covered by a confirmed [guidance profile](fit-guidance.md) or explicit
+user instruction for this round, **ask before scoring**.
 
-Run this as one short clarification pass (one question at a time), then score.
+Run one short pass (one question at a time), then score.
 
 ### Necessary points to confirm
 
-1. **Prompt type & gate** — objective vs conceptual vs lyric; graded tiers vs a
-   `pass/fail` (or `pass/maybe/fail`) gate round.
-2. **Criteria/trait list** — the dimensions fit will be judged on (e.g. grammar,
-   continuation, symbol/element, personality traits, lyrics-vs-vibe). Surface the
-   list explicitly so the user can react to it.
-3. **Relative influence of each trait** — how much each dimension moves the score,
-   using the **influence vocabulary** below. Never assume one trait outranks another.
-4. **Guidance-profile match** — if the round matches a row in the
-   [Associations](fit-guidance.md#associations) table or an existing profile,
-   **propose it, describe its lens concretely** (not just the id), and get
-   confirmation. Profiles are suggested, never auto-applied.
-5. **Gate boundary** (gate rounds only) — clarify where the pass/fail line sits if
-   it is unclear. If only a few entries are borderline, you may score the clear
-   ones and **list the questionable cases at the end for the user to adjudicate**
-   rather than guessing.
-6. **Music weighting** — see [timing rule](#when-to-ask-about-music-weight) below;
-   often deferred.
+1. **Prompt type & gate** — objective vs conceptual vs lyric; graded tiers vs
+   `pass/fail` (or `pass/maybe/fail`) gate.
+2. **Criteria/trait list** — dimensions fit will be judged on; surface explicitly
+   for user reaction.
+3. **Relative influence** — pin each trait using the [influence vocabulary](#influence-vocabulary-be-precise) below.
+4. **Guidance-profile match** — if the round matches [Associations](fit-guidance.md#associations),
+   propose the profile, describe its lens concretely, and confirm (never auto-apply).
+5. **Gate boundary** (gate rounds only) — clarify the pass/fail line, or score clear
+   cases and list borderline entries for user adjudication.
+6. **Music weighting** — see [timing rule](#when-to-ask-about-music-weight) below.
 
 ### Influence vocabulary (be precise)
 
-A vague "A matters more than B" is ambiguous. Always pin down what the lower
-trait's influence actually is, using these levels:
+Vague "A matters more than B" is ambiguous. Pin each trait to one level:
 
-- `primary` — drives the score; the main basis for the tier.
-- `co-primary` / `even` — two or more traits weighted ~equally; all drive the
-  score together. One primary present and one co-primary present are roughly even.
-- `secondary` — a real fit dimension that **leans** slightly below primary, as a
-  fuzzy distinction rather than a hard cap. It meaningfully shapes the tier (more
-  than a tiebreak) and stacks with primaries, and a missing primary is **not**
-  punished. All else equal a primary edges out a secondary, but the gap is small:
-  **strong scores across several secondaries can match or beat a basic read of a
-  primary.** It is also **field-relative** — if many songs nail the primary,
-  secondary-only songs slide down; if most of the field leans on secondaries, the
-  primary becomes more of a `bonus` to a few songs and a strong secondary can earn
-  the top tier. Use this for "close 2nd" traits (e.g. the symbol/element in
-  `traits-over-symbols`).
-- `bonus` — adds points on top when present but is **not itself a fit signal**;
-  **absence is not penalized** (e.g. "a fair amount of bonus from music"). Lighter
-  and more additive than `secondary`, which can carry partial fit on its own.
-- `tiebreak-only` — does **not** move the tier; only separates otherwise-equal songs.
-- `soft-penalty-if-present` — presence **drags the score down** (down-rank);
-  absence is neutral/fine.
-- `ignore` — not scored at all.
-- `hard-gate` — binary requirement; failing it zeroes the song regardless of every
-  other trait.
+- `primary` — drives the tier.
+- `co-primary` / `even` — ~equal weight; all drive the score together.
+- `secondary` — real fit signal, leans below primary but stacks; strong secondary
+  reads can match a basic primary and is **field-relative** (see `traits-over-symbols`
+  in fit-guidance). Absence of a primary is not penalized.
+- `bonus` — helps when present; absence neutral; lighter and more additive than
+  `secondary`.
+- `tiebreak-only` — splits ties only; does not move the tier.
+- `soft-penalty-if-present` — presence drags down; absence neutral.
+- `ignore` — not scored.
+- `hard-gate` — failing zeroes the song regardless of other traits.
 
-When the user says "A matters more than B", resolve which of these B is — e.g.:
-
-> "Should B be a lower-weighted **co-primary** (still shapes the tier, just less),
-> a **secondary** signal (a close 2nd — leans slightly lower, but stacks and can
-> match/beat a basic primary read; field-relative), a **bonus** (helps when present, never
-> hurts, but isn't fit on its own), a **tiebreak** (only splits ties), something
-> we **penalize when present**, or **ignored** entirely?"
-
-Ask analogously about each trait the user wants to have more or less influence:
-
-> "Among these traits — [the trait list] — are there any you want to have more or
-> less influence on the fit score, and which level above does each land on?"
+When the user ranks traits, resolve the lower trait's level explicitly (co-primary,
+secondary, bonus, tiebreak, penalize-when-present, or ignore).
 
 ### When to ask about music weight
 
@@ -127,4 +97,8 @@ The deterministic merge step (`parse-round.mjs --fit <fit.json>` / `mergeFitJson
 
 The human-readable fit report is the **generated HTML**, not a markdown table: run `scripts/render-fit-html.mjs` on the JSON. The HTML uses a stacked card layout (raw-order # / title / artist in a narrow identity column) so the rationale/notes get full width.
 
-Once an allocation exists (songs carry `draftVotes`), both outputs must end with a **vote-transfer table**: raw submission order, just song metadata (`#`, title, artist) and the points, plus a total. This is the copy-back-into-Music-League view. The HTML renders it automatically from `draftVotes`; the markdown companion must include the same table.
+Once an allocation exists (songs carry `draftVotes`), every output must end with a
+**vote-transfer table**: raw submission order, song metadata (`#`, title, artist), points,
+and a total — the copy-back-into-Music-League view. HTML renders it from `draftVotes`;
+markdown companions (`music.md` after parse; optional hand-maintained `fit.md`) must
+include the same table when votes exist.

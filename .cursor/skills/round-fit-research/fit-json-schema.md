@@ -1,6 +1,6 @@
 # Fit JSON schema
 
-Source of truth for `analysis/<roundname>-fit.json`. The merge step joins on `rawOrderIndex` (fallback: normalized `title`). Manual fit tokens in user comments **win** over LLM fields.
+Source of truth for `analysis/<roundname>/fit.json`. The merge step joins on `rawOrderIndex` (fallback: normalized `title`). Manual fit tokens in user comments **win** over LLM fields.
 
 ## Top-level object
 

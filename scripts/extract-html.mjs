@@ -19,16 +19,9 @@ export function decodeEntities(s) {
     .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)));
 }
 
-// Recover round markup that was double-wrapped by a rich-text editor.
-//
-// When someone opens the round page's *View Source* and pastes it into
-// TextEdit / Notes / Mail, macOS re-encodes the real HTML as escaped text and
-// lays each source line into its own `<td class="td1"><p>…</p></td>` cell
-// (the file announces itself with `Generator: Cocoa HTML Writer`). The genuine
-// `vote.html` markup survives intact inside those cells, just entity-escaped and
-// line-split. This rebuilds the original source string by reading each cell's
-// decoded text content; returns null when the document isn't such a wrapper or
-// doesn't contain a song list to recover.
+// Recover "Cocoa HTML Writer" View-Source pastes when a zero-song parse finds
+// entity-escaped round markup in `<td class="td1">` cells. See spec/decisions.md
+// → 2026-06-11 — Recover round markup from a rich-text View-Source paste.
 export function recoverEscapedSource(document) {
   const cells = [...document.querySelectorAll('td.td1 > p')];
   if (cells.length === 0) return null;

@@ -8,10 +8,9 @@ rounds where they don't belong.
 
 ## How profiles are applied
 
-- **Suggested, not automatic.** Before scoring a round, check the
-  [Associations](#associations) table for the round's league or voting style. If a
-  profile may apply, **propose it and confirm with the user** before scoring —
-  never apply silently.
+- **Suggested, not automatic.** Before scoring, check [Associations](#associations)
+  and run the clarification pass in
+  [fit-evaluation.md → Clarify before scoring](fit-evaluation.md#clarify-before-scoring).
 - **Record what was applied.** When a profile is used, list it in the fit JSON's
   top-level `guidanceProfiles: ["id", …]` and reflect it in `method`
   (see [fit-json-schema.md](../.cursor/skills/round-fit-research/fit-json-schema.md)).
@@ -27,29 +26,19 @@ rounds where they don't belong.
 ### `traits-over-symbols`
 
 **When to consider:** Astrology / archetype / persona / "describe a character or
-type" prompts that list **both** a literal symbol or element **and** a set of
-personality traits (e.g. zodiac signs, tarot figures, elemental themes).
+type" prompts that list **both** a literal symbol or element **and** personality traits.
+
+Decision log: [`decisions.md`](decisions.md) → 2026-06-10 — `traits-over-symbols`.
 
 **Lens:**
 
-- **Both is best.** A song that hits **both** the symbol/element **and** the
-  personality traits is the strongest fit and earns the top tier.
-- **Rank order:** both > traits-only > symbol/element-only > neither. Traits
-  outrank the bare symbol, but the symbol/element is a **positive, secondary
-  signal — never a penalty.** A song is not "better" for _lacking_ the imagery;
-  do not downgrade a song for having it. Only rank it below songs that also carry
-  the traits.
-- **Shared elements are weaker, not worthless.** When an element/symbol is common
-  to several prompts in the same series (e.g. "water" is shared by every water
-  sign — Cancer, Scorpio, Pisces), a literal match on it is a _secondary_ signal:
-  it cannot reach the top tier **on its own**, but it still counts toward fit and
-  stacks with any traits the song carries.
-- A clever or explicit reference to the _specific_ archetype (naming the sign,
-  invoking its myth) is stronger than a generic shared-element match.
+- **Both is best.** both > traits-only > symbol-only > neither.
+- **Symbol/element is a positive secondary signal — never a penalty.** Shared
+  elements (e.g. water across water signs) cannot reach the top tier alone but stack
+  with traits. A specific archetype reference beats a generic shared-element match.
 
-**Tier effect:** symbol/element-only picks are a valid but lower fit (they sit
-below trait-bearing songs, not at the floor); traits-only picks rank above them;
-top tiers go to songs that carry **both**. Never treat the imagery as a negative.
+**Tier effect:** top tier needs **both**; traits-only above symbol-only; never
+downgrade for carrying imagery.
 
 ### `lyrics-first`
 
@@ -99,12 +88,12 @@ split by the music bonus. Confirm the exact music weight per round (see
 Suggested (not automatic) profile candidates by league / voting style. Add rows as
 patterns recur.
 
-| League / style                           | Candidate profiles                    | Notes                                                                                                                                                                                                               |
-| ---------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chill Western Astrology League           | `traits-over-symbols`, `lyrics-first` | Zodiac prompts list a symbol/element + trait list; element (water/fire/earth/air) is shared across signs, so it is a secondary signal — credit it, but let traits decide the top, and reward songs that carry both. |
-| Any astrology / tarot / archetype series | `traits-over-symbols`                 | Shared symbols/elements across the series are secondary (not decisive) signals; both symbol + traits is the strongest fit.                                                                                          |
-| Lyric- or meaning-driven thematic rounds | `lyrics-first`                        | When the prompt is about what a song _says/means_, not how it sounds.                                                                                                                                               |
-| Continue-the-sentence / story leagues    | `story-continuation`                  | Titles attach to a running stem; grammar and an interesting continuation are co-primary (even), with music as a bonus on top. Recurs across the league's rounds.                                                    |
+| League / style                           | Candidate profiles                    | Notes                                                               |
+| ---------------------------------------- | ------------------------------------- | ------------------------------------------------------------------- |
+| Chill Western Astrology League           | `traits-over-symbols`, `lyrics-first` | Zodiac: element shared across signs → secondary; traits + both win. |
+| Any astrology / tarot / archetype series | `traits-over-symbols`                 | Shared symbols secondary; both symbol + traits strongest.           |
+| Lyric- or meaning-driven thematic rounds | `lyrics-first`                        | Prompt about meaning, not sonic genre.                              |
+| Continue-the-sentence / story leagues    | `story-continuation`                  | Grammar + continuation co-primary; music bonus.                     |
 
 ## Adding a profile
 
