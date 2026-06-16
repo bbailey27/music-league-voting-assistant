@@ -82,11 +82,16 @@ function pipelineState(name) {
   const hasInput = hasHtml || hasTxt;
   const inputPath = hasHtml ? htmlPath : txtPath;
   const hasParse = existsSync(music.md) && existsSync(music.json);
+  const hasMusicHtml = existsSync(music.html);
   const hasFitJson = existsSync(fit.json);
   const hasFitHtml = existsSync(fit.html);
   const hasScoresJson = existsSync(scores.json);
   const hasScoresHtml = existsSync(scores.html);
 
+  let musicHtmlFresh = false;
+  if (existsSync(music.json) && hasMusicHtml) {
+    musicHtmlFresh = statSync(music.html).mtimeMs >= statSync(music.json).mtimeMs;
+  }
   let fitHtmlFresh = false;
   if (hasFitJson && hasFitHtml) {
     fitHtmlFresh = statSync(fit.html).mtimeMs >= statSync(fit.json).mtimeMs;
@@ -120,6 +125,8 @@ function pipelineState(name) {
     hasTxt,
     hasInput,
     hasParse,
+    hasMusicHtml,
+    musicHtmlFresh,
     hasFitJson,
     hasFitHtml,
     fitHtmlFresh,
@@ -299,6 +306,14 @@ function cmdStatusOne(name) {
     `  ${checkbox(st.hasFitHtml, st.hasFitHtml && !st.fitHtmlFresh)} Fit HTML       ${st.fit.html}` +
       (st.hasFitHtml && !st.fitHtmlFresh ? '   (stale — re-render)' : '')
   );
+  // Music-only deliverable (ml final on a non-thematic round). Optional row —
+  // shown only once produced, since most rounds end at scores.html instead.
+  if (st.hasMusicHtml) {
+    console.log(
+      `  ${checkbox(true, !st.musicHtmlFresh)} Music HTML     ${st.music.html}` +
+        (!st.musicHtmlFresh ? '   (stale — re-render)' : '')
+    );
+  }
   warnMissingScores(st);
   console.log(`  Next: ${step.label}`);
 }

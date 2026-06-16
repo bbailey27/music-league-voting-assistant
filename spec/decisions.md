@@ -11,6 +11,21 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-06-15 — music.html on the ml status checklist
+
+**Change.** `ml status <round>` shows an optional **Music HTML** row (with stale
+detection) when `analysis/<round>/music.html` exists.
+
+**Why.** `ml final` writes `music.html` for music-only (non-thematic) rounds, but the
+status checklist only listed scores/fit HTML — so that deliverable, and whether it
+had gone stale relative to `music.json`, was invisible.
+
+**Refs.** `working tree`; affects `pipelineState` / `cmdStatusOne`
+(`scripts/ml.mjs`); test in `tests/ml-status.test.mjs`; layout in
+`spec/analysis-artifacts.md`.
+
+---
+
 ## 2026-06-15 — Persist needsResearch on music.json songs
 
 **Change.** `buildJsonPayload` now writes `needsResearch` (boolean) on each song
