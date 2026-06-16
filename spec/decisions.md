@@ -20,7 +20,7 @@ detection) when `analysis/<round>/music.html` exists.
 status checklist only listed scores/fit HTML — so that deliverable, and whether it
 had gone stale relative to `music.json`, was invisible.
 
-**Refs.** `working tree`; affects `pipelineState` / `cmdStatusOne`
+**Refs.** `5e6051f`; affects `pipelineState` / `cmdStatusOne`
 (`scripts/ml.mjs`); test in `tests/ml-status.test.mjs`; layout in
 `spec/analysis-artifacts.md`.
 
@@ -36,7 +36,7 @@ fit signal yet (`scoreComment`), but the flag was dropped on write — so the fi
 research loop, which filters `music.json` for songs needing outside knowledge, could
 never see it.
 
-**Refs.** `working tree`; affects `buildJsonPayload` (`scripts/score-core.mjs`); test
+**Refs.** `14b531b`; affects `buildJsonPayload` (`scripts/score-core.mjs`); test
 in `tests/score.test.mjs`. Unblocks the research loop in
 `followup-3-thematic-mode.plan.md`.
 
