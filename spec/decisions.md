@@ -11,6 +11,22 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-06-15 — Persist needsResearch on music.json songs
+
+**Change.** `buildJsonPayload` now writes `needsResearch` (boolean) on each song
+object in `music.json`.
+
+**Why.** Thematic scoring sets `needsResearch` when a song has a music score but no
+fit signal yet (`scoreComment`), but the flag was dropped on write — so the fit
+research loop, which filters `music.json` for songs needing outside knowledge, could
+never see it.
+
+**Refs.** `working tree`; affects `buildJsonPayload` (`scripts/score-core.mjs`); test
+in `tests/score.test.mjs`. Unblocks the research loop in
+`followup-3-thematic-mode.plan.md`.
+
+---
+
 ## 2026-06-15 — Pre-allocation gate: surface blockers before allocating
 
 **Change.** Added a named **Pre-allocation gate** rule (`spec/point-allocation.md`,

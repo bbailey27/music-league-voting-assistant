@@ -10,6 +10,7 @@ import {
   mergeFit,
   mergeFitJson,
   ckmeans1dWeighted,
+  buildJsonPayload,
 } from '../scripts/score-core.mjs';
 import { parseWeights, parsePins, parseTierCount, parseBucketCount } from '../scripts/parse-round.mjs';
 
@@ -70,6 +71,28 @@ test('scoreComment manual fit notation', () => {
   assert.equal(scoreComment('pass', 'objective').gate, 'pass');
   assert.equal(scoreComment('borderline, maybe', 'subjective').gate, 'maybe');
   assert.equal(scoreComment('off-theme', 'subjective').gate, 'fail');
+});
+
+test('buildJsonPayload persists needsResearch per song', () => {
+  // A thematic round flags music-known/fit-unknown songs for the research loop;
+  // that flag must survive the write to music.json so agents can filter on it.
+  const flagged = scoreComment('76 music', 'thematic');
+  assert.equal(flagged.needsResearch, true, 'thematic music-only comment needs research');
+  const songs = [
+    { rawOrderIndex: 0, title: 'A', artist: 'x', needsResearch: true },
+    { rawOrderIndex: 1, title: 'B', artist: 'y', needsResearch: false },
+  ];
+  const payload = buildJsonPayload({
+    round: {},
+    budget: {},
+    songs,
+    totalSongs: 2,
+    ownSkipped: 0,
+    mode: 'thematic',
+    tradeoffs: [],
+  });
+  assert.equal(payload.songs[0].needsResearch, true);
+  assert.equal(payload.songs[1].needsResearch, false);
 });
 
 test('fitTierForScore snaps to the nearest tier', () => {
