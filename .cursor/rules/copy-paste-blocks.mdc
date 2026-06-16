@@ -1,0 +1,46 @@
+---
+description: Output pasteable deliverables (tickets, PR/issue/comment text) in a single copyable code block
+alwaysApply: true
+---
+
+# Copyable Paste Blocks
+
+When the user asks for text to paste somewhere else — a ticket/issue description, a
+PR description, a code-review comment, a Slack/email message, a commit message body,
+or any "give me an md block / something I can paste" request — output it as a SINGLE
+fenced code block the user can copy verbatim.
+
+## The fence-nesting rule (most common failure)
+
+If the deliverable itself contains triple-backtick code fences, a triple-backtick
+outer wrapper terminates early and the block is not copyable. The outer fence MUST
+be longer than any fence inside it.
+
+- Inner content has ` ``` ` fences -> wrap the whole thing in four backticks ` ```` `.
+- Inner content has ` ```` ` -> wrap in five backticks. Always outer length = (max
+  inner fence length) + 1.
+- Do not add a language tag to the outer wrapper (it is a copy container, not
+  highlighted source).
+
+## Example
+
+When the ticket text contains a ```ts block, deliver it like this (four-backtick outer):
+
+`````markdown
+````markdown
+# Ticket title
+
+Some text.
+
+```ts
+const x = 1;
+```
+````
+`````
+
+## Checklist before sending pasteable text
+
+- One self-contained block, nothing the user must hand-edit after pasting.
+- Outer fence strictly longer than the longest inner fence.
+- No stray prose inside the block that is not part of the deliverable.
+- Follows `summary-output-format` wording (direct, factual; no filler).

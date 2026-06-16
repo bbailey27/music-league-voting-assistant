@@ -1,0 +1,17 @@
+---
+description: Output summaries as copyable markdown blocks with direct wording
+alwaysApply: true
+---
+
+# Summary Output Format
+
+When the user asks for a summary — of changes, for a PR, for a ticket, for a code review response, or any other deliverable text — output it inside a fenced markdown code block (` ```markdown `) so they can copy it directly.
+
+## Wording
+
+- Write in direct, factual language. Describe what changed and why.
+- Do not use filler phrases like "This change enhances...", "This improvement ensures...", "We have implemented...", or "This update provides...".
+- Prefer short active sentences: "Added X", "Split Y into Z", "Replaced A with B".
+- Name the specific files, flags, functions, or patterns involved.
+- When a decision was made not to address something, state the reason plainly.
+- Do not over-clarify based on discarded attempts and misunderstandings.
