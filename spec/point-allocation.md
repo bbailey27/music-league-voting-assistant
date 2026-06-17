@@ -43,8 +43,8 @@ conversation that happens **after** the blocking gate is clear.
   song (`maxUpvotesPerSong`).
 - When `downvotesEnabled`: **downvote bank** = `downvoteBankSize`; **downvote
   cap** = `maxDownvotesPerSong`.
-- **profile**: `{ rankBy, gate, shape, weights, overrides, leniency, tierCount,
-bucketCount }` plus downvote fields injected from the round budget via
+- **profile**: `{ rankBy, gate, shape, weights, overrides, leniency, favoriteBand,
+tierCount, bucketCount }` plus downvote fields injected from the round budget via
   `enrichProfileWithBudget()`.
 - Each song carries a music `score` and an optional canonical fit signal
   (`fitScore` / `fitTier` / `gate`, see [fit-evaluation.md](fit-evaluation.md)).
@@ -98,40 +98,62 @@ Downvote tiers are usually fewer songs and lower magnitudes than the upvote side
 widely-spread one uses more. `auto` reads both the ratio (point-curve width) and
 the score spread (opinion-curve width).
 
-### How the tiers are drawn: 1-D clustering on natural breaks
+### How the tiers are drawn: a center-out staircase of unit steps
 
-Concretely, the allocator treats the round's scores as a **1-D distribution** and
-allocation as **drawing vertical lines at the natural gaps** (the tier
-boundaries), then giving each tier a point value so that `Σ (tier size × points) =
-budget`, monotonic and capped.
+Concretely, the allocator builds the point curve as a **staircase of `+1` steps**,
+read top-down over the ranked, gated-in songs:
 
-- **Boundaries land on real gaps.** Tier boundaries are placed by
-  **Ckmeans.1d.dp** (Wang & Song, 2011) — optimal univariate _k_-means by dynamic
-  programming, the provably-optimal successor to Jenks natural breaks — which
-  minimizes within-tier variance, i.e. cuts at the largest score gaps. The unit of
-  clustering is the **atomic `tierKey` group** (equal-opinion songs, see below), so
-  equal scores can never be split across a boundary.
-- **The budget decides how many levels appear.** Candidate clusterings are built
-  for every `K = 1..#units`; each is point-filled by the **monotonic per-member
-  waterfill** (budget-exact, capped, whole-tier). A clustering can repeat a level
-  (e.g. `3/2/2/1/0`), so the smooth, graduated curve is preferred over a coarse one
-  with the same distinct values.
-- **Tier count is a soft, opinion/points-aware choice — not a hard cap.** The
-  default picks the smoothest, most-graduated feasible clustering (then the fewest
-  tiers, then the cleanest break placement). A clustered "all-meh" field with
-  scarce points stays coarse; the same field with generous points opens more tiers
-  to **keep close songs close** rather than forcing one big gap.
+- Group songs into the atomic **`tierKey` units** (equal opinion never splits).
+- A **staircase** is a `0/1` **cutoff** (songs at/above it get the baseline `1`,
+  below it `0`) plus a nested set of **promotion steps** (each lifts everyone above
+  it by `+1`). So `votes(song) = [score ≥ cutoff] + #{promotions below the song}`
+  and `budget = (#songs ≥ cutoff) + Σ_steps (#songs ≥ step)`.
 
-### Smoothness (the one hard rule)
+Because each tier is reached by stacking whole `+1` steps, **adjacent point tiers
+differ by exactly 1 by construction** — the curve is contiguous and monotonic with
+no skipped levels (no `{4,1,0}` cliffs) and a higher score never earns fewer points.
 
-After the bell/clustering attempt, songs **≤ 1 score apart must never end > 1
-point apart.** A `>1`-point jump may only land on a **real gap** (`> 1` score). The
-allocator enforces this during tier selection (a candidate whose boundary forces a
-big jump on a tiny gap is rejected in favor of a smoother clustering), and because
-tiers are contiguous clusters with descending values, monotonicity is structural —
-a higher score can never earn fewer points. This is why a clustered field gets a
-graduated `3/2/2/1/0`-style curve (every step ≤ 1) instead of a `3/3/0/0`-style
-cliff: the cliff would put 1-apart songs 3 points apart.
+- **Enumerate budget-exact staircases.** Every cutoff × promotion-step combination
+  (steps bounded by `cap` and `#units`) whose song-sum **equals the budget** is a
+  candidate; choosing the boundaries _is_ the fill (no separate waterfill phase).
+  When no staircase hits the budget exactly (e.g. budget exceeds total capacity, or
+  is smaller than the top tie group), the tallest curve under budget is built and
+  phase 3 spills the remainder via the documented `forced-spill` exception.
+- **Boundaries prefer real gaps and the owner anchors.** A boundary earns its
+  **score gap** plus a bonus for landing on the **80 (favorite)** or **75
+  (actively-like)** anchor, so steps fall where the owner's scoring is meaningful
+  rather than in a fuzzy mid-band.
+- **Top-heaviness is capped by the budget, not the cap.** A promotion that lands on
+  neither an anchor nor a real gap (a sub-1-point gap in a fuzzy cluster) is a
+  **junk** step; the selector minimizes junk steps first, so a tight cluster stays
+  low-topped (a lone `80` over a `73–76` cluster gets `2`, never a lone `3`/`4`).
+  Each genuine step also carries a small height cost, so a uniform field takes the
+  **shortest** staircase that spends the budget — a high `cap` can't inflate the top.
+  A real favorite gap or anchor band still pays for a taller, graduated top.
+
+### R2 — favorite top-band merge (raw-score rounds only)
+
+Scores **≥ 80** are "favorites," and `90` vs `84` is not a meaningful difference, so
+every unit at/above the favorite floor is **merged into one synthetic atomic top
+unit** — the favorites share the top tier. When the merged band is a meaningful
+share of the funded field (`≥ ceil(funded / 3)` or `≥ 4`, whichever is smaller), the
+allocator also surfaces a **`top-band-split`** tradeoff so the owner can instead
+break the favorites onto their own gaps. `--favorite-band <min>` overrides the
+floor; `--no-favorite-band` disables the merge.
+
+**The `80` floor is a raw-music anchor ("8+") and does not apply to the normalized
+combined score.** When `rankBy = combined`, the 75-centered z-remap pushes
+above-average songs over `80` regardless of their raw fit/music (a music-7.5 song
+can land at `80.9`), so the merge is **off by default** for combined rounds —
+natural-gap clustering and the tier/bucket-count tradeoffs control top-flattening
+instead. An explicit `--favorite-band <min>` is still honored if the owner opts in.
+
+### Contiguity + smoothness (structural)
+
+Songs **≤ 1 score apart never end > 1 point apart**, and distinct point tiers are
+**always exactly 1 apart** — both hold by construction, because the curve is a
+stack of `+1` steps over contiguous, descending units. A `>1`-point jump can only
+exist across a real score gap (a unit boundary), and monotonicity is automatic.
 
 ### Ambiguous tier counts are surfaced
 
@@ -164,13 +186,13 @@ spends the remainder on a `75+?`/`75` pair instead. An arbitrary split (two
 same-modifier songs forced apart) is only chosen when no candidate avoids it, and
 it then surfaces as a `tier-split` tradeoff.
 
-**Two knobs, different levels.** `--tier-count <n>` sets the number of **final
-point tiers** (distinct point values — e.g. `0–2 points` = 3 tiers); the allocator
-picks the best (smoothest) clustering that yields that many tiers. `--bucket-count
-<n>` is the lower-level knob: it forces **K**, the number of score clusters the
-1-D clustering produces — the budget and smoothness still decide how many distinct
-point values those buckets collapse to (so 2 buckets can still finalize to 3 point
-tiers once leftover budget is spent). `--bucket-count` wins if both are given.
+**Two knobs, different levels.** `--tier-count <n>` sets the number of **distinct
+final point values**, counting the `0` band (e.g. `0–2 points` = 3 tiers).
+`--bucket-count <n>` forces **K**, the number of **funded** point tiers (promotion
+steps + 1, excluding the `0` band) — the lower-level knob. A single integer knob
+can't always reproduce one specific staircase (two staircases can share both counts
+yet differ in size), so the surfaced `tier-structure` option carries both and the
+allocator picks the nearest achievable. `--bucket-count` wins if both are given.
 
 ### Standing shape preference (owner default)
 
@@ -218,43 +240,84 @@ a specific field calls for it.
 - **`rankBy`** — the axis a song is ranked + tiered by:
   - `music` (default): music primary, fit as tiebreak.
   - `fit`: fit primary, music as tiebreak.
-  - `combined`: weighted blend `weights.fit × fit + weights.music × music`
-    (default `{ fit: 0.7, music: 0.3 }`; override on the CLI with
-    `--weights <fit>:<music>`, normalized to sum 1).
+  - `combined`: a **per-round normalized** blend, not the raw
+    `weights.fit × fit + weights.music × music`. `mergeFit` z-scores each axis over
+    the **contenders** (point-eligible songs — not DQ'd, blank, or gated out),
+    applies the weights to the standardized values, and remaps the blend onto a
+    **75-centered, music-anchored** `combinedScore` (so the staircase's gap / 75-80
+    anchor machinery still applies; the **favorite-band merge is off** for combined
+    rounds — see R2). Each axis is also exposed remapped onto the same scale as
+    `fitNorm` / `musicNorm`, so `combinedScore = w.fit·fitNorm + w.music·musicNorm`
+    explains every jump. The reconciliation is asymmetric,
+    via different std floors: **music floor low** (≈ 2 — a tight music field
+    amplifies half-points and `+/-`) and **fit floor high** (≈ 14 — the imprecise AI
+    fit number rides a fixed, dampened scale, so a tight good-fit cluster is never
+    amplified and only adapts when fit is genuinely wide). A field below ~4
+    contenders falls back to fixed reference anchors. Weights default to
+    `{ fit: 0.7, music: 0.3 }` (override with `--weights <fit>:<music>`, normalized
+    to sum 1) and now act on **comparable scales**, so a decisive music gap is no
+    longer drowned by a wide-but-fuzzy fit gap. See the
+    [decision log](decisions.md) for the rationale.
   - Tiebreak chain always ends: higher score, then modifier rank
     (`play ≥ + > plain > -`), then title.
 - **`gate`** — a hard boundary; below it a song earns 0 regardless of the other axis:
   - `{ type: 'cutoff', axis: 'fit'|'music', min }` — graded cutoff.
   - `{ type: 'passFail' }` — binary; `fail` → 0, allocate among passes.
-  - `{ type: 'passFailMaybe' }` — three-state. `fail` → 0. `maybe` (questionable)
-    is a **conditional tier below the passes**: skipped when budget is tight,
-    funded (one point each, ahead of fails) when budget is plentiful or
-    `leniency` is dialled up. The `maybe` band is ordered by **how defensible the
-    read is** (fitScore), music only as a secondary tiebreak.
+  - `{ type: 'passFailMaybe', leniency }` — three-state. `fail` → 0. **Passes are
+    shaped first, always**, and the governing rule is `max(maybe) ≤ min(funded
+pass)`: a `maybe` never earns more points than the lowest-funded pass. By
+    default funded maybes take the **1-point floor** (ahead of fails), ordered by
+    **how defensible the read is** (fitScore), music only as a secondary tiebreak;
+    `leniency` (0…1) reaches further down the maybe list at that floor. In a
+    **low-pass round** (few clear passes, many maybes — the prompt was hard or
+    widely misread) the maybe band may instead take its **own graduated staircase**
+    capped at the lowest pass, so the top maybes are rewarded above the rest without
+    crossing the pass line. The choice surfaces as a `maybe-band` tradeoff
+    (none / flat 1-point / graduated).
 - **`shape`** — how ranked candidates become point tiers:
-  - `auto` (default): mode-centered bell whose **width grows with the
-    points-to-songs ratio** (so the top climbs as points open up), plus a
-    ratio-scaled **downward skew** near/below ~1:1 to keep the top flat and carve
-    zeros when points are tight. The bell sets per-tier point _targets_; the tier
-    **boundaries** come from 1-D clustering on natural gaps and the budget-exact
-    monotonic waterfill, subject to the smoothness rule (see _How the tiers are
-    drawn_).
+  - `auto` (default): the **center-out staircase** — enumerate budget-exact
+    staircases of `+1` steps and pick the one with the fewest junk steps, then the
+    best boundary worth (real gaps + 75/80 anchors), then the shortest top. The top
+    climbs only as a real spread (or the favorite band) justifies it, so a high
+    `cap` never inflates it (see _How the tiers are drawn_).
   - `bell`: explicit mode-centered curve with a fixed width.
   - presets `compressed` / `balanced` / `top-heavy`: width/skew overrides.
   - `relative` (legacy): `score − lowest numeric score`. Anchors on the floor
     (wrong, per above); kept selectable but not default.
 - **`overrides`** — `{ rawOrderIndex: votes }` pins a song's votes; the remaining
   budget is shaped around it (also how the web re-runs after a tradeoff pick).
-- **`tierCount`** — forces the number of **final point tiers** (distinct point
-  values; `0–2 points` = 3 tiers). The allocator picks the smoothest clustering
-  with that many tiers (nearest achievable if none). Set by accepting a surfaced
-  option or via `--tier-count <n>`. Distinct from the (separate, planned) `--tiers`
-  knob for tier _sizes_.
-- **`bucketCount`** — forces **K**, the number of score clusters (buckets) the
-  clustering produces — the lower-level knob beneath `tierCount`. Budget +
-  smoothness still decide how many distinct point values result. Set via
-  `--bucket-count <n>`; wins over `tierCount` if both are given. Both suppress the
-  `tier-structure` tradeoff.
+- **`favoriteBand`** — controls the R2 favorite top-band merge (scores ≥ 80 share
+  the top tier). Default merges at `80` **for raw-score rounds only**; it is **off by
+  default when `rankBy = combined`** (the `80` floor is a raw-music anchor). `{ min }`
+  / `--favorite-band <min>` overrides the floor on any scale; `false` /
+  `--no-favorite-band` disables the merge.
+- **`tierCount`** — forces the number of **distinct final point values** (counting
+  the `0` band; `0–2 points` = 3 tiers). The allocator picks the best staircase with
+  that many distinct values (nearest achievable if none). Set by accepting a
+  surfaced option or via `--tier-count <n>`.
+- **`bucketCount`** — forces **K**, the number of **funded** point tiers (promotion
+  steps + 1, excluding the `0` band) — the lower-level knob beneath `tierCount`. Set
+  via `--bucket-count <n>`; wins over `tierCount` if both are given. Both suppress
+  the `tier-structure` tradeoff.
+- **`--option <A|B|C…>`** — picks a `tier-structure` fork by its column letter and
+  applies that exact distribution (deterministic sugar over per-song pins), so a
+  pick is one clean flag even when two options share a tier/bucket-count label. Each
+  option also carries a `shape` signature (e.g. `2×4 / 1×2 / 0×5`) so the legend and
+  labels are always distinguishable.
+- **`--reason "why"`** — attaches a free-text rationale to an `--option` pick (no-op
+  without `--option`). Picking writes a durable **pick record** to `fitData.pick`
+  (chosen option, every option that was presented, the reason, and any **manual
+  tweaks** — final votes that deviate from the chosen option's canonical
+  distribution, e.g. an extra `--pin`) and appends one line to the global
+  `analysis/picks.jsonl` training log (round, options-shown, chosen, reason, tweaks,
+  field score snapshot). The report keeps the alternatives visible after the pick: a
+  focused **Your pick** table plus a collapsed **Options considered** comparison with
+  the chosen column highlighted.
+
+The `tier-structure` tradeoff renders as a song×option comparison in **two orders** —
+by combined score (judgment) and by **raw submission order** (app entry) — and the
+raw-order view (plus the `Vote transfer` table) interleaves the owner's own
+(unvotable) song so every submission slot is present and the ballot can't misalign.
 
 ## Same score = same tier (scoring-type aware)
 
@@ -270,11 +333,13 @@ depends on the scoring type:
   **and** same gate class (both passing, or both `maybe`) ⇒ same points. A `75`
   pass and a `75` maybe are in **different fit tiers**, so the matching
   requirement does not apply.
-- **Combined / numeric fit**: **identical music** _and_ the **same coarse fit
-  band** ⇒ same tier. The numeric fit scores are made-up AI values, not precise
-  enough to differentiate song-by-song when many songs land on the same final
-  points — so fit is collapsed to its graded tier (`fitTierForScore`) for the
-  comparison, while music (the real axis) must match exactly.
+- **Combined / numeric fit**: **identical modifier-folded music** _and_ the **same
+  coarse fit band** ⇒ same tier. The made-up AI fit number is collapsed to its
+  graded tier (`fitTierForScore`) for the comparison, so tiny fit gaps never split a
+  tier; music (the real axis) must match exactly, but with the `+`/`-` modifier
+  **folded in** — a `74+` and a plain `74` are now **different** combined tiers,
+  because in combined mode the modifier is a real (round-tightness-scaled)
+  contributor to the normalized blend, not just an indivisible-split tiebreak.
 
 ## Budget exactness
 
@@ -285,11 +350,11 @@ then gated-out/below-cutoff, disqualified last — and surfaces a `forced-spill`
 tradeoff when it has to dip into the gated/invalid pool. (Casting every vote is
 required by Music League even when few songs qualify.)
 
-**Leftover budget keeps the curve before it raises the floor.** `allocateBell`
-fills whole tiers (top-down, monotonic, the chosen clustering) to spend the budget,
+**Leftover budget keeps the curve before it raises the floor.** The staircase is
+enumerated to spend the budget **exactly** (choosing the boundaries is the fill),
 so the descending shape is preserved without flattening into all-1s. Only a
-**forced remainder** — when no whole-tier step fits (very high points vs. a low
-per-song cap, or an indivisible split inside a tie) — is spent one point at a time,
+**forced remainder** — when no budget-exact staircase fits (very high points vs. a
+low per-song cap, or an indivisible split inside a tie) — is spent one point at a time,
 best songs first (by rank, so the spill stays monotonic) and modifier-aware within
 an equal-score unit, up to the hard cap. That is the only path that can split an
 equal-score unit, and it fires only because Music League requires every point to be
@@ -353,7 +418,8 @@ deciding. Each is `{ kind, question, options: [{ label, value }] }`:
 
 - `tier-split` — an equal-score tier can't split its points evenly **and no
   modifier breaks the tie**. (If a `+`/`play` resolves it, no tradeoff fires.)
-- `maybe-band` — how many questionable entries to reward.
+- `maybe-band` — how to reward the questionable band: none, a flat 1-point floor,
+  or (in a low-pass round) its own graduated staircase capped at the lowest pass.
 - `preallocation-overflow` — floors exceed budget.
 - `forced-spill` — leftover upvote points had to land on gated-out/invalid songs.
 - `forced-spill-down` — leftover downvote points spilled outside the primary down slice.
@@ -364,6 +430,17 @@ choice cards, markdown lists a "Needs your call" section.
 
 ## Modifiers
 
-`+`/`-` are within-tier nudges and break indivisible splits; `?` near a point
-boundary is surfaced for review; `play` is a positive tiebreak; bare `-` / `no` /
-`invalid` disqualify in `scoreComment`.
+`?` near a point boundary is surfaced for review; `play` is a positive tiebreak;
+bare `-` / `no` / `invalid` disqualify in `scoreComment`.
+
+`+`/`-` behavior is **scoring-type aware**:
+
+- **Music-only / fit / gate rounds**: within-tier nudges that only break an
+  **indivisible split** (who takes the odd extra point); they never move a song to a
+  different tier.
+- **Combined**: the modifier is **folded into the music value** (`± 0.34`) before
+  per-round normalization, so its impact **scales with how tight the round is** — in
+  a tightly-clustered music field a `+` becomes a real fraction of a standard
+  deviation and can lift a song into a higher combined tier; in a wide field it
+  stays negligible. (The allocator's tiebreak still applies as a final fallback for
+  any exact remaining tie.)

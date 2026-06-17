@@ -225,11 +225,13 @@ export function rankValue(s, profile = {}) {
     case 'fit':
       return fit ?? music ?? null;
     case 'combined': {
-      const w = profile.weights || DEFAULT_COMBINED_WEIGHTS;
-      if (fit == null && music == null) return null;
-      if (fit == null) return music;
-      if (music == null) return fit;
-      return w.fit * fit + w.music * music;
+      // Prefer the per-round normalized blend mergeFit stores on `combinedScore`
+      // (each axis z-scored over the contenders, then remapped onto a 75-centered,
+      // music-anchored scale so the staircase's gap / 75-80 anchor / favorite-band
+      // machinery still applies). Fall back to the raw weighted blend for direct
+      // allocate() calls that skip the merge/normalization pass.
+      if (s.combinedScore != null) return s.combinedScore;
+      return combinedScore(s, profile.weights || DEFAULT_COMBINED_WEIGHTS);
     }
     default:
       return music ?? fit ?? null;
@@ -357,7 +359,10 @@ function tierKey(s, profile) {
     case 'fit':
       return `f:${coarseFit(s)}`;
     case 'combined':
-      return `c:${music}|${coarseFit(s)}`;
+      // Modifier-folded music (effectiveMusic) is the exact axis here: a `74+` and a
+      // plain `74` are now different tiers (the fold-in earned it), while the made-up
+      // fit number is fuzzed to its coarse band so tiny fit gaps never split a tier.
+      return `c:${effectiveMusic(s) ?? ''}|${coarseFit(s)}`;
     default:
       return `m:${music}`;
   }
@@ -498,46 +503,109 @@ export function allocate(songs, budget, cap = Infinity, profile = {}) {
         tiebreakRank(b) - tiebreakRank(a)
     );
 
-  // Decide how many 'maybe' (questionable) entries to reward. They sit *below*
-  // the clear passes, ordered by how defensible the read is (fitScore), and are
-  // only funded when the budget is generous (or leniency is dialled up).
+  // Passes first, always. The governing rule is max(maybe) <= min(funded pass):
+  // a maybe never earns more points than the lowest-funded pass. By default funded
+  // maybes take the 1-point floor (ordered by defensibility, fitScore); how many
+  // are funded is the largest count that still keeps every pass >= 1 after shaping
+  // the reduced budget, capped by the leniency dial when set. In a LOW-PASS round
+  // (few passes, many maybes) the maybe band may instead take its own graduated
+  // staircase capped at the lowest pass (Step 1b). Surfaced as a maybe-band
+  // tradeoff (0 / 1 / graduated).
+  const shapePrimary = (prim, primBudget, tr) => {
+    if (!prim.length) return;
+    if (shape === 'relative') allocateRelative(prim, primBudget, cap);
+    else allocateBell(prim, primBudget, cap, shape, profile, tr);
+  };
+
   let includedMaybes = [];
-  if (maybes.length) {
+  if (!passes.length) {
+    // No passes: the maybe band is the whole allocation (unchanged fallback).
+    includedMaybes = maybes;
+    shapePrimary(includedMaybes, budget, tradeoffs);
+  } else if (!maybes.length) {
+    // All-pass: no maybe logic runs.
+    shapePrimary(passes, budget, tradeoffs);
+  } else {
+    // Shape passes on a scratch budget and report their floor/top.
+    const shapePassesScratch = (passBudget) => {
+      for (const p of passes) p.finalVotes = 0;
+      shapePrimary(passes, passBudget, []);
+      const vs = passes.map((p) => p.finalVotes || 0);
+      return { floor: Math.min(...vs), max: Math.max(...vs) };
+    };
+
+    // 1-point floor (Step 1a): passFloor is non-decreasing in passBudget, so the
+    // largest feasible count is the first that keeps every pass >= 1.
+    const ceiling = Math.max(0, Math.min(maybes.length, budget - passes.length));
+    let maxFeasible = 0;
+    for (let c = ceiling; c >= 1; c--) {
+      if (shapePassesScratch(budget - c).floor >= 1) {
+        maxFeasible = c;
+        break;
+      }
+    }
     const len = profile.gate?.leniency;
-    const spare = Math.max(0, budget - passes.length);
-    const includeCount =
+    const flatTarget =
       typeof len === 'number'
         ? Math.round(Math.max(0, Math.min(1, len)) * maybes.length)
-        : Math.min(maybes.length, spare); // auto: only as many as there are clearly-spare points
-    includedMaybes = maybes.slice(0, includeCount);
+        : maxFeasible; // auto: fund the most that still stays at/below the passes
+    const flatCount = Math.min(maxFeasible, flatTarget);
+
+    // Graduated band (Step 1b): in a low-pass round, find the smallest passBudget
+    // that lets the passes graduate (a strict top above their floor >= 2), leaving
+    // budget for a maybe staircase capped at the lowest pass. The leniency dial
+    // keeps the flat 1-point semantics.
+    const lowPass = maybes.length > passes.length && typeof len !== 'number';
+    let grad = null;
+    if (lowPass) {
+      for (let pb = passes.length; pb <= budget - 1; pb++) {
+        const { floor, max } = shapePassesScratch(pb);
+        if (floor >= 2 && max > floor) {
+          grad = { passBudget: pb, passFloor: floor };
+          break;
+        }
+      }
+    }
+
+    if (grad) {
+      // Commit: passes graduate at the top; the maybe band takes its own staircase
+      // capped at the lowest pass, so max(maybe) <= passFloor < max(pass).
+      for (const p of passes) p.finalVotes = 0;
+      shapePrimary(passes, grad.passBudget, tradeoffs);
+      const maybeBudget = budget - grad.passBudget;
+      if (shape === 'relative') allocateRelative(maybes, maybeBudget, grad.passFloor);
+      else allocateBell(maybes, maybeBudget, grad.passFloor, shape, profile, []);
+      includedMaybes = maybes.filter((m) => (m.finalVotes || 0) > 0);
+    } else {
+      includedMaybes = maybes.slice(0, flatCount);
+      for (const p of passes) p.finalVotes = 0;
+      shapePrimary(passes, budget - flatCount, tradeoffs);
+      for (const m of includedMaybes) m.finalVotes = Math.min(1, cap);
+    }
+
+    const options = [{ label: 'Reward none (passes only)', value: 0 }];
+    if (maxFeasible > 0) {
+      options.push({
+        label: `${grad ? 'Flat' : 'Keep'} ${flatCount} maybe(s) at 1 (capped below passes)${
+          grad ? '' : ' — default'
+        }`,
+        value: flatCount,
+      });
+    }
+    if (grad) {
+      options.push({
+        label: `Graduated maybe band capped at the lowest pass (${grad.passFloor}) — default`,
+        value: includedMaybes.length,
+      });
+    }
     tradeoffs.push({
       kind: 'maybe-band',
-      question: `Reward how many of the ${maybes.length} questionable (maybe) entries? Currently ${includeCount}.`,
-      options: [
-        { label: `Keep ${includeCount} (auto from the points-to-songs ratio)`, value: includeCount },
-        { label: 'Reward all of them (max leniency)', value: maybes.length },
-        { label: 'Reward none (strict gate)', value: 0 },
-      ],
+      question: `Reward how many of the ${maybes.length} questionable (maybe) entries? A maybe never outranks a pass.`,
+      options,
     });
   }
 
-  // Each funded maybe takes a single bottom-tier point; the rest of the budget
-  // is shaped across the clear passes. With no passes, shape the maybes directly.
-  const primary = passes.length ? passes : includedMaybes;
-  let primaryBudget = budget;
-  if (passes.length && includedMaybes.length) {
-    for (const m of includedMaybes) m.finalVotes = Math.min(1, cap);
-    primaryBudget = budget - includedMaybes.reduce((a, m) => a + m.finalVotes, 0);
-  }
-
   const candidates = [...pinned, ...(passes.length ? [...passes, ...includedMaybes] : includedMaybes)];
-  if (primary.length) {
-    if (shape === 'relative') {
-      allocateRelative(primary, primaryBudget, cap);
-    } else {
-      allocateBell(primary, primaryBudget, cap, shape, profile, tradeoffs);
-    }
-  }
 
   // The vote budget must be spent exactly; spill any cap-blocked remainder.
   spillRemainder(songs, totalBudget, cap, profile, tradeoffs, new Set(candidates), upSet);
@@ -912,47 +980,6 @@ export function ckmeans1dWeighted(values, weights, K) {
   return { ranges, wss: D[K][n] };
 }
 
-// Budget-exact monotonic point fill over ranked tiers: promote whole tiers
-// (every member +1, so a tier's members stay equal), never letting a lower tier
-// exceed a higher one, up to the cap. Phase 1 chases the per-song bell target;
-// phase 2 spends any remainder top-down. Returns integer levels + the leftover
-// that whole-tier steps could not place (a forced per-member spill handles that).
-function waterfillLevels(tierCounts, targets, budget, cap) {
-  const K = tierCounts.length;
-  const levels = new Array(K).fill(0);
-  let left = budget;
-  const canRaise = (i) =>
-    levels[i] < cap && (i === 0 || levels[i] < levels[i - 1]) && tierCounts[i] <= left;
-  for (;;) {
-    let best = -1;
-    let bestDeficit = 1e-9;
-    for (let i = 0; i < K; i++) {
-      if (!canRaise(i)) continue;
-      const d = targets[i] - levels[i];
-      if (d > bestDeficit) {
-        bestDeficit = d;
-        best = i;
-      }
-    }
-    if (best < 0) break;
-    levels[best]++;
-    left -= tierCounts[best];
-  }
-  for (;;) {
-    let best = -1;
-    for (let i = 0; i < K; i++) {
-      if (canRaise(i)) {
-        best = i;
-        break;
-      }
-    }
-    if (best < 0) break;
-    levels[best]++;
-    left -= tierCounts[best];
-  }
-  return { levels, left };
-}
-
 // Tiers come from optimal 1-D clustering of the rank axis (natural breaks), each
 // given a budget-exact monotonic point value. Equal-opinion songs share a tier
 // (and points); genuine forks (an indivisible split inside a tier, an ambiguous
@@ -985,8 +1012,59 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
     u.n++;
   });
   units.sort((a, b) => b.value - a.value); // best first
+
+  // R2: collapse the favorite top band into one shared tier. Scores at/above the
+  // favorite-band floor (default 80 — "8+ = favorite") are not meaningfully
+  // differentiated (90 vs 84 is not a real difference), so by default they merge
+  // into a single atomic top unit and share the top tier. `profile.favoriteBand`
+  // overrides the floor; `false` disables the merge.
+  //
+  // The 80 default is a RAW-MUSIC anchor ("8+"). It is meaningless against the
+  // normalized combined score, where the 75-centered z-remap shoves above-average
+  // songs over 80 regardless of their raw fit/music (a music-7.5 song can land at
+  // 80.9). So the default is OFF for combined rounds; an explicit --favorite-band
+  // floor is still honored if the owner sets one knowingly.
+  const favBand = profile.favoriteBand;
+  const favMin =
+    favBand === false
+      ? Infinity
+      : favBand?.min != null
+        ? favBand.min
+        : profile.rankBy === 'combined'
+          ? Infinity
+          : 80;
+  let favBandCount = 0;
+  if (Number.isFinite(favMin)) {
+    const topIdx = [];
+    for (let i = 0; i < units.length; i++) if (units[i].value >= favMin) topIdx.push(i);
+    if (topIdx.length > 1) {
+      const top = topIdx.map((i) => units[i]);
+      const merged = {
+        value: top[0].value, // keep the highest value for ranking/labels
+        members: top.flatMap((u) => u.members),
+        weightSum: top.reduce((a, u) => a + u.weightSum, 0),
+        n: top.reduce((a, u) => a + u.n, 0),
+      };
+      favBandCount = merged.n;
+      const rest = units.filter((u) => !top.includes(u));
+      units.length = 0;
+      units.push(merged, ...rest);
+    }
+  }
   const unitVals = units.map((u) => u.value);
   const unitWts = units.map((u) => u.n);
+  const U = units.length;
+  // Two forces shape the top height:
+  //  - PROMO_PENALTY: each promotion step (a taller top) costs this much boundary
+  //    worth, so a uniform field doesn't cap-reach — a shorter staircase that spends
+  //    the budget wins over a taller one the high cap merely allows.
+  //  - JUNK_GAP: a promotion that lands on neither an owner anchor (80/75) nor a
+  //    real score gap (>= JUNK_GAP) is JUNK top-heaviness (the {4,1,0} / lone-3 bug
+  //    on a tight cluster). Junk promotions are minimized before anything else, so a
+  //    fuzzy cluster stays low-topped even when an on-anchor cutoff would otherwise
+  //    make the taller curve score higher.
+  const PROMO_PENALTY = 2.5;
+  const JUNK_GAP = 1;
 
   // Build a tier list from contiguous unit index ranges [lo, hi] (top to bottom).
   const tiersFor = (ranges) =>
@@ -1028,32 +1106,58 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
   const unitOf = [];
   units.forEach((u, ui) => u.members.forEach(() => unitOf.push(ui)));
   const tbRank = membersFlat.map((m) => tiebreakRank(m));
-  // Allow one cluster per distinct opinion (not capped at cap+1): a smooth
-  // graduated curve can repeat a level (e.g. 3/2/2/1/0), which needs more
-  // clusters than distinct point values. The budget + smoothness then decide how
-  // many levels actually appear.
-  const Kmax = units.length;
-  const candidates = [];
-  for (let K = 1; K <= Kmax; K++) {
-    const { ranges, wss } = ckmeans1dWeighted(unitVals, unitWts, K);
+  // Within-cluster sum of squares for a set of unit-index ranges (for GVF, the
+  // final cleanliness tiebreaker). Mirrors ckmeans1dWeighted's block cost.
+  const wssFor = (ranges) => {
+    let w = 0;
+    for (const [lo, hi] of ranges) {
+      let sw = 0;
+      let sx = 0;
+      let sx2 = 0;
+      for (let u = lo; u <= hi; u++) {
+        const c = unitWts[u];
+        const v = unitVals[u];
+        sw += c;
+        sx += c * v;
+        sx2 += c * v * v;
+      }
+      if (sw > 0) w += Math.max(0, sx2 - (sx * sx) / sw);
+    }
+    return w;
+  };
+
+  // Boundary quality: reward a boundary that lands on a large real score gap and
+  // on the 80 (favorite) / 75 (actively-like) anchors, so steps fall where the
+  // owner's scoring is meaningful rather than in a fuzzy mid-band.
+  const gapAt = (b) => (b > 0 && b < U ? unitVals[b - 1] - unitVals[b] : 0);
+  const anchorBonus = (b) => {
+    if (b < 1 || b > U) return 0;
+    const above = unitVals[b - 1];
+    const below = b < U ? unitVals[b] : -Infinity;
+    let bonus = 0;
+    if (above >= 80 && below < 80) bonus += 6;
+    if (above >= 75 && below < 75) bonus += 3;
+    return bonus;
+  };
+  // Boundary worth = its real gap + any anchor bonus (plan preference #2: land on
+  // the largest gaps and the 75/80 anchors).
+  const qualityOf = (boundaries) =>
+    [...new Set(boundaries)].reduce((a, b) => a + gapAt(b) + anchorBonus(b), 0);
+  // A promotion is junk when it lands on neither an anchor nor a real gap.
+  const isJunkPromo = (b) => anchorBonus(b) === 0 && gapAt(b) < JUNK_GAP;
+
+  // Evaluate a (ranges, levels) curve into the candidate shape the selector,
+  // tradeoff surfacing and renderer expect. `left` is any unspent budget (only
+  // the rare non-exact exception); `boundaries` are the cutoff + promotion
+  // positions used, scored for the boundary-quality preference.
+  const evalCandidate = (ranges, levels, left, boundaries) => {
     const tiers = tiersFor(ranges);
-    const totalW = tiers.reduce((a, t) => a + t.weight, 0) || 1;
-    const targets = tiers.map((t) => (t.weight / t.count / totalW) * budget);
-    const { levels, left } = waterfillLevels(
-      tiers.map((t) => t.count),
-      targets,
-      budget,
-      cap
-    );
-    // Evaluate each candidate on its FINAL curve: expand cluster levels to a
-    // per-song vector and spend any whole-tier leftover the way phase 3 will
-    // (top-down, by rank, capped). Otherwise a candidate that under-spends would
-    // misreport its tier count and smoothness, and `--tier-count` would pick a
-    // shape that the forced spill then changes.
     const votes = [];
     ranges.forEach(([lo, hi], ci) => {
       for (let u = lo; u <= hi; u++) for (let k = 0; k < units[u].n; k++) votes.push(levels[ci]);
     });
+    // Spread any leftover (the rare exception path) top-down, capped, the way
+    // phase 3 will, so runs/smoothness report the realized curve.
     let leftover = left;
     let placed = true;
     while (leftover > 0 && placed) {
@@ -1065,19 +1169,12 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
         placed = true;
       }
     }
-    // Smoothness: a >1 point jump may only land on a real score gap (> 1).
     let violations = 0;
     for (let i = 0; i < votes.length - 1; i++) {
       if (posValue[i] - posValue[i + 1] <= SMOOTH_GAP && Math.abs(votes[i] - votes[i + 1]) > 1) {
         violations++;
       }
     }
-    // Run-length encode the realized per-song curve. `runs.length` is the number
-    // of FINAL point tiers (distinct point values, since the curve is monotonic);
-    // two clusterings that yield the same votes collapse to one run list, so
-    // options dedup cleanly and tier counts are honest. Each run also carries its
-    // score range (posValue is best-first, so hi is the first member, lo the last)
-    // for a skimmable points / songs / score-range table.
     const runs = [];
     votes.forEach((v, i) => {
       const tok = rawToken(membersFlat[i]);
@@ -1090,11 +1187,6 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
         runs.push({ level: v, count: 1, hi: posValue[i], lo: posValue[i], tokens: [tok] });
       }
     });
-    // Count equal-score units whose members land on different point levels —
-    // a forced tie-split. A split is *arbitrary* (a coin flip) when two members
-    // with the SAME +/− modifier rank get different points; it's *resolvable*
-    // when a modifier always decides who takes the extra. K-selection prefers
-    // candidates with no arbitrary split, then the fewest splits overall.
     const byUnit = new Map();
     for (let i = 0; i < votes.length; i++) {
       const ui = unitOf[i];
@@ -1118,43 +1210,168 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
         }
       }
     }
-    candidates.push({
+    const K = Math.max(1, levels.filter((l) => l > 0).length); // funded point tiers
+    // boundaries = [cutoff, ...promotions]; only promotions add height, so junk
+    // top-heaviness is counted over the promotions alone.
+    const promos = [...new Set(boundaries.slice(1))];
+    const junkPromos = promos.filter(isJunkPromo).length;
+    // Per-song votes for this curve, in best-first (= rank/combined) order, so a
+    // tier-structure tradeoff can be rendered as a song×option comparison table
+    // instead of opaque per-option blocks. `votes`/`posValue`/`membersFlat` are all
+    // index-aligned and the unit set is identical across candidates, so option
+    // columns line up row-for-row.
+    const perSong = membersFlat.map((m, i) => ({
+      rawOrderIndex: m.rawOrderIndex,
+      title: m.title,
+      // `rank` is the ranking key the curve actually used (a favorite-band unit
+      // shares one averaged value across its members); `score` is each song's OWN
+      // combined/music score, so the comparison table shows the real number per row
+      // instead of the merged-unit average.
+      rank: posValue[i],
+      score: m.combinedScore ?? m.score ?? posValue[i],
+      token: rawToken(m),
+      votes: votes[i],
+    }));
+    return {
       K,
       tiers,
       levels,
+      perSong,
       left,
       violations,
       tieSplits,
       arbitrarySplits,
       runs,
       distinct: runs.length,
-      gvf: 1 - wss / tss,
+      gvf: 1 - wssFor(ranges) / tss,
+      // Unjustified extra steps (taller top with no gap/anchor under it). Minimized
+      // first so a tight cluster stays low-topped (no lone 3 / {4,1,0}).
+      junkPromos,
+      // Net worth of the curve: total boundary worth (gaps + 75/80 anchors) less the
+      // per-promotion height cost. A real favorite gap or anchor band pays for a
+      // taller top; uniform filler steps don't, so the curve stays as short as the
+      // budget needs (no cap-reach).
+      score: qualityOf(boundaries) - PROMO_PENALTY * (K - 1),
       voteKey: runs.map((r) => `${r.count}:${r.level}`).join('|'),
-    });
+    };
+  };
+
+  // A staircase = a 0/1 cutoff at position c plus distinct promotion positions.
+  // unit i's points = [i < c] + #{p : i < p}; positions index the gaps between
+  // best-first units (cum[b] = songs in units[0..b-1]). Adjacent point tiers
+  // therefore differ by exactly 1 by construction. Convert to (ranges, levels).
+  const cum = [0];
+  for (let b = 0; b < U; b++) cum[b + 1] = cum[b] + units[b].n;
+  const buildCurve = (c, promos) => {
+    const lvl = new Array(U);
+    for (let i = 0; i < U; i++) {
+      let v = i < c ? 1 : 0;
+      for (const p of promos) if (i < p) v++;
+      lvl[i] = v;
+    }
+    const ranges = [];
+    let start = 0;
+    for (let i = 1; i <= U; i++) {
+      if (i === U || lvl[i] !== lvl[start]) {
+        ranges.push([start, i - 1]);
+        start = i;
+      }
+    }
+    return { ranges, levels: ranges.map(([lo]) => lvl[lo]) };
+  };
+
+  const candidates = [];
+  const byVoteKey = new Set();
+  const addCurve = (c, promos, left) => {
+    const { ranges, levels } = buildCurve(c, promos);
+    const cand = evalCandidate(ranges, levels, left, [c, ...promos]);
+    if (byVoteKey.has(cand.voteKey)) return;
+    byVoteKey.add(cand.voteKey);
+    candidates.push(cand);
+  };
+
+  // Enumerate every staircase that spends the budget EXACTLY: for each cutoff c
+  // (baseline 1 funds cum[c] songs), the promotion budget T = budget − cum[c]
+  // must be formed by a distinct subset of {cum[1..c]} of size ≤ cap−1. Choosing
+  // boundaries IS the fill — no separate waterfill phase.
+  const maxPromos = Number.isFinite(cap) ? Math.max(0, cap - 1) : U;
+  let nodes = 0;
+  const NODE_CAP = 400000;
+  for (let c = 1; c <= U && cum[c] <= budget; c++) {
+    const T = budget - cum[c];
+    if (T === 0) {
+      addCurve(c, [], 0);
+      continue;
+    }
+    const solve = (pos, remaining, chosen) => {
+      if (nodes++ > NODE_CAP) return;
+      if (remaining === 0) {
+        addCurve(c, chosen.slice(), 0);
+        return;
+      }
+      if (pos < 1 || chosen.length >= maxPromos || cum[1] > remaining) return;
+      if (cum[pos] <= remaining) {
+        chosen.push(pos);
+        solve(pos - 1, remaining - cum[pos], chosen);
+        chosen.pop();
+      }
+      solve(pos - 1, remaining, chosen);
+    };
+    // A promotion at position c lifts every funded unit, dropping the level-1
+    // floor; that is only contiguity-safe with no zero tier (c === U). When zeros
+    // exist (c < U) the lowest funded unit must stay at 1, so cap promotions at
+    // c − 1.
+    solve(c < U ? c - 1 : c, T, []);
   }
 
-  // Default: smooth first; then avoid an *arbitrary* tie-split (don't coin-flip
-  // an unmodified equal-score group — e.g. two plain 76s — when another bucket
-  // count lands the forced split where a +/− resolves it); then the fewest
-  // splits overall; then the most graduated curve (most point tiers); then the
-  // fewest score buckets; then the cleanest break placement.
+  // Exception path: no staircase spends the budget exactly (e.g. the budget
+  // exceeds total capacity, or is smaller than the top tie group). Build the
+  // tallest curve under budget and let phase 3 spill the remainder.
+  if (!candidates.length) {
+    let c = U;
+    while (c >= 1 && cum[c] > budget) c--;
+    if (c < 1) {
+      addCurve(0, [], budget); // can't fund even the top unit whole
+    } else {
+      let remaining = budget - cum[c];
+      const promos = [];
+      for (let p = c < U ? c - 1 : c; p >= 1 && promos.length < maxPromos; p--) {
+        if (cum[p] <= remaining) {
+          promos.push(p);
+          remaining -= cum[p];
+        }
+      }
+      addCurve(c, promos, remaining);
+    }
+  }
+
+  // Staircases are contiguous + monotonic by construction (violations/splits are
+  // 0 for any exact one), so the real preference is: exact over the spill
+  // exception; then no arbitrary/forced tie-split; then the FEWEST junk promotions
+  // (top-heaviness cap — a tight cluster stays low-topped); then the highest net
+  // score (gaps + 80/75 anchors, less the per-promotion height cost); then the
+  // SHORTER top (fewer promotion steps) when those tie; then the cleanest break.
   const ordered = [...candidates].sort(
     (a, b) =>
       a.violations - b.violations ||
+      a.left - b.left ||
       a.arbitrarySplits - b.arbitrarySplits ||
       a.tieSplits - b.tieSplits ||
-      b.distinct - a.distinct ||
+      a.junkPromos - b.junkPromos ||
+      b.score - a.score ||
       a.K - b.K ||
       b.gvf - a.gvf
   );
-  // Two knobs (most specific wins): `bucketCount` forces K, the number of score
-  // clusters; `tierCount` forces the number of final POINT tiers (distinct point
-  // values, e.g. 0–2 points = 3 tiers). For a point-tier target, pick the
-  // best-preference candidate with that many tiers (nearest achievable if none).
+  // Two knobs (most specific wins): `bucketCount` forces the number of funded
+  // point tiers (promotion steps + 1); `tierCount` forces the number of distinct
+  // final point values (including a 0 tier). Pick the best-preference candidate
+  // matching the target, nearest achievable if none.
   let chosen = ordered[0];
   if (profile.bucketCount) {
-    const want = Math.max(1, Math.min(Kmax, profile.bucketCount));
-    chosen = candidates.find((c) => c.K === want) || chosen;
+    const want = profile.bucketCount;
+    chosen =
+      ordered.find((c) => c.K === want) ||
+      [...ordered].sort((a, b) => Math.abs(a.K - want) - Math.abs(b.K - want))[0];
   } else if (profile.tierCount) {
     const want = profile.tierCount;
     chosen =
@@ -1184,14 +1401,19 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
         kind: 'tier-structure',
         question: `Which point split?${
           small ? ' Scores are tightly clustered (small range), so this is a judgment call.' : ''
-        } Default is ${chosen.distinct} tier${chosen.distinct > 1 ? 's' : ''} (bucket-count ${
-          chosen.K
-        }); pick another with --bucket-count, or --tier-count <n> for a tier count.`,
+        } Default is ${chosen.distinct} tier${chosen.distinct > 1 ? 's' : ''} (option A); pick another with --option <A|B|C> (or --tier-count <n> / --bucket-count <n>).`,
         options: distinctCands.slice(0, 3).map((c) => ({
           label: `${c.distinct} tier${c.distinct > 1 ? 's' : ''} (bucket-count ${c.K}) — ${summarize(c)}`,
           value: c.K,
           tierCount: c.distinct,
           bucketCount: c.K,
+          // Vote-count signature (e.g. "2×4 / 1×2 / 0×5") — the part that actually
+          // distinguishes two options that share a tier/bucket count, so legends and
+          // labels never look identical.
+          shape: summarize(c),
+          // Per-song votes (best-first / combined order) for the side-by-side
+          // comparison table; index-aligned across every option.
+          perSong: c.perSong,
           // Structured rows for a points / songs / score-range table (renderer).
           // `scores` lists the precise raw scores (with +/−/? modifiers) in the
           // tier, shown when any are modified.
@@ -1203,6 +1425,24 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
             scores: r.tokens,
           })),
         })),
+      });
+    }
+  }
+
+  // R2: when the merged ≥80 favorite band is a meaningful share of the funded
+  // field, the merge is a real call — surface a top-band-split tradeoff so the
+  // owner can break the favorites onto their own gaps (`--no-favorite-band`).
+  if (favBandCount > 1) {
+    const fundedSongs = chosen.runs.reduce((a, r) => a + (r.level > 0 ? r.count : 0), 0);
+    const significant = Math.min(Math.ceil(fundedSongs / 3), 4);
+    if (favBandCount >= significant) {
+      tradeoffs.push({
+        kind: 'top-band-split',
+        question: `${favBandCount} favorites (score ≥ ${favMin}) share the top tier. Keep them merged, or split them onto their own score gaps?`,
+        options: [
+          { label: `Keep the ${favBandCount} favorites together (default)`, value: 0 },
+          { label: 'Split the favorites on their own gaps (--no-favorite-band)', value: 1 },
+        ],
       });
     }
   }
@@ -1323,11 +1563,128 @@ export function combinedScore(s, weights = DEFAULT_COMBINED_WEIGHTS) {
 const normTitle = (t) => String(t || '').toLowerCase().replace(/\s+/g, ' ').trim();
 const GATE_WORD_SET = new Set(['pass', 'maybe', 'fail']);
 
+// ---------------------------------------------------------------------------
+// Per-round combined-score normalization
+//
+// Problem: fit and music live on different *spreads*, not just different weights.
+// Fit (a made-up 0–100 AI number) ranges far wider than music, so the raw blend
+// `0.7·fit + 0.3·music` lets a barely-meaningful 8-point fit gap dwarf a decisive
+// 1-point music gap — the opposite of what the weights imply.
+//
+// Fix: z-score each axis over the *contenders* (the songs eligible for points —
+// not DQ'd, not blank, not gated out), so the weights act on comparable scales,
+// then remap the blend back onto a 75-centered, music-like display scale.
+//
+// The trick is asymmetric trust, expressed as different std FLOORS:
+//   - music floor LOW  → music adapts to the round; a tight music field amplifies
+//     half-points and +/- exactly as the owner wants.
+//   - fit floor HIGH   → fit rides an effectively FIXED, dampened scale; a tight
+//     good-fit cluster stays ~equal (never amplified), since the AI fit numbers
+//     aren't precise enough to earn a wide spread. Fit only "adapts" when its real
+//     spread exceeds the floor (a genuinely excellent-to-weak field).
+// ---------------------------------------------------------------------------
+
+// A `+`/`-` modifier folded into the numeric music value *before* normalizing, so
+// in a tight round (small music std) it becomes a real fraction of a std — and in a
+// wide round it stays negligible. Kept below 0.5 so `74+` never collides with a
+// real `74.5`.
+const MODIFIER_MUSIC_DELTA = 0.34;
+// Std floors per the asymmetric-trust design above.
+const MUSIC_STD_FLOOR = 2;
+const FIT_STD_FLOOR = 14;
+// Display remap: average contender → COMBINED_DISPLAY_CENTER (75, the "actively
+// like" anchor), and 1 blended std → COMBINED_DISPLAY_SD points, so a clearly
+// above-average song lands near/over the 80 favorite anchor. This keeps the
+// allocator's gap/75-80-anchor/favorite-band machinery valid unchanged.
+const COMBINED_DISPLAY_CENTER = 75;
+const COMBINED_DISPLAY_SD = 10;
+// Below this many contenders a per-round mean/std is noise; fall back to fixed
+// reference anchors (still floored) so a tiny field gets stable, dampened blending
+// rather than a curve fit to 2–3 points.
+const MIN_NORM_CONTENDERS = 4;
+const FIT_REF_MEAN = 72; // ~solid tier
+const MUSIC_REF_MEAN = 73;
+
+// Music score with the +/- modifier folded in (combined-mode ranking/tiering only;
+// music-only rounds keep +/- as pure tiebreaks). Null when there is no music score.
+function effectiveMusic(s) {
+  if (s.score == null) return null;
+  let v = s.score;
+  if (s.plus) v += MODIFIER_MUSIC_DELTA;
+  if (s.minus) v -= MODIFIER_MUSIC_DELTA;
+  return v;
+}
+
+function mean(xs) {
+  return xs.reduce((a, b) => a + b, 0) / xs.length;
+}
+function stddev(xs, mu) {
+  if (xs.length < 2) return 0;
+  return Math.sqrt(xs.reduce((a, b) => a + (b - mu) * (b - mu), 0) / xs.length);
+}
+
+// A contender = a song eligible to earn points, whose scores should shape the
+// curve. Mirrors the allocator's exclusions: DQ'd (`-`) and blank songs are out,
+// and the gate's terrible-fit/fail outliers are out (a fit cutoff is the fit-side
+// analogue of the owner's `-` music DQ — it removes the bad ones so the std
+// represents variation among the real contenders).
+function isContender(s, gate) {
+  if (s.isDisqualified || s.needsUserInput) return false;
+  if (!gate) return true;
+  if (gate.type === 'cutoff') {
+    const v = gate.axis === 'fit' ? s.fitScore : s.score;
+    return v != null && v >= gate.min;
+  }
+  const g = s.gate || (GATE_WORD_SET.has(String(s.fitTier || '').toLowerCase()) ? String(s.fitTier).toLowerCase() : null);
+  return g !== 'fail';
+}
+
+// Set `combinedScore` on every song to the normalized, remapped blend. Songs with
+// only one axis fall back to that axis's raw score (kept clean for display).
+export function normalizeCombined(songs, weights = DEFAULT_COMBINED_WEIGHTS, gate = null) {
+  const contenders = songs.filter((s) => isContender(s, gate));
+  const fitVals = contenders.map((s) => s.fitScore).filter((v) => v != null);
+  const musicVals = contenders.map((s) => effectiveMusic(s)).filter((v) => v != null);
+  const smallN = contenders.length < MIN_NORM_CONTENDERS;
+
+  const fitMean = smallN || !fitVals.length ? FIT_REF_MEAN : mean(fitVals);
+  const musicMean = smallN || !musicVals.length ? MUSIC_REF_MEAN : mean(musicVals);
+  const fitDenom = Math.max(FIT_STD_FLOOR, smallN || !fitVals.length ? 0 : stddev(fitVals, fitMean));
+  const musicDenom = Math.max(MUSIC_STD_FLOOR, smallN || !musicVals.length ? 0 : stddev(musicVals, musicMean));
+
+  for (const s of songs) {
+    const fit = s.fitScore;
+    const music = effectiveMusic(s);
+    // fitNorm / musicNorm are each axis z-scored over the contenders and remapped
+    // onto the SAME 75-centered display scale as combinedScore. Because the weights
+    // sum to 1, combinedScore === w.fit·fitNorm + w.music·musicNorm exactly — so
+    // these two numbers explain every jump (a low-fit / high-music song shows a low
+    // fitNorm and a high musicNorm). Null when that axis is absent.
+    s.fitNorm = null;
+    s.musicNorm = null;
+    if (fit == null && music == null) {
+      s.combinedScore = null;
+    } else if (fit == null) {
+      s.combinedScore = s.score; // music-only: clean raw score (no modifier delta)
+    } else if (music == null) {
+      s.combinedScore = fit;
+    } else {
+      const zFit = (fit - fitMean) / fitDenom;
+      const zMusic = (music - musicMean) / musicDenom;
+      s.fitNorm = COMBINED_DISPLAY_CENTER + zFit * COMBINED_DISPLAY_SD;
+      s.musicNorm = COMBINED_DISPLAY_CENTER + zMusic * COMBINED_DISPLAY_SD;
+      const blend = weights.fit * zFit + weights.music * zMusic;
+      s.combinedScore = COMBINED_DISPLAY_CENTER + blend * COMBINED_DISPLAY_SD;
+    }
+  }
+  return songs;
+}
+
 // Merge an LLM fit JSON's songs into the parsed round songs, joining by
 // rawOrderIndex (then title). Manual fit signals win; the LLM fills only
 // fit-silent songs. Context fields (themes/rationale/…) are carried for
 // rendering but never override scoring. Sets combinedScore on every song.
-export function mergeFit(songs, fitSongs, { weights = DEFAULT_COMBINED_WEIGHTS } = {}) {
+export function mergeFit(songs, fitSongs, { weights = DEFAULT_COMBINED_WEIGHTS, gate = null } = {}) {
   const byIndex = new Map();
   const byTitle = new Map();
   for (const f of fitSongs || []) {
@@ -1351,7 +1708,88 @@ export function mergeFit(songs, fitSongs, { weights = DEFAULT_COMBINED_WEIGHTS }
         if (f[k] != null && s[k] == null) s[k] = f[k];
       }
     }
-    s.combinedScore = combinedScore(s, weights);
+  }
+  // Combined scores are a per-round normalization, so they must be set in one pass
+  // over the whole field (not song-by-song) once fit is merged in.
+  normalizeCombined(songs, weights, gate);
+  flagMusicLifts(songs);
+  return songs;
+}
+
+// Build a durable "pick record" once the owner chooses a distribution option: the
+// chosen option, every option that was on the table (slimmed for the report + the
+// training log), any manual tweaks (final votes that deviate from the chosen
+// option's canonical distribution, e.g. an extra --pin), and an optional reason.
+// Pure — IO (scores.json / picks.jsonl) lives in the CLI. `options` are the
+// tier-structure tradeoff options (each with `perSong`); `songs` is the allocated
+// field after the pick is applied.
+export function buildPickRecord({ options, chosenIndex, songs, reason = null, pickedAt = new Date().toISOString() }) {
+  const letter = (i) => String.fromCharCode(65 + i);
+  const chosen = options[chosenIndex];
+  if (!chosen) return null;
+  const finalByIdx = new Map(songs.map((s) => [s.rawOrderIndex, s.finalVotes ?? 0]));
+  const tweaks = [];
+  for (const ps of chosen.perSong) {
+    const fin = finalByIdx.get(ps.rawOrderIndex) ?? 0;
+    if (fin !== ps.votes) {
+      tweaks.push({ rawOrderIndex: ps.rawOrderIndex, title: ps.title, from: ps.votes, to: fin });
+    }
+  }
+  return {
+    chosen: letter(chosenIndex),
+    chosenIndex,
+    tierCount: chosen.tierCount,
+    shape: chosen.shape,
+    reason: reason || null,
+    pickedAt,
+    tweaks,
+    options: options.map((o, i) => ({
+      letter: letter(i),
+      tierCount: o.tierCount,
+      bucketCount: o.bucketCount,
+      shape: o.shape,
+      isChosen: i === chosenIndex,
+      perSong: (o.perSong || []).map((s) => ({
+        rawOrderIndex: s.rawOrderIndex,
+        title: s.title,
+        score: s.score ?? s.rank ?? null,
+        votes: s.votes,
+      })),
+    })),
+  };
+}
+
+// Flag songs whose combined rank sits ABOVE a song with a strictly better fit
+// tier — i.e. music (not fit) carried them past it. This is surfaced as a
+// "music-lifted" callout rather than silently reordering: the user can promote or
+// adjust by hand. Names the best-fit song that was leapfrogged. Sets `s.musicLift`
+// to `{ overTitle, overTier }` or `null`.
+export function flagMusicLifts(songs) {
+  for (const s of songs) s.musicLift = null;
+  const tierIdx = (t) => {
+    const i = FIT_TIER_ORDER.indexOf(String(t || '').toLowerCase());
+    return i === -1 ? FIT_TIER_ORDER.length : i; // smaller = better fit
+  };
+  const ranked = songs
+    .filter((s) => s.combinedScore != null && s.fitTier && !s.isDisqualified)
+    .sort((a, b) => b.combinedScore - a.combinedScore);
+  for (let i = 0; i < ranked.length; i++) {
+    const x = ranked[i];
+    const xi = tierIdx(x.fitTier);
+    let best = null;
+    for (let j = i + 1; j < ranked.length; j++) {
+      const y = ranked[j];
+      const yi = tierIdx(y.fitTier);
+      if (yi >= xi) continue; // y is not a better fit tier
+      if (
+        best == null ||
+        yi < tierIdx(best.fitTier) ||
+        (yi === tierIdx(best.fitTier) && (y.fitScore ?? 0) > (best.fitScore ?? 0))
+      ) {
+        best = y;
+      }
+    }
+    if (best) x.musicLift = { overTitle: best.title, overTier: best.fitTier };
   }
   return songs;
 }
@@ -1363,7 +1801,7 @@ export function mergeFit(songs, fitSongs, { weights = DEFAULT_COMBINED_WEIGHTS }
 export function mergeFitJson(parsed, fitData, profile = {}) {
   const weights = profile.weights || DEFAULT_COMBINED_WEIGHTS;
   const rankBy = profile.rankBy || 'combined';
-  mergeFit(parsed.songs, fitData.songs || [], { weights });
+  mergeFit(parsed.songs, fitData.songs || [], { weights, gate: profile.gate });
 
   const { tradeoffs } = allocate(
     parsed.songs,
@@ -1380,10 +1818,27 @@ export function mergeFitJson(parsed, fitData, profile = {}) {
     f.musicScore = s.score ?? null;
     if (s.userComment && f.musicComment == null) f.musicComment = s.userComment;
     f.combinedScore = s.combinedScore ?? null;
+    // Normalized per-axis values (display scale) so the report can show why a song
+    // landed where it did: combined = w.fit·fitNorm + w.music·musicNorm.
+    f.fitNorm = s.fitNorm ?? null;
+    f.musicNorm = s.musicNorm ?? null;
+    f.musicLift = s.musicLift ?? null;
     f.draftVotes = s.finalVotes ?? 0;
     f.draftDownvotes = s.finalDownvotes ?? 0;
   }
   fitData.combineWeights = weights;
+  // Persist the allocator's "needs your call" tradeoffs onto the merged JSON so the
+  // scores.html deliverable can render the distribution options as a comparison
+  // table (the fit-only source file stays untouched).
+  fitData.tradeoffs = tradeoffs;
+  // Carry the owner's own (unvotable) submissions so the raw-order ballot can show
+  // every submission slot — a hidden gap risks a misaligned ballot in the app.
+  fitData.ownSongs = (parsed.ownSongs || []).map((s) => ({
+    rawOrderIndex: s.rawOrderIndex,
+    title: s.title,
+    artist: s.artist,
+    isOwn: true,
+  }));
   return { fitData, songs: parsed.songs, tradeoffs };
 }
 
@@ -1417,10 +1872,6 @@ export function rankedSort(a, b) {
   );
 }
 
-// Render a tier-structure tradeoff's options as skimmable tables: one row per
-// point tier, with the point value, the song count, and the score range in
-// separate columns so "4 songs at 1 point" can't be misread as "1 song at 4
-// points". Each option is reproduced with its own --bucket-count.
 // Emit a markdown table with cells padded to even column widths so the raw
 // source is skimmable. `aligns` is 'right' | 'left' per column.
 function renderTable(L, headers, aligns, rows, indent = '') {
@@ -1439,37 +1890,43 @@ function renderTable(L, headers, aligns, rows, indent = '') {
   for (const r of rows) L.push(`${indent}| ${r.map(cell).join(' | ')} |`);
 }
 
+// Render a tier-structure tradeoff as ONE side-by-side comparison table: songs
+// (in combined/rank order) are rows, options are columns (A = default), and each
+// cell is the votes that option gives the song. This reads as a direct
+// "what changes between options" diff instead of three separate per-option blocks.
+const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 function renderTierStructure(L, t) {
-  const opts = t.options || [];
-  // Only show the precise-scores column when some score carries a +/−/? modifier
-  // (otherwise the score range already says everything).
-  const hasMods = opts.some((o) =>
-    (o.tiers || []).some((row) => (row.scores || []).some((s) => /[+\-?]/.test(s)))
-  );
-  opts.forEach((o, idx) => {
-    const tier = `${o.tierCount} tier${o.tierCount === 1 ? '' : 's'}`;
+  const opts = (t.options || []).filter((o) => Array.isArray(o.perSong) && o.perSong.length);
+  if (!opts.length) {
+    for (const o of t.options || []) L.push(`  - ${o.label ?? o}`);
     L.push('');
+    return;
+  }
+  const rows0 = opts[0].perSong; // index-aligned across every option
+  const trunc = (s) => (String(s).length > 30 ? `${String(s).slice(0, 29)}…` : String(s));
+  const headers = ['#', 'Song', 'Score', ...opts.map((_, i) => OPTION_LETTERS[i])];
+  const aligns = ['right', 'left', 'right', ...opts.map(() => 'right')];
+  const rows = rows0.map((r, ri) => [
+    String(r.rawOrderIndex),
+    trunc(r.title),
+    formatScore(r.score ?? r.rank),
+    ...opts.map((o) => String(o.perSong[ri]?.votes ?? 0)),
+  ]);
+  rows.push([
+    '',
+    'Total',
+    '',
+    ...opts.map((o) => String(o.perSong.reduce((a, s) => a + (s.votes || 0), 0))),
+  ]);
+  L.push('');
+  renderTable(L, headers, aligns, rows, '  ');
+  L.push('');
+  opts.forEach((o, i) => {
     L.push(
-      `  **Option ${idx + 1}${idx === 0 ? ' · default' : ''} — ${tier}** ` +
-        `(\`--bucket-count ${o.bucketCount}\`)`
+      `  - **${OPTION_LETTERS[i]}**${i === 0 ? ' (default)' : ''} — ${o.tierCount} tier${
+        o.tierCount === 1 ? '' : 's'
+      }, \`${o.shape ?? `bucket-count ${o.bucketCount}`}\`, \`--option ${OPTION_LETTERS[i]}\``
     );
-    L.push('');
-    const headers = ['Points', 'Songs', 'Score range'];
-    const aligns = ['right', 'right', 'left'];
-    if (hasMods) {
-      headers.push('Scores');
-      aligns.push('left');
-    }
-    const rows = (o.tiers || []).map((row) => {
-      const range =
-        row.scoreHi === row.scoreLo
-          ? formatScore(row.scoreHi)
-          : `${formatScore(row.scoreLo)}–${formatScore(row.scoreHi)}`;
-      const cells = [String(row.points), String(row.count), range];
-      if (hasMods) cells.push((row.scores || []).join(', '));
-      return cells;
-    });
-    renderTable(L, headers, aligns, rows, '  ');
   });
   L.push('');
 }

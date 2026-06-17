@@ -51,11 +51,11 @@ const INFO = {
 };
 const SHINEE = 8; // group title track — the disqualified entry (already isDisqualified)
 
-// Per-song upvote cap. The round allows up to 10/song, but a single 80 over a
-// tight 72–76 field balloons to 3–4 under the bell. Dropping the max to 2 yields
-// the owner-preferred contiguous "16B" curve (2,2,2,2,1,1,0…) with no skipped
-// levels — a stopgap until the allocator's fill/no-skip rewrite lands.
-const CAP = 2;
+// Per-song upvote cap = the round's own rule (10/song). The old CAP=2 stopgap is
+// gone: the center-out staircase rewrite (R1) caps top-heaviness from the budget,
+// not the cap, so a lone 80 over a tight 72–76 field no longer balloons to 3–4 —
+// the curve stays contiguous and low-topped at the natural cap.
+const CAP = 10;
 
 const FIT_SCALE = {
   pass:  { fitScore: 80, desc: 'Valid soloist-from-a-group; vote on music.' },

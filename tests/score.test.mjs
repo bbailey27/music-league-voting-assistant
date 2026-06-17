@@ -9,8 +9,10 @@ import {
   fitTierForScore,
   mergeFit,
   mergeFitJson,
+  normalizeCombined,
   ckmeans1dWeighted,
   buildJsonPayload,
+  buildPickRecord,
 } from '../scripts/score-core.mjs';
 import { parseWeights, parsePins, parseTierCount, parseBucketCount } from '../scripts/parse-round.mjs';
 
@@ -175,6 +177,20 @@ function assertMonotonicSmooth(g, label = '') {
   }
 }
 
+// Owner contiguity rule (stronger than score-gap smoothness): the distinct point
+// values in the final curve must be sequential integers exactly 1 apart —
+// {3,2,1,0} ok, {4,1,0} or {2,0} not.
+function assertContiguous(votes, label = '') {
+  const distinct = [...new Set(votes)].sort((a, b) => b - a);
+  for (let i = 1; i < distinct.length; i++) {
+    assert.equal(
+      distinct[i - 1] - distinct[i],
+      1,
+      `${label} non-contiguous point tiers: ${JSON.stringify(distinct)} from ${JSON.stringify(votes)}`
+    );
+  }
+}
+
 test('auto keeps amplitude at ~1:1 — some 2s and some 0s, not all 1s', () => {
   // Owner rule: don't flatten the field into all-1s. With real spread and a ~1:1
   // budget, promote a couple of 2s and leave a few 0s — the curve (not a raised
@@ -261,33 +277,33 @@ test('more points open more tiers when the field has room (keep close songs clos
   );
 });
 
-test('tier-structure surfaces distinct point distributions; each reproduces via --bucket-count', () => {
+test('tier-structure surfaces distinct contiguous point distributions', () => {
   const scores = [78, 77, 76, 75, 74, 73, 72, 71, 70, 69];
   const g = mk(scores);
   const { tradeoffs } = allocate(g, 14, 5, { shape: 'auto' });
   const ts = tradeoffs.find((t) => t.kind === 'tier-structure');
   assert.ok(ts, 'an ambiguous field offers a tier-structure choice');
   assert.ok(ts.options.length >= 2, 'at least two options');
-  // Each option value is a bucket count (K) — the unambiguous reproduction key,
-  // since two different bucket counts can land on the same tier count but a
-  // different distribution (a real tradeoff). Values are distinct.
-  const ks = ts.options.map((o) => o.value);
-  assert.ok(ks.every((n) => Number.isInteger(n) && n >= 1), 'option values are bucket counts');
-  assert.equal(new Set(ks).size, ks.length, 'each option is a distinct bucket count');
+  // Each option carries an integer tier count + bucket count. Under the center-out
+  // staircase a single integer knob can't always reproduce one specific split
+  // (two staircases can share both counts but differ in size — the 3-3-3 C1/C2/C3
+  // case), so the contract is: distinct distributions, each contiguous + monotonic,
+  // and --tier-count yields a curve with that many distinct point values.
+  for (const o of ts.options) {
+    assert.ok(Number.isInteger(o.tierCount) && o.tierCount >= 1, 'tier count');
+    assert.ok(Number.isInteger(o.bucketCount) && o.bucketCount >= 1, 'bucket count');
+  }
+  const dists = ts.options.map((o) => o.tiers.map((t) => `${t.points}x${t.count}`).join('/'));
+  assert.equal(new Set(dists).size, dists.length, 'each surfaced option is a different distribution');
 
-  // Forcing --bucket-count reproduces that exact (distinct) curve; the surfaced
-  // distributions differ from one another.
-  const dists = ks.map((k) => {
+  for (const o of ts.options) {
     const f = mk(scores);
-    allocate(f, 14, 5, { shape: 'auto', bucketCount: k });
+    allocate(f, 14, 5, { shape: 'auto', tierCount: o.tierCount });
     assert.equal(sum(f), 14);
     const by = [...f].sort((a, b) => b.score - a.score);
-    for (let i = 1; i < by.length; i++) {
-      assert.ok(by[i].finalVotes <= by[i - 1].finalVotes, 'monotonic');
-    }
-    return by.map((s) => s.finalVotes).join(',');
-  });
-  assert.equal(new Set(dists).size, dists.length, 'each surfaced option is a different distribution');
+    assert.equal(new Set(by.map((s) => s.finalVotes)).size, o.tierCount, '--tier-count hits the tier count');
+    assertContiguous(by.map((s) => s.finalVotes), `tier-count ${o.tierCount}`);
+  }
 });
 
 test('tier-structure options carry table data (points / count / score range) per tier', () => {
@@ -312,6 +328,33 @@ test('tier-structure options carry table data (points / count / score range) per
       assert.ok(Number.isInteger(r.count) && r.count >= 1, 'song count');
       assert.ok(r.scoreHi >= r.scoreLo, 'score range hi >= lo');
     }
+  }
+});
+
+test('tier-structure options carry per-song votes, index-aligned across options for the comparison table', () => {
+  const scores = [78, 77, 76, 75, 74, 73, 72, 71, 70, 69];
+  const g = mk(scores);
+  const { tradeoffs } = allocate(g, 14, 5, { shape: 'auto' });
+  const ts = tradeoffs.find((t) => t.kind === 'tier-structure');
+  assert.ok(ts);
+  const ref = ts.options[0].perSong;
+  assert.ok(Array.isArray(ref) && ref.length === scores.length, 'one perSong row per song');
+  for (const o of ts.options) {
+    assert.ok(typeof o.shape === 'string' && o.shape.length, 'option carries a vote-shape signature');
+    assert.equal(o.perSong.length, ref.length, 'every option has the same rows');
+    // Rows must describe the SAME songs in the SAME order so columns align.
+    o.perSong.forEach((row, i) => {
+      assert.equal(row.rawOrderIndex, ref[i].rawOrderIndex, 'song identity matches by index');
+      assert.ok(Number.isInteger(row.votes) && row.votes >= 0, 'integer votes per song');
+    });
+    // Rows are in best-first (combined/rank) order: rank values never increase.
+    const ranks = o.perSong.map((r) => r.rank);
+    assert.deepEqual(ranks, [...ranks].sort((a, b) => b - a), 'rows ordered high→low rank');
+    assert.equal(
+      o.perSong.reduce((a, r) => a + r.votes, 0),
+      o.tiers.reduce((a, r) => a + r.points * r.count, 0),
+      'per-song votes total the option budget'
+    );
   }
 });
 
@@ -490,6 +533,245 @@ test('passFailMaybe: questionable band funded only when budget is generous', () 
   assert.equal(sum(songs), 12);
 });
 
+// ---------------------------------------------------------------------------
+// R1: center-out unit-step staircase (contiguity + no top-heaviness)
+// ---------------------------------------------------------------------------
+test('R1: kpop-solo-like field gets a contiguous, low-top curve (no {4,1,0})', () => {
+  // The reported bug: a tight cluster + modest budget produced {4,1,0} (a tall
+  // top over a cliff). The staircase must give contiguous point tiers and keep
+  // the top low when no real gap justifies it.
+  const scores = [80, 76, 76, 75.5, 75, 75, 74.5, 74, 74, 73.5];
+  const g = mk(scores);
+  allocate(g, 10, 5, { shape: 'auto' });
+  assert.equal(sum(g), 10);
+  const votes = [...g].sort((a, b) => b.score - a.score).map((s) => s.finalVotes);
+  assertContiguous(votes, 'kpop-like');
+  assert.ok(Math.max(...votes) <= 2, `tight cluster should not top-heap, got ${JSON.stringify(votes)}`);
+});
+
+test('R1+R2 regression (3 3 3): clear favorites build a graduated top over the 75 anchor band', () => {
+  // Two clear favorites (>=80) sit a real gap above the field, then an "actively
+  // like" band (>=75) above a long tail. Unlike the tight kpop cluster, the real
+  // favorite gap + the 75 anchor justify a taller, graduated top: favorites at the
+  // max, a middle band at the 75 line, then a 1-point floor — not a flat max-2.
+  const scores = [
+    90, 84, 77, 77, 75.5, 75, 74, 73.5, 73.5, 73, 72.5, 72, 71.5, 71, 70.5, 70, 69.5, 69, 68.5, 68, 67.5, 67,
+  ];
+  const g = mk(scores);
+  const { tradeoffs } = allocate(g, 15, 4, { shape: 'auto' });
+  assert.equal(sum(g), 15);
+  const by = [...g].sort((a, b) => b.score - a.score);
+  const votes = by.map((s) => s.finalVotes);
+  assertContiguous(votes, '3 3 3');
+  // Favorites share the strict top tier; the curve is graduated (>=3 funded tiers),
+  // not a flat max-2 — a real favorite gap earns a taller top than the kpop cluster.
+  const favVotes = by.filter((s) => s.score >= 80).map((s) => s.finalVotes);
+  assert.equal(new Set(favVotes).size, 1, 'favorites share one tier');
+  assert.equal(favVotes[0], Math.max(...votes), 'favorites are the top tier');
+  assert.equal(Math.max(...votes), 3, 'graduated top reaches 3 (favorites), not a flat 2');
+  assert.ok(new Set(votes.filter((v) => v > 0)).size >= 3, 'at least three funded point tiers');
+  // The "actively like" 2-band sits on the 75 anchor: every score >= 75 earns >= 2.
+  assert.ok(by.filter((s) => s.score >= 75).every((s) => s.finalVotes >= 2), '>=75 forms the middle band');
+  // The C1/C2/C3 alternatives are surfaced as a tier-structure choice.
+  const ts = tradeoffs.find((t) => t.kind === 'tier-structure');
+  assert.ok(ts && ts.options.length >= 2, 'alternative staircases surface as a tradeoff');
+});
+
+test('R1: high cap does not inflate the top when a shorter staircase fits (no cap-reach)', () => {
+  const scores = [78, 77, 76, 75, 74, 73, 72, 71, 70, 69];
+  const lowCap = mk(scores);
+  allocate(lowCap, 14, 3, { shape: 'auto' });
+  const highCap = mk(scores);
+  allocate(highCap, 14, 99, { shape: 'auto' });
+  assert.equal(sum(lowCap), 14);
+  assert.equal(sum(highCap), 14);
+  const top = (g) => Math.max(...g.map((s) => s.finalVotes));
+  // A near-infinite cap must not produce a taller top than a tight cap when the
+  // same budget is spent — the top comes from promotion steps, not the cap.
+  assert.equal(top(highCap), top(lowCap), 'top height is budget-driven, not cap-driven');
+  assertContiguous([...highCap].sort((a, b) => b.score - a.score).map((s) => s.finalVotes), 'high-cap');
+});
+
+test('R1: every auto curve is contiguous and budget-exact across fields/ratios', () => {
+  const fields = [
+    [92, 88, 74, 73, 72, 72, 71, 70, 70, 69],
+    [88, 85, 82, 80, 78, 76, 75, 74, 72, 70],
+    [75, 74, 73, 72, 72, 71, 70, 69, 68, 67],
+    [80, 76, 76, 75.5, 75, 75, 74.5, 74, 74, 73.5, 73, 72],
+  ];
+  for (const scores of fields) {
+    for (const budget of [6, 10, 14, 20]) {
+      const g = mk(scores);
+      allocate(g, budget, 5, { shape: 'auto' });
+      assert.equal(sum(g), budget, `budget ${budget} fully spent`);
+      assertContiguous(
+        [...g].sort((a, b) => b.score - a.score).map((s) => s.finalVotes),
+        `field/${budget}`
+      );
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// R2: favorite top-band merge (scores >= 80 share the top tier)
+// ---------------------------------------------------------------------------
+test('R2: scores >= 80 merge into one shared top tier by default', () => {
+  const scores = [90, 84, 82, 81, 77, 75.5, 74, 73.5, 73, 72.5, 72, 71, 70, 69, 68, 67];
+  const g = mk(scores);
+  const { tradeoffs } = allocate(g, 15, 4, { shape: 'auto' });
+  assert.equal(sum(g), 15);
+  const top = [...g].filter((s) => s.score >= 80).map((s) => s.finalVotes);
+  assert.equal(new Set(top).size, 1, 'all >=80 favorites share one point value');
+  assert.equal(Math.max(...g.map((s) => s.finalVotes)), top[0], 'the favorites are the top tier');
+  assert.ok(tradeoffs.some((t) => t.kind === 'top-band-split'), 'a significant merged band surfaces a split tradeoff');
+  assertContiguous([...g].sort((a, b) => b.score - a.score).map((s) => s.finalVotes), 'R2 merged');
+});
+
+test('R2: --no-favorite-band splits the favorites onto their own gaps', () => {
+  const scores = [90, 84, 82, 81, 77, 75.5, 74, 73.5, 73, 72.5, 72, 71, 70, 69, 68, 67];
+  const g = mk(scores);
+  allocate(g, 15, 4, { shape: 'auto', favoriteBand: false });
+  assert.equal(sum(g), 15);
+  const top = [...g].filter((s) => s.score >= 80).map((s) => s.finalVotes);
+  assert.ok(new Set(top).size > 1, 'disabling the merge lets the favorites separate');
+  assertContiguous([...g].sort((a, b) => b.score - a.score).map((s) => s.finalVotes), 'R2 split');
+});
+
+test('R2: favorite-band default is OFF for combined rounds (the 80 floor is a raw-music anchor)', () => {
+  // Combined scores near/above 80 are a z-remap artifact (above-average in a weak
+  // field), not real raw 8+ favorites — so the merge must not fire by default when
+  // ranking by combined. Raw blends here put a/b/c/d >= 80 with no normalization.
+  const rows = () => [
+    { title: 'a', rawOrderIndex: 0, score: 77, fitScore: 93 },
+    { title: 'b', rawOrderIndex: 1, score: 76, fitScore: 85 },
+    { title: 'c', rawOrderIndex: 2, score: 74, fitScore: 90 },
+    { title: 'd', rawOrderIndex: 3, score: 75, fitScore: 84 },
+    { title: 'e', rawOrderIndex: 4, score: 73, fitScore: 72 },
+    { title: 'f', rawOrderIndex: 5, score: 72, fitScore: 70 },
+  ];
+  const dflt = rows();
+  const { tradeoffs: tDflt } = allocate(dflt, 10, 5, { rankBy: 'combined' });
+  assert.ok(
+    !tDflt.some((t) => t.kind === 'top-band-split'),
+    'no favorite-band merge surfaces by default in combined mode'
+  );
+
+  // An explicit floor is still honored even in combined mode (owner opts in).
+  const forced = rows();
+  const { tradeoffs: tForced } = allocate(forced, 10, 5, {
+    rankBy: 'combined',
+    favoriteBand: { min: 80 },
+  });
+  const fav = [...forced].filter((s) => rankValue(s, { rankBy: 'combined' }) >= 80);
+  const favVotes = new Set(fav.map((s) => s.finalVotes));
+  assert.equal(favVotes.size, 1, 'an explicit floor merges the >=80 band into one tier');
+  assert.ok(
+    tForced.some((t) => t.kind === 'top-band-split'),
+    'the explicit merge surfaces the split tradeoff'
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Bug 2: passes shaped first; a maybe never outranks a pass
+// ---------------------------------------------------------------------------
+const maybeNeverOutranksPass = (songs, passN) => {
+  const passes = songs.slice(0, passN).map((s) => s.finalVotes);
+  const maybes = songs.slice(passN).filter((s) => s.gate === 'maybe').map((s) => s.finalVotes);
+  const minPass = Math.min(...passes);
+  const maxMaybe = maybes.length ? Math.max(...maybes) : 0;
+  assert.ok(maxMaybe <= minPass, `max(maybe)=${maxMaybe} must be <= min(pass)=${minPass}`);
+};
+
+test('Bug 2: a maybe never outranks a pass (repro: 7 passes, 2 maybes, budget 10)', () => {
+  const songs = [
+    { title: 'p1', rawOrderIndex: 0, score: 76, gate: 'pass' },
+    { title: 'p2', rawOrderIndex: 1, score: 75, gate: 'pass' },
+    { title: 'p3', rawOrderIndex: 2, score: 74, gate: 'pass' },
+    { title: 'p4', rawOrderIndex: 3, score: 73, gate: 'pass' },
+    { title: 'p5', rawOrderIndex: 4, score: 72, gate: 'pass' },
+    { title: 'p6', rawOrderIndex: 5, score: 71, gate: 'pass' },
+    { title: 'p7', rawOrderIndex: 6, score: 69, gate: 'pass' },
+    { title: 'm1', rawOrderIndex: 7, score: 76, fitScore: 64, gate: 'maybe' },
+    { title: 'm2', rawOrderIndex: 8, score: 70, fitScore: 55, gate: 'maybe' },
+  ];
+  allocate(songs, 10, 5, { rankBy: 'combined', gate: { type: 'passFailMaybe' } });
+  assert.equal(sum(songs), 10);
+  maybeNeverOutranksPass(songs, 7);
+  // No pass sits at 0 while a maybe is funded.
+  const fundedMaybe = songs.slice(7).some((s) => s.finalVotes > 0);
+  if (fundedMaybe) assert.ok(songs.slice(0, 7).every((s) => s.finalVotes >= 1), 'no 0 pass beside a funded maybe');
+});
+
+test('Bug 2: generous surplus funds maybes at the 1-point floor (3 passes, 2 maybes, budget 10)', () => {
+  const songs = [
+    { title: 'p1', rawOrderIndex: 0, score: 78, gate: 'pass' },
+    { title: 'p2', rawOrderIndex: 1, score: 75, gate: 'pass' },
+    { title: 'p3', rawOrderIndex: 2, score: 73, gate: 'pass' },
+    { title: 'm1', rawOrderIndex: 3, score: 74, fitScore: 64, gate: 'maybe' },
+    { title: 'm2', rawOrderIndex: 4, score: 72, fitScore: 58, gate: 'maybe' },
+  ];
+  allocate(songs, 10, 5, { rankBy: 'combined', gate: { type: 'passFailMaybe' } });
+  assert.equal(sum(songs), 10);
+  assert.ok(songs.slice(0, 3).every((s) => s.finalVotes >= 1), 'all passes funded');
+  // Not a low-pass round (passes >= maybes) -> maybes stay at the 1-point floor.
+  assert.ok(songs[3].finalVotes <= 1 && songs[4].finalVotes <= 1, 'maybes capped at 1 (Q4 default)');
+  maybeNeverOutranksPass(songs, 3);
+});
+
+test('Bug 2: leniency reaches further down the maybe list at the floor', () => {
+  const base = () => [
+    { title: 'p1', rawOrderIndex: 0, score: 80, gate: 'pass' },
+    { title: 'p2', rawOrderIndex: 1, score: 78, gate: 'pass' },
+    { title: 'p3', rawOrderIndex: 2, score: 76, gate: 'pass' },
+    { title: 'p4', rawOrderIndex: 3, score: 74, gate: 'pass' },
+    { title: 'p5', rawOrderIndex: 4, score: 73, gate: 'pass' },
+    { title: 'p6', rawOrderIndex: 5, score: 72, gate: 'pass' },
+    { title: 'm1', rawOrderIndex: 6, score: 75, fitScore: 66, gate: 'maybe' },
+    { title: 'm2', rawOrderIndex: 7, score: 73, fitScore: 60, gate: 'maybe' },
+    { title: 'm3', rawOrderIndex: 8, score: 71, fitScore: 55, gate: 'maybe' },
+    { title: 'm4', rawOrderIndex: 9, score: 70, fitScore: 50, gate: 'maybe' },
+  ];
+  const stingy = base();
+  allocate(stingy, 14, 5, { rankBy: 'combined', gate: { type: 'passFailMaybe', leniency: 0 } });
+  const lenient = base();
+  allocate(lenient, 14, 5, { rankBy: 'combined', gate: { type: 'passFailMaybe', leniency: 1 } });
+  assert.equal(sum(stingy), 14);
+  assert.equal(sum(lenient), 14);
+  const fundedMaybes = (g) => g.slice(6).filter((s) => s.finalVotes > 0).length;
+  assert.ok(fundedMaybes(lenient) >= fundedMaybes(stingy), 'leniency funds at least as many maybes');
+  maybeNeverOutranksPass(lenient, 6);
+  // Funded maybes are the most-defensible (highest fitScore) ones, in order.
+  const funded = lenient.slice(6).filter((s) => s.finalVotes > 0).map((s) => s.fitScore);
+  assert.deepEqual(funded, [...funded].sort((a, b) => b - a), 'maybes funded by defensibility, not music');
+});
+
+test('Bug 2 (Step 1b): low-pass round gives the maybe band its own graduated staircase', () => {
+  // Few clear passes, mostly maybes: passes take a strict top; the maybe band
+  // graduates below them, capped at the lowest pass.
+  const songs = [
+    { title: 'p1', rawOrderIndex: 0, score: 80, gate: 'pass' },
+    { title: 'p2', rawOrderIndex: 1, score: 74, gate: 'pass' },
+    { title: 'm1', rawOrderIndex: 2, score: 78, fitScore: 66, gate: 'maybe' },
+    { title: 'm2', rawOrderIndex: 3, score: 76, fitScore: 62, gate: 'maybe' },
+    { title: 'm3', rawOrderIndex: 4, score: 73, fitScore: 60, gate: 'maybe' },
+    { title: 'm4', rawOrderIndex: 5, score: 72, fitScore: 58, gate: 'maybe' },
+    { title: 'm5', rawOrderIndex: 6, score: 71, fitScore: 55, gate: 'maybe' },
+    { title: 'm6', rawOrderIndex: 7, score: 70, fitScore: 52, gate: 'maybe' },
+    { title: 'm7', rawOrderIndex: 8, score: 69, fitScore: 50, gate: 'maybe' },
+    { title: 'm8', rawOrderIndex: 9, score: 68, fitScore: 48, gate: 'maybe' },
+  ];
+  const { tradeoffs } = allocate(songs, 10, 5, { rankBy: 'combined', gate: { type: 'passFailMaybe' } });
+  assert.equal(sum(songs), 10);
+  const passes = songs.slice(0, 2).map((s) => s.finalVotes);
+  const maybes = songs.slice(2).map((s) => s.finalVotes);
+  const passFloor = Math.min(...passes);
+  assert.ok(Math.max(...maybes) <= passFloor, 'every maybe <= the lowest pass');
+  assert.ok(Math.max(...passes) > Math.max(...maybes), 'top pass strictly highest');
+  assert.ok(new Set(maybes.filter((v) => v > 0)).size >= 2, 'the maybe band is graduated, not flat');
+  const mb = tradeoffs.find((t) => t.kind === 'maybe-band');
+  assert.ok(mb && mb.options.some((o) => /graduated/i.test(o.label)), 'maybe-band tradeoff offers a graduated option');
+});
+
 test('tied scores stay in one tier (votes differ by at most 1) at ~1:1', () => {
   // 15-song round, ~1:1 budget, several tied score groups.
   const scores = [70, 71, 72, 72, 72, 73, 73, 73, 74, 74, 75, 76, 76, 78, 80];
@@ -554,6 +836,138 @@ test('combined: equal music + same coarse fit band share a tier', () => {
     'near-equal fit does not separate equal-music songs'
   );
   assert.ok(songs[0].finalVotes >= songs[2].finalVotes, 'higher fit band ranks at least as high');
+});
+
+// ---------------------------------------------------------------------------
+// Combined-score normalization (per-axis z-score + asymmetric std floors)
+// ---------------------------------------------------------------------------
+const combinedById = (songs) => Object.fromEntries(songs.map((s) => [s.rawOrderIndex, s.combinedScore]));
+
+test('normalization: a real music edge overcomes a small fit edge (the rebalance)', () => {
+  // Raw 0.7·fit + 0.3·music makes the higher-fit song win; normalization (which
+  // dampens fit's wide spread and lets the tighter music distribution speak)
+  // flips them, because the 8-point music gap is decisive and the 5-point fit gap
+  // barely is. Six contenders so the per-round std (not the small-n fallback) runs.
+  const songs = [
+    { rawOrderIndex: 0, title: 'loFit-hiMusic', score: 78, fitScore: 85 },
+    { rawOrderIndex: 1, title: 'hiFit-loMusic', score: 70, fitScore: 90 },
+    { rawOrderIndex: 2, title: 'c', score: 74, fitScore: 80 },
+    { rawOrderIndex: 3, title: 'd', score: 73, fitScore: 75 },
+    { rawOrderIndex: 4, title: 'e', score: 76, fitScore: 72 },
+    { rawOrderIndex: 5, title: 'f', score: 72, fitScore: 70 },
+  ];
+  // Raw blend: hiFit-loMusic (84) > loFit-hiMusic (82.9).
+  assert.ok(0.7 * 90 + 0.3 * 70 > 0.7 * 85 + 0.3 * 78, 'raw blend favors the higher-fit song');
+  normalizeCombined(songs);
+  const c = combinedById(songs);
+  assert.ok(c[0] > c[1], 'normalized blend flips them: the music edge wins');
+});
+
+test('normalization: high fit floor dampens a tight fit cluster (no amplification)', () => {
+  // Same music, fit 85 vs 93 (different bands but a small, fuzzy AI gap). The high
+  // fit floor (14) keeps the combined gap modest instead of letting a tight cluster's
+  // std blow an 8-point fit gap up into a large swing. Still monotonic in fit.
+  const songs = [
+    { rawOrderIndex: 0, title: 'a', score: 74, fitScore: 93 },
+    { rawOrderIndex: 1, title: 'b', score: 74, fitScore: 85 },
+    { rawOrderIndex: 2, title: 'c', score: 74, fitScore: 88 },
+    { rawOrderIndex: 3, title: 'd', score: 74, fitScore: 90 },
+  ];
+  normalizeCombined(songs);
+  const c = combinedById(songs);
+  assert.ok(c[0] >= c[1], 'higher fit ranks at least as high (monotonic)');
+  assert.ok(c[0] - c[1] <= 6, `8-point fit gap stays dampened, got ${(c[0] - c[1]).toFixed(2)}`);
+});
+
+test('normalization: tight music amplifies a 1-point gap more than a wide field', () => {
+  // The asymmetric design: music adapts to the round, so the same 1-point music gap
+  // is worth more combined points when the field is tightly clustered than when it
+  // is widely spread. Fit is held identical so only music moves the blend.
+  const tight = [
+    { rawOrderIndex: 0, score: 75, fitScore: 80 },
+    { rawOrderIndex: 1, score: 74, fitScore: 80 },
+    { rawOrderIndex: 2, score: 75, fitScore: 80 },
+    { rawOrderIndex: 3, score: 74, fitScore: 80 },
+    { rawOrderIndex: 4, score: 75, fitScore: 80 },
+    { rawOrderIndex: 5, score: 74, fitScore: 80 },
+  ];
+  const wide = [
+    { rawOrderIndex: 0, score: 75, fitScore: 80 },
+    { rawOrderIndex: 1, score: 74, fitScore: 80 },
+    { rawOrderIndex: 2, score: 85, fitScore: 80 },
+    { rawOrderIndex: 3, score: 64, fitScore: 80 },
+    { rawOrderIndex: 4, score: 90, fitScore: 80 },
+    { rawOrderIndex: 5, score: 60, fitScore: 80 },
+  ];
+  normalizeCombined(tight);
+  normalizeCombined(wide);
+  const gapTight = combinedById(tight)[0] - combinedById(tight)[1];
+  const gapWide = combinedById(wide)[0] - combinedById(wide)[1];
+  assert.ok(gapTight > gapWide, `tight music amplifies the 1-pt gap (${gapTight.toFixed(2)} > ${gapWide.toFixed(2)})`);
+});
+
+test('normalization: +/- folds into music so 74+ outranks a plain 74 (same fit)', () => {
+  const songs = [
+    { rawOrderIndex: 0, title: 'plus', score: 74, fitScore: 80, plus: true },
+    { rawOrderIndex: 1, title: 'plain', score: 74, fitScore: 80 },
+    { rawOrderIndex: 2, title: 'minus', score: 74, fitScore: 80, minus: true },
+    { rawOrderIndex: 3, title: 'c', score: 76, fitScore: 80 },
+    { rawOrderIndex: 4, title: 'd', score: 72, fitScore: 80 },
+  ];
+  normalizeCombined(songs);
+  const c = combinedById(songs);
+  assert.ok(c[0] > c[1], '74+ outranks plain 74');
+  assert.ok(c[1] > c[2], 'plain 74 outranks 74-');
+});
+
+test('normalization: small contender field falls back to fixed refs (stable, finite)', () => {
+  const songs = [
+    { rawOrderIndex: 0, score: 75, fitScore: 90 },
+    { rawOrderIndex: 1, score: 70, fitScore: 60 },
+  ];
+  normalizeCombined(songs);
+  for (const s of songs) {
+    assert.ok(Number.isFinite(s.combinedScore), 'combined is finite under the small-n fallback');
+  }
+  assert.ok(songs[0].combinedScore > songs[1].combinedScore, 'still ranks the stronger song higher');
+});
+
+test('normalization: contenders exclude gated-out fit so the std reflects real candidates', () => {
+  // A terrible-fit outlier below the cutoff must not widen the fit std (the fit-side
+  // analogue of the owner dropping music outliers with `-`). Its presence should not
+  // change the combined scores of the contenders.
+  const base = () => [
+    { rawOrderIndex: 0, score: 75, fitScore: 90 },
+    { rawOrderIndex: 1, score: 74, fitScore: 85 },
+    { rawOrderIndex: 2, score: 73, fitScore: 80 },
+    { rawOrderIndex: 3, score: 72, fitScore: 72 },
+    { rawOrderIndex: 4, score: 76, fitScore: 70 },
+  ];
+  const gate = { type: 'cutoff', axis: 'fit', min: 68 };
+  const without = base();
+  normalizeCombined(without, undefined, gate);
+  const withOutlier = [...base(), { rawOrderIndex: 5, score: 71, fitScore: 15 }];
+  normalizeCombined(withOutlier, undefined, gate);
+  for (const i of [0, 1, 2, 3, 4]) {
+    assert.ok(
+      Math.abs(combinedById(without)[i] - combinedById(withOutlier)[i]) < 1e-9,
+      `contender ${i} combined is unaffected by the gated-out outlier`
+    );
+  }
+});
+
+test('normalization: average contender sits near 75 and a clear standout reaches the 80 anchor', () => {
+  const songs = [
+    { rawOrderIndex: 0, score: 80, fitScore: 95 }, // clear standout on both axes
+    { rawOrderIndex: 1, score: 74, fitScore: 78 },
+    { rawOrderIndex: 2, score: 73, fitScore: 75 },
+    { rawOrderIndex: 3, score: 72, fitScore: 72 },
+    { rawOrderIndex: 4, score: 75, fitScore: 70 },
+  ];
+  normalizeCombined(songs);
+  const c = combinedById(songs);
+  assert.ok(Math.abs(c[2] - 75) < 6, 'a middling contender lands near the 75 anchor');
+  assert.ok(c[0] >= 80, 'a both-axes standout reaches the 80 favorite anchor');
 });
 
 test('budget is always fully spent, spilling onto invalid as a last resort', () => {
@@ -773,4 +1187,67 @@ test('parseBucketCount parses a positive integer and rejects bad specs', () => {
   assert.throws(() => parseBucketCount('0'));
   assert.throws(() => parseBucketCount('2.5'));
   assert.throws(() => parseBucketCount('x'));
+});
+
+const PICK_OPTIONS = [
+  {
+    tierCount: 2,
+    bucketCount: 2,
+    shape: '1×4 / 0×3',
+    perSong: [
+      { rawOrderIndex: 3, title: 'Alpha', score: 88, votes: 4 },
+      { rawOrderIndex: 1, title: 'Bravo', score: 80, votes: 0 },
+    ],
+  },
+  {
+    tierCount: 3,
+    bucketCount: 3,
+    shape: '2×4 / 1×2 / 0×5',
+    perSong: [
+      { rawOrderIndex: 3, title: 'Alpha', score: 88, votes: 4 },
+      { rawOrderIndex: 1, title: 'Bravo', score: 80, votes: 2 },
+    ],
+  },
+];
+
+test('buildPickRecord captures chosen option letter, shape, reason, and all options', () => {
+  const songs = [
+    { rawOrderIndex: 3, finalVotes: 4 },
+    { rawOrderIndex: 1, finalVotes: 2 },
+  ];
+  const pick = buildPickRecord({ options: PICK_OPTIONS, chosenIndex: 1, songs, reason: 'tight round' });
+  assert.equal(pick.chosen, 'B');
+  assert.equal(pick.chosenIndex, 1);
+  assert.equal(pick.tierCount, 3);
+  assert.equal(pick.shape, '2×4 / 1×2 / 0×5');
+  assert.equal(pick.reason, 'tight round');
+  assert.equal(pick.options.length, 2);
+  assert.equal(pick.options[0].letter, 'A');
+  assert.equal(pick.options[1].letter, 'B');
+  assert.equal(pick.options[1].isChosen, true);
+  assert.equal(pick.options[0].isChosen, false);
+  assert.deepEqual(pick.options[1].perSong[1], { rawOrderIndex: 1, title: 'Bravo', score: 80, votes: 2 });
+});
+
+test('buildPickRecord records manual tweaks where final votes deviate from the chosen option', () => {
+  const songs = [
+    { rawOrderIndex: 3, finalVotes: 4 },
+    { rawOrderIndex: 1, finalVotes: 3 },
+  ];
+  const pick = buildPickRecord({ options: PICK_OPTIONS, chosenIndex: 1, songs });
+  assert.equal(pick.reason, null);
+  assert.deepEqual(pick.tweaks, [{ rawOrderIndex: 1, title: 'Bravo', from: 2, to: 3 }]);
+});
+
+test('buildPickRecord reports no tweaks when final matches the chosen distribution', () => {
+  const songs = [
+    { rawOrderIndex: 3, finalVotes: 4 },
+    { rawOrderIndex: 1, finalVotes: 2 },
+  ];
+  const pick = buildPickRecord({ options: PICK_OPTIONS, chosenIndex: 1, songs });
+  assert.deepEqual(pick.tweaks, []);
+});
+
+test('buildPickRecord returns null for an out-of-range chosenIndex', () => {
+  assert.equal(buildPickRecord({ options: PICK_OPTIONS, chosenIndex: 5, songs: [] }), null);
 });

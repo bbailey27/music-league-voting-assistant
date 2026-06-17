@@ -7,12 +7,17 @@ isProject: false
 
 # Allocator fill + maybe-funding fixes
 
-**Related plans.** Bug 1 is the motivating example for
-[`center-out-smooth-allocation.plan.md`](center-out-smooth-allocation.plan.md) **R1**
-(center-out unit-step staircase). Implement Bug 1 as R1 — do not patch
-`waterfillLevels` in isolation unless R1 is explicitly deferred. Bug 2 is
-orthogonal and can ship first. R3/R4 refinements in
-[`future-plans.plan.md`](future-plans.plan.md) stay deferred.
+**Related plans.** **R1** (the center-out unit-step staircase) and **R2** (the ≥80
+favorite-band merge) originated in
+[`center-out-smooth-allocation.plan.md`](center-out-smooth-allocation.plan.md);
+their full construction is now **inlined in this plan** (see _R1 + R2 — center-out
+staircase construction_ below) so Bug 1 stands alone. `center-out` is retained as
+the origin and for the deferred R3/R4 notes. Implement Bug 1 as R1 — do not patch
+`waterfillLevels` in isolation unless R1 is explicitly deferred. Bug 2 is largely
+orthogonal and ships first, **except its graduated maybe band (Q4), which reuses
+the R1 staircase and therefore lands with R1** (see _Implementation order_). R3/R4
+refinements stay deferred in
+[`future-plans.plan.md`](future-plans.plan.md).
 
 ---
 
@@ -69,46 +74,18 @@ clusters. Skipped levels are structural, not a rounding bug.
 ### Proposed fix — implement R1 (center-out staircase)
 
 **Do not extend `waterfillLevels`.** Replace the bell-target + waterfill core in
-`allocateBell` with the **R1 staircase enumerator** already specified in
-[`center-out-smooth-allocation.plan.md`](center-out-smooth-allocation.plan.md)
-(sections “Model: stacked unit steps” and “Changes §1 · R1 construction”).
+`allocateBell` (the `K = 1..Kmax` candidate loop plus `waterfillLevels`) with the
+**R1 staircase enumerator**. The full construction, the R2 favorite-band merge, the
+worked `3 3 3` example, preserved invariants, and the interim-patch fallback are
+inlined in the **_R1 + R2 — center-out staircase construction_** section below.
+Ship R2 in the same PR — the `3 3 3` → C2 regression depends on the ≥80 merge.
 
-Summary of the integrated algorithm:
-
-1. **Units** — group by `tierKey` (unchanged); optionally R2-merge ≥80 favorites
-   (same plan, can land in same PR or immediately after).
-2. **Boundaries** — candidate promotion/cutoff positions = gaps between units
-   (Ckmeans-ranked, largest first) ∪ anchor positions at 75 and 80.
-3. **Staircase** — nested boundaries top-down: baseline `1` at/above the 0/1
-   cutoff, `+1` for each promotion boundary crossed. Adjacent point tiers differ
-   by exactly **1 by construction**.
-4. **Budget** — enumerate feasible boundary sets whose
-   `Σ (#songs ≥ boundary) == budget` (exact); prefer pure unit-step solutions,
-   boundaries on large gaps/anchors, then **shorter top** (fewer promotion steps).
-5. **Fill = structure** — there is no separate waterfill; choosing boundaries
-   *is* choosing both cluster splits and point levels in one decision.
-6. **Tradeoffs** — top 2–3 distinct feasible staircases → existing
-   `tier-structure` options (`candidates[]` shape unchanged).
-
-This directly matches the owner’s “promote next clump vs split and promote
-sub-tier” mental model: each promotion step is either a new boundary (split) or
-raising all songs above an existing boundary (promote clump), one +1 at a time,
-top-down until budget is spent.
-
-**Preserved invariants** ([`spec/point-allocation.md`](../../spec/point-allocation.md)):
-
-- Budget exactness — staircase sum equals budget; `spillRemainder` unchanged for
-  cap-blocked / forced per-member remainder only.
-- Monotonicity + equal-score units — still via `tierKey` and atomic units.
-- No mixed targets — gate/maybe changes are Bug 2 only.
-- Existing `--shape` bell presets — keep for opt-in; only `auto` routes to
-  staircase (per center-out plan).
-
-**If R1 must be split across PRs**, the only acceptable interim patch is to add a
-**point-tier contiguity guard** to K-selection (reject candidates whose
-`distinct levels` have gaps >1) *and* cap phase-2 waterfill so tier *i* cannot
-be raised more than `levels[i-1]` times without first raising tier *i-1* — but
-this is a band-aid; R1 is the real fix.
+This fixes both owner requirements at once: **contiguity** (every step is `+1` by
+construction) and **top-heaviness** (the top is only as tall as the promotion steps
+the budget funds, never reaching for the cap). It also matches the owner's "promote
+the next clump vs. split and promote a sub-tier" mental model — each step is either
+a new boundary (split) or raising everything above an existing boundary (promote),
+one `+1` at a time, top-down until the budget is spent.
 
 ### Edge cases (Bug 1)
 
@@ -118,7 +95,7 @@ this is a band-aid; R1 is the real fix.
 | Ties / equal scores | Same `tierKey` unit never split across a boundary; indivisible remainder still via phase-3 spill + `tier-split` tradeoff |
 | Single-tier round | One boundary (cutoff only) → all funded songs same point value |
 | High cap, low budget | Top height emerges from promotion count, not cap — no `{4,1,0}` on tight cluster |
-| `--bucket-count` / `--tier-count` pins | Map to boundary count / distinct point values per center-out plan; pins win over default preference |
+| `--bucket-count` / `--tier-count` pins | Map to boundary count / distinct point values per the R1 section; pins win over default preference |
 | Bug 2 interaction | Pass-only pool fed to staircase; maybes never enter `allocateBell` (see below) |
 | Downvotes | Mirror staircase below center in follow-up (`allocateBellDown`); not blocking for these bugs |
 
@@ -129,8 +106,8 @@ Add to [`tests/score.test.mjs`](../../tests/score.test.mjs):
 1. **`kpop-solo-like contiguous curve`** — 10–16 songs, scores in 72–80, budget
    10, cap 5: assert distinct levels have gaps of exactly 1 (e.g. `{2,1,0}` not
    `{4,1,0}`); assert max tier ≤ 2 for this fixture (top-heaviness cap).
-2. **Regression on `3 3 3`** — default auto curve matches center-out **C2**
-   (`3,3 / 2×2 / 1×5 / 0`) per center-out plan tests.
+2. **Regression on `3 3 3`** — default auto curve matches **C2**
+   (`3,3 / 2×2 / 1×5 / 0`) per the R1 worked example below.
 3. **No-cap-reach** — high cap does not inflate top when a shorter staircase
    spends the budget exactly.
 4. **Integration** — `node scripts/one-off/kpop-solo-versions.mjs` without the CAP=2
@@ -139,6 +116,104 @@ Add to [`tests/score.test.mjs`](../../tests/score.test.mjs):
 
 Manual: `node scripts/parse-round.mjs rounds/2026-06-11-kpop-solo.html` (gate
 profile) — spot-check no `{4,1,0}` and no cap-2 workaround needed.
+
+---
+
+## R1 + R2 — center-out staircase construction (inlined)
+
+The full fix for Bug 1, lifted from
+[`center-out-smooth-allocation.plan.md`](center-out-smooth-allocation.plan.md) so
+this plan stands alone. That plan remains the origin and holds the deferred R3/R4
+notes.
+
+### R1 — model: stacked unit steps
+
+Group the eligible, ranked, gated-in songs into the existing atomic `tierKey`
+units (equal opinion never splits). A **staircase** is a nested set of boundaries
+`t0 > t1 > t2 > …` (in rank value), read top-down:
+
+- `t0` = the **0/1 cutoff**: songs at/above it get the baseline `1`; below it, `0`.
+- each higher boundary `t1, t2, …` is a **promotion step**: songs above it get `+1`.
+
+So `votes(song) = [score ≥ t0] + Σ_k [score ≥ t_k]`. The curve is automatically
+monotonic, every adjacent point tier differs by exactly **1 by construction**, and
+
+```
+budget = (#songs ≥ t0) + Σ_k (#songs ≥ t_k)
+```
+
+### R1 — construction (replaces bell-target + waterfill)
+
+1. **Boundary positions** = the natural gaps between units (Ckmeans-ranked,
+   largest first) ∪ the **anchor positions 75 and 80** (so a step can prefer to
+   land on a meaningful score rather than in the fuzzy 68–72 band).
+2. **Enumerate** feasible staircases (cutoff × promotion-step positions, each on a
+   boundary, bounded by `cap` steps and `#units`) whose song-sum **equals budget**.
+   When none is exact, the nearest feasible marks the documented exception path
+   (`forced-spill`).
+3. **Choosing boundaries is the fill** — there is no separate waterfill phase; one
+   decision picks both the cluster splits and the point levels.
+4. Among feasible staircases, prefer in order:
+   1. **No exception used** (pure unit steps; no forced spill into gated-out /
+      disqualified / clearly-low songs).
+   2. **Boundaries on the largest real gaps and on the 75 / 80 anchors.**
+   3. **The shorter top** (fewer/lower promotion steps) — encodes "lower max points
+      over a forced gap."
+   4. Existing tiebreakers (cleanest break placement / GVF).
+5. The top 2–3 distinct feasible staircases become the `tier-structure` tradeoff
+   (deduped on the final point distribution, as today).
+
+### R2 — favorite top-band merge (default on)
+
+After grouping by `tierKey`, merge every unit whose rank value is **≥ 80** into one
+synthetic atomic top unit (so `90` and `84` share the top tier). Gate behind a
+`profile.favoriteBand` config (default `{ min: 80, splitAt: significant }`). When
+the merged band is "significant" (proposed `≥ ceil(fundedSongs / 3)` **or** `≥ 4`,
+whichever is smaller — tune in impl), also retain the unmerged boundaries as an
+alternative and emit a `top-band-split` tradeoff. `--no-favorite-band` disables the
+merge; `--favorite-band <min>` overrides the threshold.
+
+### Worked example — `3 3 3` (budget 15, cap 4, 22 songs)
+
+Units (desc): `[90,84]` (R2-merged) · `77+` · `75.5` · `74` · `73.5+` · `73.5` ·
+`73?` · `72.5` · `72?` · … Pure unit-step staircases summing to 15 include:
+
+- **C1**: cutoff at 72?, one promotion (≥77) → `3,3 / 2 / 1×7`.
+- **C2** ✅ default: cutoff at 72.5, promotions at ≥75.5 and ≥80 → `3,3 / 2×2 / 1×5`
+  (boundaries land on the 75 anchor + the 84→77 gap; the top stays at 3).
+- **C3**: cutoff at 73?, promotions at ≥74 and ≥80 → `3,3 / 2×3 / 1×3`.
+
+All three surface as the `tier-structure` tradeoff; the allocator defaults to C2.
+
+### Knobs + preserved candidate plumbing (unchanged)
+
+- Keep producing the same `candidates[]` shape (`runs`, `distinct`, `voteKey`,
+  `tiers`, `levels`) so tradeoff surfacing, the `--tier-count` / `--bucket-count`
+  selection, and the renderer are all unchanged.
+- `--bucket-count` maps to "number of boundary positions used"; `--tier-count`
+  stays "number of distinct point values."
+- Reuse the per-song smoothness check only as a guard/label — it must never trip
+  for a pure unit-step staircase.
+
+### Preserved invariants ([`spec/point-allocation.md`](../../spec/point-allocation.md))
+
+- **Budget exactness** — staircase sum equals budget; `spillRemainder` unchanged
+  for cap-blocked / forced per-member remainder only.
+- **Monotonicity + equal-score units** — via `tierKey` atomic units.
+- **No mixed targets** — gate/maybe changes are Bug 2 only.
+- **`--shape` presets** (`bell` / `compressed` / `balanced` / `top-heavy` /
+  `relative`) stay selectable; only `auto` routes to the staircase — which changes
+  the `auto` default for every round.
+- **Downvotes** mirror the staircase below center (`allocateBellDown`) as a
+  fast-follow; not blocking for these bugs.
+
+### Interim patch (only if R1 must split across PRs)
+
+The sole acceptable stopgap is a **point-tier contiguity guard** in K-selection
+(reject candidates whose distinct levels have gaps > 1) *plus* a cap on phase-2
+waterfill (tier *i* can't be raised more than `levels[i-1]` times before tier
+*i-1*). This is a band-aid — it fixes contiguity but **not** top-heaviness — so R1
+remains the real fix.
 
 ---
 
@@ -206,7 +281,16 @@ Problems:
 `allocateBell` is innocent here; the bug is purely funding order and maybe
 inclusion logic in `allocate()`.
 
-### Proposed fix — passes first, maybes from verified surplus
+### Proposed fix — passes first, maybes capped below passes
+
+**Governing rule (owner, confirmed — Q1/Q2/Q4).** The hard constraint is *not*
+"never fund a maybe." It is: **a maybe never receives more points than the
+lowest-funded pass** — `max(maybe finalVotes) ≤ min(funded pass finalVotes)`.
+Within that ceiling a `leniency` dial may reach **further down the maybe list and
+grant the first few (most-defensible) maybes a bottom-tier point**, *without ever
+re-ranking a maybe among the passes on music* (no "promote to pass" — a high music
+score must not let a maybe climb to multiple points as if it were a solid pass).
+See _Phase B_ below for how this is constructed.
 
 **Phase A — shape passes (always).**
 
@@ -216,44 +300,51 @@ inclusion logic in `allocate()`.
 3. If there are **no passes**, keep current behavior: shape `includedMaybes`
    directly (unchanged fallback at line 537).
 
-**Phase B — maybe inclusion (leftovers only).**
+**Phase B — maybe inclusion (capped below passes).**
 
-Compute `includedMaybes` and `passBudget` together:
+`includedMaybes`, their point levels, and `passBudget` are decided together so the
+governing rule holds by construction:
 
 ```
 candidateMaybeCount =
-  leniency knob (0…maybes.length) OR auto heuristic (see below)
+  leniency dial (0…maybes.length)          // explicit knob; default = auto
+  OR auto heuristic (verified surplus; see below)
 
-passBudget = budget - candidateMaybeCount   // each included maybe will get exactly 1
+passBudget = budget − (points reserved for the maybe band)
 
-Run staircase/bell on passes with passBudget
+Run R1 staircase / bell on PASSES only with passBudget
+passFloor = min(pass.finalVotes)           // lowest funded pass tier
 
-gateOrderOk =
-  candidateMaybeCount == 0
-  OR min(pass.finalVotes) >= 1          // strict: no maybe funded while any pass at 0
-  // (stronger invariant: min(pass) >= max(maybe) when maybes funded — same for 1pt maybes)
+Fund the first candidateMaybeCount maybes (most-defensible first, existing sort),
+each at a bottom level ≤ passFloor:
+  - default: 1 point each (requires passFloor ≥ 1)
+  - low-pass round (few passes, large maybe band): the maybe band may take its OWN
+    graduated staircase, but every maybe ≤ passFloor and the top passes stay
+    strictly highest — this is "go further down the list," NOT "move the pass line"
 
+gateOrderOk = max(maybe.finalVotes) ≤ passFloor
 If !gateOrderOk:
-  retry with candidateMaybeCount = 0, passBudget = budget   // passes first, always
-
-If gateOrderOk:
-  assign includedMaybes each 1 pt (cap), most-defensible first (existing sort)
+  reduce candidateMaybeCount (down to 0) and re-shape passes on the full budget
+  — passes first, always.
 ```
 
-**Auto heuristic (replace `spare = budget - passes.length`):**
+**Auto heuristic (replaces `spare = budget − passes.length`).** Start at
+`candidateMaybeCount = 0`; only increase while a **trial run** keeps `gateOrderOk`
+after passes are shaped (decrement from `min(maybes.length, budget − passFloor)`).
+The `leniency` dial sets the *target* count directly (still clamped by the trial),
+so the owner can say "go a few further down" without code changes.
 
-- Start with `candidateMaybeCount = 0`.
-- Only increase if a **trial run** shows `gateOrderOk` after pass shaping — e.g.
-  binary search or decrement from `min(maybes.length, budget - passFloor)` where
-  `passFloor` is the minimum budget to give every pass ≥1 (usually `passes.length`,
-  but bell may still zero the bottom pass — see open question below).
-- Surface the `maybe-band` tradeoff **after** the trial, listing counts that
-  actually satisfy gate order (0, …, max feasible).
+**Surface as a `maybe-band` tradeoff with concrete candidate allocations** (maybes
+get **0 / 1 / a graduated band**) so the leniency is chosen by picking an option,
+never by hand-tweaking (Q4). Each option lists only counts/levels that satisfy the
+governing rule.
 
 **Hard invariant (enforce in code and tests):**
 
-> If any maybe has `finalVotes > 0`, then every pass must have
-> `finalVotes >= that value` (equivalently: no pass at 0 while any maybe is funded).
+> `max(maybe finalVotes) ≤ min(funded pass finalVotes)` — a maybe never earns more
+> points than any funded pass. (With 1-point maybes this reduces to "no pass at 0
+> while any maybe is funded"; equality at the 1-point floor is allowed — a 1-point
+> maybe may sit alongside 1-point passes, ordered below them by defensibility.)
 
 **Interaction with Bug 1 / R1:** Maybes never enter the staircase unit list.
 Pass pool → staircase with `passBudget`; maybe points are assigned after, outside
@@ -271,69 +362,114 @@ a [`spec/decisions.md`](../../spec/decisions.md) entry — **not in this plan PR
 | Case | Expected behavior |
 |------|-------------------|
 | Budget == passes.length | No maybes funded; passes shaped with full budget (existing tight test stays) |
-| All passes naturally ≥1 after shaping | Maybes can receive 1 each from deducted budget if gate-order trial passes |
-| Bottom pass at 0 (natural bell zero band) | **No maybe funded** under strict rule — zeros stay in the pass band, not given to maybes |
-| `leniency = 1` | Still subject to gate-order guard unless owner explicitly opts to weaken it (open question) |
-| All-maybe (no passes) | Shape maybes with full budget (unchanged) |
+| All passes naturally ≥1 after shaping | Maybes can receive 1 each from deducted budget if the gate-order trial passes (`passFloor ≥ 1`) |
+| Bottom pass at 0 (natural bell zero band) | **No maybe funded** — funding one would break `max(maybe) ≤ min(pass)`; zeros stay in the pass band |
+| `leniency` dialled up | Funds the first `⌈leniency·maybes⌉` defensible maybes at `≤ passFloor`, never above a funded pass; auto-reduces the count if a pass would drop to 0. The dial reaches further down the list — it does **not** override the governing rule |
+| Low-pass round (few passes, many maybes) | Passes take the top tiers; the maybe band gets its own graduated staircase capped at `passFloor`, top passes strictly highest. Surfaced as a `maybe-band` tradeoff (0 / 1 / graduated) |
+| All-maybe (no passes) | Shape maybes with full budget (unchanged fallback) |
 | All-pass | No maybe logic runs |
-| Pinned overrides | Maybes still last; pins on passes consume budget before maybe trial |
-| Combined with Bug 1 | Pass-only staircase; same gate-order rules |
-| `spillRemainder` | Must not fund maybes via spill while passes at 0 — spill targets best **passes** first |
+| Pinned overrides | Maybes still last; pins on passes consume budget before the maybe trial |
+| Combined with Bug 1 | Pass-only staircase; maybe band assigned after, capped at `passFloor` |
+| `spillRemainder` | Must not lift a maybe above `passFloor`; spill targets best **passes** first |
 
 ### Verification (Bug 2)
 
 Add / update in [`tests/score.test.mjs`](../../tests/score.test.mjs):
 
-1. **`pass-never-loses-to-maybe`** — repro fixture (7 passes, 2 maybes, budget 10):
-   assert no maybe has votes unless every pass has ≥ that many votes; specifically
-   assert no `(pass=0, maybe>0)` pairs.
-2. **Update `passFailMaybe: questionable band funded only when budget is generous`**
-   — generous case (5 passes, 4 maybes, budget 12) will likely fund **zero**
-   maybes under strict gate-order (passes-only bell gives bottom pass 0). Revise
-   expectations OR use a fixture where all passes reach ≥1 before maybe funding
-   (e.g. 3 passes, budget 10, 2 maybes — expect 2 maybes at 1, all passes ≥1).
-3. **kpop-solo regression** — V3/V4 gate profiles: no maybe in the awarded list
-   unless every pass is strictly above the maybe band (or all passes ≥1).
-4. **Tradeoff** — `maybe-band` options only list counts feasible under gate-order
-   guard.
+1. **`maybe-never-outranks-a-pass`** — repro fixture (7 passes `76…69`, 2 maybes,
+   budget 10): assert `max(maybe finalVotes) ≤ min(funded pass finalVotes)`;
+   specifically no `(pass < maybe)` pairs and no `(pass=0, maybe>0)` pairs.
+2. **Generous surplus funds maybes at the floor** — 3 passes, 2 maybes, budget 10:
+   with `passBudget = 8` the passes shape to e.g. `3,3,2` (all ≥1), so both maybes
+   fund at **1** (total `8 + 2 = 10`); assert maybes never exceed `1` here even
+   though budget is generous (Q4 default).
+3. **Leniency reaches further down** — 6 passes (all ≥1 after shaping), 4 maybes,
+   leniency dialled up: assert the first N (most-defensible) maybes fund at
+   `≤ passFloor`, ordered by `fitScore` (not re-ranked among passes on music), and
+   that the count auto-reduces if a pass would hit 0.
+4. **Low-pass round graduated band** — 2 passes, 8 maybes, budget 10: passes take
+   the top; the maybe band gets a graduated curve capped at `passFloor`; assert top
+   passes are strictly highest and every maybe `≤ passFloor`.
+5. **kpop-solo regression** — V3/V4 gate profiles: no maybe outranks any funded
+   pass; FINAL-style outcome (8 passes, budget 10) funds zero maybes with spare
+   points deepening the pass curve.
+6. **Tradeoff** — `maybe-band` options list concrete `0 / 1 / graduated`
+   allocations, each satisfying `max(maybe) ≤ min(pass)`.
 
 ---
 
 ## Implementation order
 
-1. **Bug 2 first** (small, isolated `allocate()` change) — immediately stops
-   pass-below-maybe regressions on gate rounds.
-2. **Bug 1 via R1** (larger `allocateBell` rewrite per center-out plan) — fixes
-   contiguity and top-heaviness for all `auto` rounds.
+1. **Step 1a — Bug 2 funding order** (small, isolated `allocate()` change; ships
+   first, no R1 dependency). Shape passes before any maybe; enforce
+   `max(maybe) ≤ min(funded pass)`; fund maybes at the **1-point floor** only —
+   auto from verified surplus, or via the `leniency` dial — capped below passes.
+   This is the common case and immediately stops a maybe outranking a pass.
+2. **Step 2 — Bug 1 via full R1 + R2 in one PR** (Q3, Q5). Replace the bell-target
+   / `waterfillLevels` core with the center-out staircase **and** the ≥80
+   favorite-band merge together — the headline regression (`3 3 3` → C2) depends on
+   the merge. Intentionally changes the default `auto` curve for every round, so
+   existing `score.test.mjs` allocation expectations are rewritten to the new shapes
+   (documented, not chased to green).
+3. **Step 1b — graduated maybe band** (Q4; lands **with or just after** Step 2).
+   The low-pass-round behavior (few passes, many maybes → the maybe band takes its
+   own graduated staircase capped at `passFloor`) **reuses the R1 staircase**, so it
+   cannot precede Step 2. Until it ships, low-pass rounds fall back to the 1-point
+   floor from Step 1a.
 
-Both can land in one PR or two; Bug 2 has no dependency on R1.
+**Ordering rationale.** Step 1a is pure funding-order logic, independent of the
+allocator rewrite, so it ships first for an immediate correctness win. Step 1b is
+*labelled* part of Bug 2 but **depends on R1** (it needs the staircase to build a
+graduated maybe band), so it is sequenced after Step 2 rather than bundled with 1a
+— the earlier "Bug 2 before R1" wording could not hold for this piece. R2 ships
+with R1, never after.
 
 ## Files to touch (implementation — not this plan)
 
-| File | Bug 1 | Bug 2 |
-|------|-------|-------|
-| `scripts/score-core.mjs` | Replace waterfill/K-loop with staircase (R1) | Reorder maybe funding in `allocate()` |
-| `tests/score.test.mjs` | Contiguity + kpop-like fixtures | Gate-order + revised maybe tests |
-| `spec/point-allocation.md` | Allocation model → center-out (with R1) | Gate maybe band wording |
-| `spec/decisions.md` | At R1 landing | At maybe-order landing |
+Columns map to the steps: **Step 1a + 1b** = Bug 2 (1b lands with R1), **Step 2** =
+Bug 1 (R1 + R2).
+
+| File | Step 2 (Bug 1: R1 + R2) | Steps 1a / 1b (Bug 2) |
+|------|-------------------------|-----------------------|
+| `scripts/score-core.mjs` | Replace waterfill/K-loop with staircase (R1); add R2 ≥80 merge | 1a: reorder maybe funding in `allocate()`; 1b: graduated maybe band over the R1 staircase (capped at `passFloor`) |
+| `tests/score.test.mjs` | Contiguity + kpop-like + `3 3 3`→C2 + R2 fixtures | 1a: gate-order + 1-point maybe tests; 1b: low-pass graduated-band test |
+| `spec/point-allocation.md` | Allocation model → center-out (R1 + R2 + top-band-split) | Gate maybe band: `max(maybe) ≤ min(pass)`, leniency, graduated band |
+| `spec/decisions.md` | At R1/R2 landing | 1a: at maybe-order landing; 1b: at graduated-band landing |
 | `scripts/one-off/kpop-solo-versions.mjs` | Remove CAP=2 workaround when green | — |
 
-## Open design questions (owner input)
+## Resolved design decisions (owner, 2026-06-15)
 
-1. **Maybe “leftovers” vs generous budget.** Strict gate-order (`no maybe if any
-   pass at 0`) means many real rounds (bottom pass naturally 0) will **never** fund
-   maybes even with budget 12+. Is that intended, or should “passes first” mean
-   passes get the full bell/staircase on the **entire** budget first and maybes
-   only receive points if we **demote** the lowest pass tier to fund them?
+The five open questions are settled. The governing maybe rule and the Phase B
+algorithm above already reflect these.
 
-2. **Leniency knob.** Should `leniency > 0` override the gate-order guard (old
-   behavior for max leniency), or is the guard absolute?
+1. **Passes first (Q1) — confirmed.** Passes are always shaped before any maybe is
+   funded; a clean pass can never lose to a maybe. A maybe is funded only from
+   verified surplus (or via the `leniency` dial), never by demoting a pass below
+   it. *Callback:* matches the real kpop-solo FINAL (8 passes, budget 10 → all
+   maybes 0, spare points promoted passes to `2`), and *decision 2026-06-10
+   curve-is-the-point* (a naturally-zero bottom band is fine).
 
-3. **R1 vs interim patch.** Confirm implementing full R1 now (preferred) vs a
-   short-term waterfill guard while R1 is in progress.
+2. **Leniency dial, but the guard is the corrected invariant (Q2).** The hard rule
+   is **`max(maybe) ≤ min(funded pass)`**, *not* "never fund a maybe." A `leniency`
+   knob reaches further down the maybe list to grant the first few high-defensibility
+   maybes a **bottom-tier** point, ordered by `fitScore` and **never re-ranked among
+   passes on music** (no "promote to pass" — the rejected framing). Leniency tunes
+   *how far down*, never *above a funded pass*.
 
-4. **Maybe point level.** Confirm maybes stay at exactly 1 when funded (current
-   spec) or can receive staircase tiers when budget is very large.
+3. **Full R1 now (Q3) — confirmed.** Implement the center-out staircase, not the
+   interim waterfill band-aid (which leaves top-heaviness unsolved). Land Bug 2
+   first as its own isolated change. *Callback:* mirrors *decision 2026-06-10
+   "Tiers are drawn by 1-D clustering"* that **Overruled** the old bell+`levelCap`
+   core; R1 similarly overrules the bell-target/waterfill core (own `Overruled`
+   entry at landing).
 
-5. **R2 favorite-band merge.** Ship with Bug 1/R1 in the same PR, or immediately
-   after? kpop-solo benefits from contiguity even without R2.
+4. **Maybe point level: usually 1, graduated only when surfaced (Q4).** Default is
+   1 point per funded maybe. A maybe band **may** take a graduated curve in
+   **low-pass rounds** (few clear passes, many maybes — implying a hard/misread
+   prompt where the owner leans lenient), always capped at `passFloor` with the top
+   passes strictly highest. The `0 / 1 / graduated` choice is offered as a
+   `maybe-band` tradeoff with concrete candidate allocations, never a hidden
+   "very-large-budget" threshold or hand-tweak.
+
+5. **R2 ships with R1 (Q5) — confirmed.** The ≥80 favorite-band merge lands in the
+   same PR as R1 because the `3 3 3` → **C2** regression test depends on the merge.

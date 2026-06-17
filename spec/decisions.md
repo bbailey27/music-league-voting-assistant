@@ -11,6 +11,250 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-06-16 — record picks: reason, manual tweaks, options kept visible + training log
+
+**Change.**
+
+1. Picking an option (`--option`) now writes a durable **pick record** to
+   `fitData.pick`: the chosen option, **every option that was presented** (slimmed
+   `perSong` with score + votes), an optional **reason** (`--reason "why"`), and any
+   **manual tweaks** (final votes that deviate from the chosen option's canonical
+   distribution, auto-diffed — e.g. an extra `--pin` on top of the pick).
+2. A new helper `buildPickRecord()` (pure, in `score-core.mjs`) builds that record;
+   `parse-round.mjs` writes it into `scores.json` and **appends one line to the
+   global `analysis/picks.jsonl`** training log (round, options-shown as
+   votes-by-index, chosen, reason, tweaks, and a compact field score snapshot).
+3. `scores.html` keeps the alternatives visible **after** a pick: a focused
+   **Your pick** table (chosen distribution by combined score) with the reason and
+   tweaks, plus a collapsed **Options considered** comparison reusing the
+   song×option table with the chosen column highlighted (`chosenIndex`).
+
+**Why.** A pick used to vanish into a flat pinned allocation — the menu that was
+weighed and the rationale were lost. Keeping the options visible and recording
+*what was shown → what was chosen and why* makes the deliverable auditable and
+builds a dataset for future allocation/training work. Embedding in `scores.json`
+keeps each round self-contained; the global `picks.jsonl` accumulates across rounds.
+
+**Refs.** `working tree` · `spec/point-allocation.md` (`--reason`, pick record) ·
+`scripts/score-core.mjs` (`buildPickRecord`) ·
+`scripts/render-html-shared.mjs` (`pickHtml`, `tierStructureTableHtml` `chosenIndex`).
+
+---
+
+## 2026-06-16 — clean `--option` picks, distinguishable option shapes, own song in raw order
+
+**Change.**
+
+1. **`--option <A|B|C…>`** selects a `tier-structure` distribution fork by its column
+   letter and applies that exact curve as deterministic per-song pins. A pick is now
+   one clean flag instead of hand-transcribing `--pin` for each song — needed because
+   two options can share a tier/bucket-count label.
+2. Each tier-structure option carries a **`shape`** signature (the run pattern, e.g.
+   `2×4 / 1×2 / 0×5`); legends/labels use it so options never look identical.
+3. The comparison output now renders in **two orders** — by combined score
+   (judgment) and by **raw submission order** (app entry). The raw-order ballot and
+   the `Vote transfer` table interleave the owner's own **unvotable** song so every
+   submission slot is present.
+4. **Owner song bug fix:** the fit-merge path dropped the owner's own submission
+   from `scores.json` entirely, so the raw-order transfer in `scores.html` had a
+   silent gap (Devil: `#9 Overdose` missing → every later row off by one when typing
+   into the app). `mergeFitJson` now persists `ownSongs`, and both `render-fit-html`
+   and `render-final-html` show it as a `— your song` row.
+
+**Why.** Picking a distribution required reading a comparison table and then manually
+building a pin command; and the ballot you transcribe into the app was both in the
+wrong order (combined, not submission) and missing your own song's slot.
+
+**Refs.** `working tree` · `scripts/parse-round.mjs` (`--option`, `resolveOptionIndex`,
+two-order CLI ballot), `scripts/score-core.mjs` (option `shape`, `ownSongs`
+writeback), `scripts/render-html-shared.mjs` (`tradeoffsHtml` two tables + own row),
+`scripts/render-fit-html.mjs` + `scripts/render-final-html.mjs` (transfer interleaves
+own song), `spec/point-allocation.md`.
+
+---
+
+## 2026-06-16 — favorite-band off for combined rounds; expose normalized axes + music-lift flag
+
+**Change.** Four linked fixes to how the normalized combined score is allocated and
+shown:
+
+1. **Favorite-band merge is off by default when `rankBy = combined`.** The `80`
+   floor (`favMin`) is a raw-music anchor ("8+"); comparing it against the
+   normalized combined score is a category error — the 75-centered z-remap shoves
+   above-average songs over `80` regardless of raw quality. On the Devil round it
+   merged four songs whose raw music was 77 / 76 / 74 / 75.5 (zero of them real
+   8+ favorites) into one tier. An explicit `--favorite-band <min>` is still honored.
+2. **Expose `fitNorm` / `musicNorm`** — each axis z-scored over contenders and
+   remapped onto the same 75-centered scale, so `combinedScore = w.fit·fitNorm +
+   w.music·musicNorm` exactly. Written back to the merged JSON and rendered on each
+   card as a `combined = fitⁿ ×w + musicⁿ ×w (raw fit/music)` breakdown line. Raw
+   100-point fit alone couldn't explain a jump; the normalized pair can.
+3. **`musicLift` callout** (`flagMusicLifts`) — flags any song whose combined rank
+   sits above a song with a strictly better fit tier (music, not fit, carried it
+   past). Surfaced as an `↑ music-lifted over <tier>` flag, naming the leapfrogged
+   song, rather than silently reordering. (Devil: Seven Devils over Christian Woman;
+   UNKNOWN LOVERZ over If I'm Honest.)
+4. **Comparison table shows each song's own score, not the merged-unit value.** The
+   tier-structure `perSong` now carries `score` (the song's real combinedScore)
+   alongside `rank` (the favorite-band unit value used for ordering), so the table
+   stops printing the broadcast top-of-band value for every favorite.
+
+**Why.** Ranking by a normalized blend made the top opaque and let a raw-music
+heuristic (the `80` favorite floor) fire on a scale where `80` is just "~0.5 SD above
+the field." Exposing the normalized axes makes every placement auditable; turning off
+the mis-scaled merge stops manufacturing fake co-favorites; the lift flag keeps the
+"promotion is a callout, not an auto-reorder" principle (mirrors pass-vs-maybe).
+
+**Overruled.** Alternatives for the favorite floor — gate on raw music ≥ 80, redefine
+"favorite" as excellent fit tier, or trigger on band tightness — rejected in favor of
+simply disabling it for combined rounds (the tier/bucket-count tradeoffs already give
+top-flattening control).
+
+**Refs.** `working tree` · `scripts/score-core.mjs` (`favMin` gate, `normalizeCombined`
+`fitNorm`/`musicNorm`, `flagMusicLifts`, `perSong.score`), `scripts/render-fit-html.mjs`
+(norm breakdown + lift flag), `scripts/render-html-shared.mjs` (styles, table score),
+`spec/point-allocation.md` R2 + combined sections.
+
+---
+
+## 2026-06-16 — tradeoff distribution options render as a song×option comparison table
+
+**Change.** A `tier-structure` tradeoff (the "which point split?" fork) now renders
+as **one side-by-side comparison table** instead of one block per option. Rows are
+songs in combined/rank order, columns are the options (`A` = default, `B`, …), and
+each cell is the votes that option assigns; a `Total` row closes it. The allocator
+attaches `perSong` (best-first, index-aligned across options) to each tier-structure
+option to carry the per-song votes. Applied to every surface: the `parse-round`
+merge CLI (aligned text table), `scores.html` (the merge now persists `tradeoffs`
+into the JSON so `render-fit-html` can show them), `final.html`, and `music.md`.
+
+**Why.** Three stacked per-option blocks (or three prose strings like "the fruits 3;
+If I'm Honest 2; …") forced a manual diff to see what actually moves between options.
+A shared table makes the delta obvious at a glance and reads in the same combined
+order as the ranked list. Non-distribution tradeoffs (favorite-band split, etc.)
+stay as compact bullet choice lists.
+
+**Refs.** `working tree` · `scripts/render-html-shared.mjs` (`tradeoffsHtml`),
+`scripts/score-core.mjs` (`renderTierStructure`, `perSong`, `mergeFitJson` writeback),
+`scripts/parse-round.mjs` (`printTradeoffCli`), `scripts/render-fit-html.mjs`,
+`scripts/render-final-html.mjs`.
+
+---
+
+## 2026-06-16 — combined score: per-round normalization with asymmetric std floors
+
+**Change.** `rankBy: combined` no longer ranks on the raw `0.7·fit + 0.3·music`.
+`mergeFit` now runs `normalizeCombined`: each axis is **z-scored over the
+contenders** (point-eligible songs — not DQ'd, not blank, not gated out), the
+weights are applied to the standardized values, and the blend is remapped onto a
+**75-centered, music-anchored** display scale (`combinedScore`). The reconciliation
+is **asymmetric, expressed as different std floors**: music floor low
+(`MUSIC_STD_FLOOR = 2`, so a tight music field amplifies half-points and `+/-`),
+fit floor high (`FIT_STD_FLOOR = 14`, so the imprecise AI fit number rides an
+effectively fixed, dampened scale and a tight good-fit cluster is never amplified).
+`+`/`-` now **fold into the music value** (`MODIFIER_MUSIC_DELTA = 0.34`) before
+normalizing, so a `74+` can out-tier a plain `74` in combined mode (combined
+`tierKey` keys on this modifier-folded music). A field below `MIN_NORM_CONTENDERS`
+(4) falls back to fixed reference anchors. The display remap is centered so the
+average contender ≈ 75 and a clear standout reaches ~80 — keeping the staircase's
+75/80 anchors and the `≥ 80` favorite-band merge valid **unchanged**. `ml scores`
+and the combined HTML sort now order by `combinedScore` with **music as the
+secondary tiebreak**.
+
+**Why.** Fit and music differed in *spread*, not just weight: the AI fit number
+ranges far wider than music, so the raw blend let a barely-meaningful ~8-point fit
+gap (e.g. `93` vs `85`) dwarf a decisive 1-point music gap — the opposite of what
+`0.7/0.3` implies. Z-scoring puts the weights on comparable scales. The asymmetric
+floors encode trust: the owner's music precision is real (tight → amplify), the AI
+fit precision is not (tight → do not amplify). Dropping gated-out fit from the
+contender population is the fit-side analogue of the owner's `-` music DQ — it keeps
+terrible-fit outliers from inflating the fit std so the curve represents the real
+candidates. On The Devil round this dropped The Perfect Drug (fit 88 / music 70)
+from 2 votes to 1 and lifted UNKNOWN LOVERZ and Dancing On The Wall (high music) to
+2 — music finally counts.
+
+**Overruled.** Symmetric normalization (one floor for both axes) was rejected: after
+dropping low-fit outliers the survivors are a *tighter* fit cluster, which a
+round-relative std would then **amplify** — re-inflating the meaningless `93` vs `85`
+gap, the exact opposite of the goal. The high fit floor prevents that. Snapping fit
+to its band anchors (an earlier idea) was rejected to keep granular fit scores
+visible (cliff-vs-slope) for research and the owner's eye.
+
+**Refs.** working tree; `normalizeCombined` / `effectiveMusic` / `isContender` and
+the `rankValue` + combined `tierKey` changes in `scripts/score-core.mjs`; combined
+sort in `scripts/render-fit-html.mjs`; `cmdScores` `--order combined` default in
+`scripts/ml.mjs`; tests under _Combined-score normalization_ in
+`tests/score.test.mjs`; spec _Profile / Same score = same tier / Modifiers_ in
+`spec/point-allocation.md`.
+
+---
+
+## 2026-06-16 — auto allocation: center-out staircase (R1) + favorite-band merge (R2)
+
+**Change.** `allocate`'s `auto` shape no longer uses the bell-target + Ckmeans +
+per-member waterfill. It now enumerates **budget-exact staircases** of `+1` steps
+(a `0/1` cutoff plus nested promotion steps) and selects one by: fewest junk steps →
+best boundary worth (real gaps + 75/80 anchors) → shortest top → cleanest break.
+Distinct point tiers are therefore **contiguous by construction** (always exactly 1
+apart — no `{4,1,0}` cliffs). Top height comes from the budget, not the cap: a
+promotion on neither an anchor nor a real gap is "junk" and minimized first, so a
+tight cluster stays low-topped (a lone `80` over a `73–76` field gets `2`, never a
+lone `3`/`4`). **R2:** scores `≥ 80` merge into one shared top tier by default
+(`favoriteBand`, `--favorite-band <min>` / `--no-favorite-band`); a significant
+merged band surfaces a `top-band-split` tradeoff. The kpop one-off
+(`scripts/one-off/kpop-solo-versions.mjs`) dropped its `CAP=2` stopgap and runs at
+the round's natural cap.
+
+**Why.** The bell+waterfill model produced top-heavy, non-contiguous curves on tight
+clusters (the reported `{4,1,0}` bug), which forced a manual `CAP=2` workaround on
+the kpop round. Stacking unit steps makes contiguity structural and ties top height
+to the budget. The favorite merge reflects that `90` vs `84` is not a real
+difference — favorites should share the top.
+
+**Overruled.** The plan's preference order put boundary quality (gap + anchor) above
+the "shorter top" preference, which alone re-introduced lone-`3` tops on tight
+clusters (kpop). Resolved by splitting the two: anchors do **not** force extra steps;
+a junk-promo count gates top-heaviness first, then quality, then shorter top. The
+plan's `3 3 3 → C2` example (favorites at `3` over a graduated `≥75` band) still
+holds because its second step lands on the 75 anchor, not a junk gap.
+
+**Refs.** working tree; `allocateBell` in `scripts/score-core.mjs`
+(staircase enumerator, `JUNK_GAP`/`PROMO_PENALTY`, R2 merge), `--favorite-band`
+flags in `scripts/parse-round.mjs`; tests in `tests/score.test.mjs` (R1/R2 +
+`3 3 3` regression + contiguity); spec _How the tiers are drawn_ / _R2_ in
+`spec/point-allocation.md`.
+
+---
+
+## 2026-06-16 — passFailMaybe: passes shaped first, governed by max(maybe) ≤ min(pass)
+
+**Change.** In `passFailMaybe` rounds the **passes are shaped first**, and the
+governing rule is `max(maybe) ≤ min(funded pass)` — a `maybe` never earns more
+points than the lowest-funded pass. Funded maybes default to the **1-point floor**
+(ordered by defensibility / fitScore), with `leniency` (0…1) reaching further down
+the list. In a **low-pass round** (more maybes than passes) the maybe band may take
+its **own graduated staircase** capped at the lowest pass. The choice surfaces as a
+`maybe-band` tradeoff (none / flat / graduated).
+
+**Why.** The previous flow could let a high-music `maybe` outrank a `pass` (a maybe
+funded above the lowest pass), inverting the gate. It also had no way to fairly
+distribute points in a round with few clear passes and many maybes without simply
+moving the pass/fail line. Anchoring on `max(maybe) ≤ min(pass)` keeps the gate's
+meaning while still rewarding the most-defensible maybes; the graduated band handles
+low-pass rounds where leniency is warranted (a hard or widely-misread prompt).
+
+**Overruled.** An initial "passes fully funded first, maybes only from leftover"
+reading left maybes at `0` even with generous budgets. Corrected per owner intent:
+the rule allows equality (maybe = lowest pass) and a leniency dial, not "never fund
+a maybe."
+
+**Refs.** working tree; `allocate` maybe-funding branch in
+`scripts/score-core.mjs`; tests in `tests/score.test.mjs` (invariant, leniency,
+low-pass graduated band); spec _Profile → gate → passFailMaybe_ and _maybe-band_ in
+`spec/point-allocation.md`.
+
+---
+
 ## 2026-06-15 — music.html on the ml status checklist
 
 **Change.** `ml status <round>` shows an optional **Music HTML** row (with stale
