@@ -8,10 +8,18 @@
 // scoring signals.
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { extname } from 'node:path';
+import { extname, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseHTML } from 'linkedom';
-import { allocate, buildMarkdown, buildJsonPayload, mergeFitJson, enrichProfileWithBudget } from './score-core.mjs';
+import {
+  allocate,
+  buildMarkdown,
+  buildJsonPayload,
+  mergeFitJson,
+  enrichProfileWithBudget,
+  formatScore,
+  buildPickRecord,
+} from './score-core.mjs';
 import { parseRoundDocument, recoverEscapedSource } from './extract-html.mjs';
 import { parseRoundText } from './parse-text.mjs';
 import { matchFlag, takePositional } from './cli-args.mjs';
@@ -39,6 +47,9 @@ function parseArgs(argv) {
     pin: [],
     tierCount: null,
     bucketCount: null,
+    favoriteBand: null,
+    option: null,
+    reason: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -48,6 +59,10 @@ function parseArgs(argv) {
     }
     if (a === '--lenient') {
       args.lenient = true;
+      continue;
+    }
+    if (a === '--no-favorite-band') {
+      args.favoriteBand = false;
       continue;
     }
     const flags = [
@@ -80,6 +95,15 @@ function parseArgs(argv) {
       }],
       ['bucket-count', (v) => {
         args.bucketCount = v;
+      }],
+      ['favorite-band', (v) => {
+        args.favoriteBand = v;
+      }],
+      ['option', (v) => {
+        args.option = v;
+      }],
+      ['reason', (v) => {
+        args.reason = v;
       }],
     ];
     let matched = false;
@@ -145,6 +169,19 @@ export function parseBucketCount(spec) {
   return parseCountFlag(spec, '--bucket-count');
 }
 
+// The favorite top-band merge (R2): scores at/above the floor share one top tier.
+// `false` (from --no-favorite-band) disables it; a number sets the floor; null
+// leaves the allocator default (80). Returns false | { min } | undefined.
+export function parseFavoriteBand(spec) {
+  if (spec === false) return false;
+  if (spec == null || spec === '') return undefined;
+  const n = Number(spec);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(`Invalid --favorite-band "${spec}" (use a score floor, e.g. 80, or --no-favorite-band)`);
+  }
+  return { min: n };
+}
+
 // Parse a combined-rank blend from "<fit>:<music>" (e.g. "0.6:0.4"). Values are
 // normalized to sum to 1 so combinedScore stays on the 0–100 scale. Returns
 // undefined for falsy input; throws on malformed/degenerate input.
@@ -189,6 +226,131 @@ function parseRoundHtml(html, mode) {
   return parsed;
 }
 
+const TRADEOFF_OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+// Resolve an --option spec ("A".."F" or "1".."n") to a 0-based index, or null.
+function resolveOptionIndex(spec, count) {
+  if (!count) return null;
+  const s = String(spec).trim();
+  let idx = null;
+  if (/^[A-Za-z]$/.test(s)) idx = s.toUpperCase().charCodeAt(0) - 65;
+  else if (/^\d+$/.test(s)) idx = Number(s) - 1;
+  return idx != null && idx >= 0 && idx < count ? idx : null;
+}
+
+// Print a left/right-aligned text table (col 0 + the "Song" col left-aligned).
+function printTextTable(headers, rows, songCol) {
+  const all = [headers, ...rows];
+  const widths = headers.map((_, i) => Math.max(...all.map((r) => String(r[i] ?? '').length)));
+  const fmt = (row) =>
+    row.map((c, i) => (i === songCol ? String(c).padEnd(widths[i]) : String(c).padStart(widths[i]))).join('  ');
+  console.log(`    ${fmt(headers)}`);
+  for (const row of rows) console.log(`    ${fmt(row)}`);
+}
+
+// Print a "needs your call" tradeoff to the terminal. Distribution forks
+// (tier-structure) render as TWO song×option comparison tables — one in
+// combined/rank order (for judgment), one in raw submission order incl. the
+// owner's own (unvotable) song (for entering straight into the app) — plus a
+// legend that names each option's distinct vote shape and its --option selector.
+function printTradeoffCli(t, ownSongs = []) {
+  console.log(`  • ${t.question}`);
+  const opts = (t.options || []).filter((o) => Array.isArray(o.perSong) && o.perSong.length);
+  if (t.kind !== 'tier-structure' || !opts.length) return;
+  const letters = TRADEOFF_OPTION_LETTERS;
+  const trunc = (s) => (String(s).length > 28 ? `${String(s).slice(0, 27)}…` : String(s));
+
+  // Combined/rank order — easiest for judging which songs each option rewards.
+  const headers = ['#', 'Song', 'Score', ...opts.map((_, i) => letters[i])];
+  const dataRows = opts[0].perSong.map((r, ri) => [
+    String(r.rawOrderIndex),
+    trunc(r.title),
+    formatScore(r.score ?? r.rank),
+    ...opts.map((o) => String(o.perSong[ri]?.votes ?? 0)),
+  ]);
+  dataRows.push(['', 'Total', '', ...opts.map((o) => String(o.perSong.reduce((a, s) => a + (s.votes || 0), 0)))]);
+  console.log('    — by combined score —');
+  printTextTable(headers, dataRows, 1);
+
+  // Raw submission order — every slot present (incl. your own song) so a column
+  // transcribes straight into the app without a pick command.
+  const byIdx = opts.map((o) => new Map(o.perSong.map((s) => [s.rawOrderIndex, s.votes])));
+  const slots = [
+    ...opts[0].perSong.map((s) => ({ i: s.rawOrderIndex, title: s.title, own: false })),
+    ...(ownSongs || []).map((s) => ({ i: s.rawOrderIndex, title: s.title, own: true })),
+  ].sort((a, b) => a.i - b.i);
+  const rawRows = slots.map((r) => [
+    String(r.i),
+    trunc(r.title),
+    ...opts.map((_, k) => (r.own ? '—' : String(byIdx[k].get(r.i) ?? 0))),
+  ]);
+  rawRows.push(['', 'Total', ...opts.map((o) => String(o.perSong.reduce((a, s) => a + (s.votes || 0), 0)))]);
+  console.log('    — raw submission order (for app entry) —');
+  printTextTable(['#', 'Song', ...opts.map((_, i) => letters[i])], rawRows, 1);
+
+  opts.forEach((o, i) => {
+    console.log(
+      `      ${letters[i]}${i === 0 ? ' (default)' : ''}: ${o.tierCount} tier${
+        o.tierCount === 1 ? '' : 's'
+      } · ${o.shape} · --option ${letters[i]}`
+    );
+  });
+}
+
+// Append one self-contained line to the global training log (analysis/picks.jsonl):
+// the round, the chosen option + reason + tweaks, every option that was presented
+// (as votes-by-index), and a compact score snapshot of the field. One growing
+// dataset of "options shown → what was chosen and why" across rounds.
+async function recordPickToTrainingLog(roundId, fitData, pick) {
+  const logPath = join(dirname(scoresPaths(roundId).dir), 'picks.jsonl');
+  const entry = {
+    round: roundId,
+    pickedAt: pick.pickedAt,
+    chosen: pick.chosen,
+    tierCount: pick.tierCount,
+    shape: pick.shape,
+    reason: pick.reason,
+    tweaks: pick.tweaks,
+    options: pick.options.map((o) => ({
+      letter: o.letter,
+      tierCount: o.tierCount,
+      bucketCount: o.bucketCount,
+      shape: o.shape,
+      isChosen: o.isChosen,
+      votesByIndex: Object.fromEntries(o.perSong.map((s) => [s.rawOrderIndex, s.votes])),
+    })),
+    field: (fitData.songs || []).map((s) => ({
+      rawOrderIndex: s.rawOrderIndex,
+      title: s.title,
+      artist: s.artist,
+      fitScore: s.fitScore ?? null,
+      fitTier: s.fitTier ?? null,
+      musicScore: s.musicScore ?? null,
+      combinedScore: s.combinedScore ?? null,
+      draftVotes: s.draftVotes ?? 0,
+    })),
+  };
+  // Idempotent per round: re-running a pick replaces that round's prior line rather
+  // than appending a duplicate, so the log stays one-row-per-round for training.
+  let prior = [];
+  try {
+    prior = (await readFile(logPath, 'utf8'))
+      .split('\n')
+      .filter(Boolean)
+      .filter((l) => {
+        try {
+          return JSON.parse(l).round !== roundId;
+        } catch {
+          return true;
+        }
+      });
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+  await writeFile(logPath, `${[...prior, JSON.stringify(entry)].join('\n')}\n`, 'utf8');
+  console.log(`Logged pick to ${logPath}`);
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -196,7 +358,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.file) {
     console.error(
-      'Usage: node scripts/parse-round.mjs <round.html|round.txt> [--mode objective|subjective] [--no-json] [--lenient] [--shape ...] [--tier-count <n>] [--bucket-count <n>] [--pin <i>:<v>] [--fit <fit.json> [--rank combined] [--weights <fit>:<music>] [--gate ...] [--cutoff ...]]'
+      'Usage: node scripts/parse-round.mjs <round.html|round.txt> [--mode objective|subjective] [--no-json] [--lenient] [--shape ...] [--tier-count <n>] [--bucket-count <n>] [--option <A|B|C> [--reason "why"]] [--favorite-band <min>|--no-favorite-band] [--pin <i>:<v>] [--fit <fit.json> [--rank combined] [--weights <fit>:<music>] [--gate ...] [--cutoff ...]]'
     );
     process.exit(1);
   }
@@ -224,8 +386,9 @@ async function main() {
   const overrides = parsePins(args.pin);
   const tierCount = parseTierCount(args.tierCount);
   const bucketCount = parseBucketCount(args.bucketCount);
+  const favoriteBand = parseFavoriteBand(args.favoriteBand);
   const profile = enrichProfileWithBudget(
-    { shape: args.shape, gate, weights, overrides, tierCount, bucketCount },
+    { shape: args.shape, gate, weights, overrides, tierCount, bucketCount, favoriteBand },
     parsed.budget
   );
   if (args.rank) profile.rankBy = args.rank;
@@ -242,17 +405,70 @@ async function main() {
       process.exit(1);
     }
     const roundId = roundIdFromInput(args.file);
-    const { tradeoffs } = mergeFitJson(parsed, fitData, {
+    const mergeProfile = {
       ...enrichProfileWithBudget(profile, parsed.budget),
       rankBy: args.rank || 'combined',
-    });
+    };
+    let { tradeoffs } = mergeFitJson(parsed, fitData, mergeProfile);
+
+    // --option <A|B|C…> picks a distribution fork by its column letter and applies
+    // it deterministically (sugar over per-song pins), so a pick is one clean flag
+    // even when two options happen to share a tier/bucket-count label.
+    if (args.option != null) {
+      // The presented menu must be free of the user's tweak pins: a `--pin` alongside
+      // `--option` should read as a manual tweak ON TOP of the chosen option, not get
+      // baked into the menu (a pinned song is otherwise pulled out of the tier pool,
+      // so it'd vanish from every option and the tweak couldn't be diffed).
+      let menuTradeoffs = tradeoffs;
+      if (profile.overrides && Object.keys(profile.overrides).length) {
+        ({ tradeoffs: menuTradeoffs } = mergeFitJson(parsed, fitData, { ...mergeProfile, overrides: undefined }));
+      }
+      const ts = menuTradeoffs.find((t) => t.kind === 'tier-structure');
+      // Capture the options that were presented BEFORE applying the pick — the pick
+      // record (and HTML) keep them visible even though the second pass clears the
+      // live tradeoff.
+      const presented = (ts?.options || []).filter((o) => Array.isArray(o.perSong) && o.perSong.length);
+      const idx = resolveOptionIndex(args.option, presented.length);
+      if (idx == null) {
+        console.error(
+          `--option "${args.option}" is not available (this round has ${presented.length || 0} option(s): ${presented
+            .map((_, i) => String.fromCharCode(65 + i))
+            .join(', ') || 'none'}).`
+        );
+        process.exit(1);
+      }
+      const chosen = presented[idx];
+      const overrides = {
+        ...Object.fromEntries(chosen.perSong.map((s) => [s.rawOrderIndex, s.votes])),
+        ...(profile.overrides || {}),
+      };
+      ({ tradeoffs } = mergeFitJson(parsed, fitData, { ...mergeProfile, overrides }));
+
+      const pick = buildPickRecord({
+        options: presented,
+        chosenIndex: idx,
+        songs: parsed.songs,
+        reason: args.reason,
+      });
+      fitData.pick = pick;
+      await recordPickToTrainingLog(roundId, fitData, pick);
+
+      console.log(
+        `Applied option ${pick.chosen} — ${pick.tierCount} tier${pick.tierCount === 1 ? '' : 's'}, ${pick.shape}.` +
+          (pick.tweaks.length ? ` (${pick.tweaks.length} manual tweak${pick.tweaks.length === 1 ? '' : 's'})` : '') +
+          (pick.reason ? ` Reason: ${pick.reason}` : '')
+      );
+    } else if (args.reason != null) {
+      console.error('--reason needs an --option pick to attach to; ignoring.');
+    }
+
     const scoresOut = scoresPaths(roundId).json;
     await mkdir(scoresPaths(roundId).dir, { recursive: true });
     await writeFile(scoresOut, JSON.stringify(fitData, null, 2), 'utf8');
     console.log(`Wrote ${scoresOut} (merged scores + draftVotes; fit-only source unchanged: ${args.fit})`);
     if (tradeoffs.length) {
       console.log(`\n${tradeoffs.length} tradeoff(s) need your call:`);
-      for (const t of tradeoffs) console.log(`  • ${t.question}`);
+      for (const t of tradeoffs) printTradeoffCli(t, parsed.ownSongs);
     }
     return;
   }

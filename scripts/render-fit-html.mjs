@@ -10,7 +10,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { basename, dirname, join, extname } from 'node:path';
 import { formatScore } from './score-core.mjs';
 import { matchFlag, takePositional } from './cli-args.mjs';
-import { esc, tierHue, chip, RENDER_FIT_STYLE } from './render-html-shared.mjs';
+import { esc, tierHue, chip, tradeoffsHtml, pickHtml, RENDER_FIT_STYLE } from './render-html-shared.mjs';
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -83,7 +83,7 @@ ${rows}
 </section>`;
 }
 
-function renderCard(s, combineLabel) {
+function renderCard(s, combineLabel, weights) {
   const hue = tierHue(s.fitTier);
   const themes = Array.isArray(s.themesHit) ? s.themesHit : [];
   const themeChips = themes.length
@@ -91,7 +91,14 @@ function renderCard(s, combineLabel) {
     : '<span class="muted">no themes</span>';
 
   const flags = Array.isArray(s.flags) ? s.flags : [];
-  const flagChips = flags.map((f) => `<span class="flag">${esc(f)}</span>`).join('');
+  let flagChips = flags.map((f) => `<span class="flag">${esc(f)}</span>`).join('');
+  if (s.musicLift) {
+    flagChips += `<span class="flag lift" title="Music pulled this above ${esc(
+      s.musicLift.overTitle
+    )} (${esc(s.musicLift.overTier)} fit) despite a weaker fit tier — promote/adjust by hand if you disagree">↑ music-lifted over ${esc(
+      s.musicLift.overTier
+    )}</span>`;
+  }
 
   const meta = [];
   if (s.confidence) meta.push(`<span class="meta-item">confidence: ${esc(s.confidence)}</span>`);
@@ -110,6 +117,22 @@ function renderCard(s, combineLabel) {
       `<span class="score votes${s.draftVotes > 0 ? ' has-votes' : ''}" title="draft upvotes">${formatScore(s.draftVotes)} ▲</span>`
     );
 
+  // Show how the combined score is actually built: each axis normalized onto the
+  // same 75-centered scale, then weighted. This is what explains a jump that the
+  // raw 100-point fit / music numbers can't (low fitⁿ but high musicⁿ → lifted).
+  const wf = weights && weights.fit != null ? weights.fit : 0.7;
+  const wm = weights && weights.music != null ? weights.music : 0.3;
+  const normLine =
+    s.fitNorm != null && s.musicNorm != null
+      ? `<div class="norm" title="Each axis is z-scored across the contenders and remapped to a 75-centered scale, then blended. Raw fit/music sit on different spreads; normalizing is what puts them on equal footing.">` +
+        `<span class="muted">combined</span> <b>${formatScore(s.combinedScore)}</b> ` +
+        `<span class="muted">=</span> fit<sup>n</sup> <b>${formatScore(s.fitNorm)}</b> ` +
+        `<span class="muted">×&#8202;${wf}</span> <span class="muted">+</span> ` +
+        `music<sup>n</sup> <b>${formatScore(s.musicNorm)}</b> <span class="muted">×&#8202;${wm}</span>` +
+        `<span class="raw muted"> (raw fit ${formatScore(s.fitScore)}, music ${formatScore(s.musicScore)})</span>` +
+        `</div>`
+      : '';
+
   return `<article class="card" style="--tier-hue:${hue}">
   <div class="identity">
     <span class="rank">#${esc(s.rawOrderIndex)}</span>
@@ -122,6 +145,7 @@ function renderCard(s, combineLabel) {
       ${scores.join('')}
       <div class="themes">${themeChips}</div>
     </div>
+    ${normLine}
     ${flagChips ? `<div class="flags">${flagChips}</div>` : ''}
     ${s.rationale ? `<p class="rationale">${esc(s.rationale)}</p>` : ''}
     ${s.musicComment ? `<p class="music-note"><span class="label">your note</span> ${esc(s.musicComment)}</p>` : ''}
@@ -135,9 +159,13 @@ function renderCandidates(data, order) {
   if (order === 'raw') {
     songs.sort((a, b) => (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0));
   } else if (order === 'combined') {
+    // Combined first, then music as the explicit secondary axis (so equal-combined
+    // songs read high-to-low on the real music score, not by raw submission order),
+    // then raw order as the final stable tiebreak.
     songs.sort(
       (a, b) =>
         (b.combinedScore ?? b.fitScore ?? 0) - (a.combinedScore ?? a.fitScore ?? 0) ||
+        (b.musicScore ?? -Infinity) - (a.musicScore ?? -Infinity) ||
         (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0)
     );
   } else if (order === 'music') {
@@ -170,7 +198,7 @@ function renderCandidates(data, order) {
       : 'music+fit blend';
   return `<section class="candidates">
   <h2>${heading}</h2>
-  ${songs.map((s) => renderCard(s, combineLabel)).join('\n')}
+  ${songs.map((s) => renderCard(s, combineLabel, w)).join('\n')}
 </section>`;
 }
 
@@ -191,11 +219,22 @@ function renderTransfer(data) {
   if (!songs.length) return '';
   // Only worth showing once an allocation exists.
   if (!songs.some((s) => s.draftVotes != null)) return '';
-  songs.sort((a, b) => (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0));
+  // Interleave the owner's own (unvotable) submissions so EVERY raw submission slot
+  // is present — the user enters votes by position, so a hidden gap (your own song)
+  // risks a misaligned ballot.
+  const own = Array.isArray(data.ownSongs) ? data.ownSongs : [];
+  const rowsAll = [...songs, ...own].sort((a, b) => (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0));
   const total = songs.reduce((sum, s) => sum + (Number(s.draftVotes) || 0), 0);
-  const rows = songs
-    .map(
-      (s) => `<tr${s.draftVotes > 0 ? ' class="has-votes"' : ''}>
+  const rows = rowsAll
+    .map((s) =>
+      s.isOwn
+        ? `<tr class="own">
+      <td class="num">${esc(s.rawOrderIndex)}</td>
+      <td>${esc(s.title)}</td>
+      <td class="muted">${esc(s.artist)}</td>
+      <td class="num votes muted">— your song</td>
+    </tr>`
+        : `<tr${s.draftVotes > 0 ? ' class="has-votes"' : ''}>
       <td class="num">${esc(s.rawOrderIndex)}</td>
       <td>${esc(s.title)}</td>
       <td class="muted">${esc(s.artist)}</td>
@@ -251,6 +290,8 @@ function renderDocument(data, order) {
 ${renderHead(data)}
 ${renderScale(data)}
 ${renderCandidates(data, order)}
+${tradeoffsHtml(data.tradeoffs, data.ownSongs)}
+${pickHtml(data.pick, data.ownSongs)}
 ${renderHighlights(data)}
 ${renderCombine(data)}
 ${renderTransfer(data)}

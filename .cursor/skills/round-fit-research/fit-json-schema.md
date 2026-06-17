@@ -29,9 +29,29 @@ and confirmed with the user — render-only/traceability, never auto-applied.
 After merge (`parse-round.mjs --fit`), the file also carries:
 
 - `combineWeights`: `{ "fit": 0.7, "music": 0.3 }`
-- per-song: `musicScore`, `musicComment`, `combinedScore`, `draftVotes`
+- per-song: `musicScore`, `musicComment`, `combinedScore`, `fitNorm`, `musicNorm`,
+  `musicLift`, `draftVotes`. Note `combinedScore` is the **per-round normalized**
+  blend (each axis z-scored over the contenders, then remapped onto a ~75-centered,
+  music-anchored scale — see
+  [`spec/point-allocation.md`](../../../spec/point-allocation.md)), **not** a literal
+  `0.7 × fitScore + 0.3 × musicScore`. `fitScore` / `musicScore` stay raw and
+  granular for display.
+- `fitNorm` / `musicNorm` are each axis remapped onto the same 75-centered scale, so
+  `combinedScore = combineWeights.fit × fitNorm + combineWeights.music × musicNorm`
+  exactly (the report shows this breakdown so a jump is auditable).
+- `musicLift` is `{ overTitle, overTier }` when music carried the song above a
+  strictly-better-fit song (a "music-lifted" callout), else `null`.
+- top-level `tradeoffs` is the allocator's "needs your call" list (distribution
+  forks etc.), written back so the report can render the comparison table.
+- top-level `pick` is the durable record written when an option is chosen via
+  `--option` (`{ chosen, chosenIndex, tierCount, shape, reason, pickedAt, tweaks,
+  options }`): the chosen fork, every option that was presented (slimmed `perSong`
+  with `score` + `votes`), an optional `--reason` string, and auto-diffed manual
+  `tweaks`. The report renders the focused pick + a collapsed options comparison; a
+  copy is also appended to the global `analysis/picks.jsonl` training log.
 
-Do **not** supply `draftVotes` in initial fit research — the allocator writes them.
+Do **not** supply `draftVotes`, `fitNorm`, `musicNorm`, `musicLift`, `tradeoffs`, or
+`pick` in initial fit research — the allocator writes them all.
 
 ## fitScale
 
@@ -83,7 +103,10 @@ Gate-style rounds add `"gate": "pass" | "maybe" | "fail"` (or put gate word in `
 
 ## Merge weights
 
-Default combined ranking: `0.7 × fit + 0.3 × music`. Override with `--rank` / profile when merging.
+Default combined ranking: a per-round **normalized** `0.7 fit / 0.3 music` blend
+(z-scored per axis with asymmetric std floors — fit dampened, music adaptive — see
+[`spec/point-allocation.md`](../../../spec/point-allocation.md)), not a literal
+weighted sum. Override the weights with `--weights <fit>:<music>` / profile when merging.
 
 Cutoff example: `--cutoff fit:68` zeroes songs below fit 68 before tiering.
 

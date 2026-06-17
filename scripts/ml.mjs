@@ -215,8 +215,12 @@ function cmdScores(name, flags) {
     console.error(`No scores JSON at ${scoresJson}. Run merge first (--fit).`);
     process.exit(1);
   }
+  // The merged scores deliverable ranks by the blended combinedScore (with music as
+  // the secondary axis), not fit alone — default to it unless the caller overrode.
+  const orderDefault =
+    flags.includes('--order') || flags.some((f) => f.startsWith('--order=')) ? [] : ['--order', 'combined'];
   process.exit(
-    runScript('render-fit-html.mjs', [scoresJson, '--out', scoresPaths(base).html, ...flags])
+    runScript('render-fit-html.mjs', [scoresJson, '--out', scoresPaths(base).html, ...flags, ...orderDefault])
   );
 }
 
@@ -263,7 +267,9 @@ function cmdRun(name) {
       warnMissingScores(st);
       break;
     case 'scores':
-      return process.exit(runScript('render-fit-html.mjs', [st.scores.json, '--out', st.scores.html]));
+      return process.exit(
+        runScript('render-fit-html.mjs', [st.scores.json, '--out', st.scores.html, '--order', 'combined'])
+      );
     case 'fit':
       return process.exit(runScript('render-fit-html.mjs', [st.fit.json, '--out', st.fit.html]));
     case 'manual':

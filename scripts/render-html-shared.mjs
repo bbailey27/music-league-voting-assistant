@@ -1,5 +1,7 @@
 // Shared HTML rendering helpers and stylesheet fragments for fit/final reports.
 
+import { formatScore } from './score-core.mjs';
+
 export function esc(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
@@ -28,6 +30,169 @@ export function tierHue(tier) {
 export function chip(text, hue) {
   const style = hue == null ? '' : ` style="--chip-hue:${hue}"`;
   return `<span class="chip"${style}>${esc(text)}</span>`;
+}
+
+const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+// A `tier-structure` distribution tradeoff rendered as TWO song×option comparison
+// tables — one in combined/rank order (for judging which songs each option
+// rewards) and one in raw submission order, including the owner's own (unvotable)
+// song (for transcribing a column straight into the app) — plus a legend naming
+// each option's distinct vote shape and its `--option` selector. Falls back
+// gracefully when `perSong` is absent.
+function tierStructureTableHtml(t, ownSongs = [], chosenIndex = null) {
+  const opts = (t.options || []).filter((o) => Array.isArray(o.perSong) && o.perSong.length);
+  if (!opts.length) {
+    const items = (t.options || []).map((o) => `<li>${esc(o.label ?? o)}</li>`).join('');
+    return `<div class="tradeoff"><p class="q">${esc(t.question)}</p><ul>${items}</ul></div>`;
+  }
+  // A column is "highlighted" if it's the default (live tradeoff) or the chosen one
+  // (a recorded pick); the chosen column also gets a stronger `chosen` class.
+  const optClass = (i) =>
+    `opt${chosenIndex == null && i === 0 ? ' default' : ''}${i === chosenIndex ? ' chosen' : ''}`;
+  const optHead = opts.map((o, i) => `<th class="num ${optClass(i)}">${OPTION_LETTERS[i]}</th>`).join('');
+  const totalsRow = (extraLead = 0) => {
+    const cells = opts
+      .map((o, i) => `<td class="num ${optClass(i)}">${o.perSong.reduce((a, s) => a + (s.votes || 0), 0)}</td>`)
+      .join('');
+    return `<tr>${'<td></td>'.repeat(extraLead)}<td>Total</td>${cells}</tr>`;
+  };
+
+  // Combined/rank order.
+  const combinedBody = opts[0].perSong
+    .map((r, ri) => {
+      const cells = opts
+        .map((o, i) => {
+          const v = o.perSong[ri]?.votes ?? 0;
+          return `<td class="num ${optClass(i)}${v > 0 ? ' on' : ''}">${formatScore(v)}</td>`;
+        })
+        .join('');
+      return `<tr><td class="num muted">${esc(r.rawOrderIndex)}</td><td>${esc(r.title)}</td><td class="num">${formatScore(r.score ?? r.rank)}</td>${cells}</tr>`;
+    })
+    .join('\n');
+
+  // Raw submission order, every slot present (incl. own songs).
+  const byIdx = opts.map((o) => new Map(o.perSong.map((s) => [s.rawOrderIndex, s.votes])));
+  const slots = [
+    ...opts[0].perSong.map((s) => ({ i: s.rawOrderIndex, title: s.title, own: false })),
+    ...(Array.isArray(ownSongs) ? ownSongs : []).map((s) => ({ i: s.rawOrderIndex, title: s.title, own: true })),
+  ].sort((a, b) => a.i - b.i);
+  const rawBody = slots
+    .map((r) => {
+      const cells = opts
+        .map((o, i) => {
+          if (r.own) return `<td class="num ${optClass(i)} muted">—</td>`;
+          const v = byIdx[i].get(r.i) ?? 0;
+          return `<td class="num ${optClass(i)}${v > 0 ? ' on' : ''}">${formatScore(v)}</td>`;
+        })
+        .join('');
+      const label = r.own ? `${esc(r.title)} <span class="muted">(your song)</span>` : esc(r.title);
+      return `<tr${r.own ? ' class="own"' : ''}><td class="num muted">${esc(r.i)}</td><td>${label}</td>${cells}</tr>`;
+    })
+    .join('\n');
+
+  const legend = opts
+    .map(
+      (o, i) =>
+        `<li><b>${OPTION_LETTERS[i]}</b>${chosenIndex == null && i === 0 ? ' <span class="muted">(default)</span>' : ''}${
+          i === chosenIndex ? ' <span class="muted">(your pick)</span>' : ''
+        } — ${o.tierCount} tier${o.tierCount === 1 ? '' : 's'}, <code>${esc(o.shape)}</code>, <code>--option ${
+          OPTION_LETTERS[i]
+        }</code></li>`
+    )
+    .join('');
+
+  const question = t.question ? `<p class="q">${esc(t.question)}</p>` : '';
+  return `<div class="tradeoff">
+  ${question}
+  <p class="sub muted">By combined score</p>
+  <table class="compare">
+    <thead><tr><th class="num">#</th><th>Song</th><th class="num">Score</th>${optHead}</tr></thead>
+    <tbody>
+${combinedBody}
+    </tbody>
+    <tfoot>${totalsRow(2)}</tfoot>
+  </table>
+  <p class="sub muted">Raw submission order — for entering into the app</p>
+  <table class="compare">
+    <thead><tr><th class="num">#</th><th>Song</th>${optHead}</tr></thead>
+    <tbody>
+${rawBody}
+    </tbody>
+    <tfoot>${totalsRow(1)}</tfoot>
+  </table>
+  <ul class="legend">${legend}</ul>
+</div>`;
+}
+
+// Render a recorded pick: the chosen distribution as a focused combined+raw table
+// (incl. the owner's own song), the reason + any manual tweaks, and a collapsed
+// "options considered" comparison (all options, chosen column highlighted) so the
+// alternatives stay visible and auditable after the pick.
+export function pickHtml(pick, ownSongs = []) {
+  if (!pick || !Array.isArray(pick.options) || !pick.options.length) return '';
+  const ci = pick.chosenIndex ?? pick.options.findIndex((o) => o.isChosen);
+  const chosen = pick.options[ci];
+  if (!chosen) return '';
+
+  const combinedRows = chosen.perSong
+    .map(
+      (s) =>
+        `<tr${s.votes > 0 ? ' class="has-votes"' : ''}><td class="num muted">${esc(s.rawOrderIndex)}</td><td>${esc(
+          s.title
+        )}</td><td class="num">${formatScore(s.score)}</td><td class="num votes${s.votes > 0 ? ' on' : ''}">${formatScore(
+          s.votes
+        )}</td></tr>`
+    )
+    .join('\n');
+  const total = chosen.perSong.reduce((a, s) => a + (s.votes || 0), 0);
+
+  const reason = pick.reason
+    ? `<p class="reason"><span class="label">Why</span> ${esc(pick.reason)}</p>`
+    : '';
+  const tweaks = (pick.tweaks || []).length
+    ? `<p class="tweaks"><span class="label">Manual tweaks</span> ${pick.tweaks
+        .map((t) => `#${esc(t.rawOrderIndex)} ${esc(t.title)} ${esc(t.from)}→${esc(t.to)}`)
+        .join('; ')}</p>`
+    : '';
+
+  const considered = `<details class="considered">
+  <summary>Options considered (${pick.options.map((o) => esc(o.letter)).join(' / ')})</summary>
+  ${tierStructureTableHtml({ kind: 'tier-structure', question: '', options: pick.options }, ownSongs, ci)}
+</details>`;
+
+  return `<section class="pick tradeoffs">
+  <h2>Your pick — Option ${esc(pick.chosen)} <span class="muted">(${esc(chosen.tierCount)} tier${
+    chosen.tierCount === 1 ? '' : 's'
+  }, ${esc(chosen.shape)})</span></h2>
+  ${reason}${tweaks}
+  <table class="compare">
+    <thead><tr><th class="num">#</th><th>Song</th><th class="num">Score</th><th class="num">Votes</th></tr></thead>
+    <tbody>
+${combinedRows}
+    </tbody>
+    <tfoot><tr><td></td><td>Total</td><td></td><td class="num">${total}</td></tr></tfoot>
+  </table>
+  ${considered}
+</section>`;
+}
+
+// Render an allocator "needs your call" tradeoff list: distribution forks become
+// comparison tables; every other kind stays a compact bulleted choice list.
+export function tradeoffsHtml(tradeoffs, ownSongs = []) {
+  const list = Array.isArray(tradeoffs) ? tradeoffs : [];
+  if (!list.length) return '';
+  const blocks = list
+    .map((t) => {
+      if (t.kind === 'tier-structure') return tierStructureTableHtml(t, ownSongs);
+      const opts = (t.options || []).map((o) => `<li>${esc(o.label ?? o)}</li>`).join('');
+      return `<div class="tradeoff"><p class="q">${esc(t.question)}</p>${opts ? `<ul>${opts}</ul>` : ''}</div>`;
+    })
+    .join('\n');
+  return `<section class="tradeoffs">
+  <h2>Needs your call</h2>
+${blocks}
+</section>`;
 }
 
 const RENDER_HTML_BASE_STYLE = `
@@ -108,6 +273,30 @@ th { color: var(--muted); font-weight: 600; }
 }
 .transfer tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: none; }
 
+.tradeoffs .tradeoff { margin: 0 0 1.25rem; }
+.tradeoffs .q { font-weight: 600; margin: 0 0 .5rem; }
+.tradeoffs table.compare { font-size: .88rem; }
+.tradeoffs table.compare th.opt, .tradeoffs table.compare td.opt { width: 3rem; }
+.tradeoffs table.compare td.opt { color: var(--muted); }
+.tradeoffs table.compare td.opt.on { color: var(--fg); font-weight: 700; }
+.tradeoffs table.compare .opt.default { background: hsl(145 60% 50% / .1); }
+.tradeoffs table.compare .opt.chosen { background: hsl(265 70% 55% / .16); }
+.tradeoffs table.compare th.opt.chosen { color: hsl(265 60% 45%); font-weight: 800; }
+@media (prefers-color-scheme: dark) { .tradeoffs table.compare th.opt.chosen { color: hsl(265 80% 78%); } }
+.pick .reason, .pick .tweaks { margin: .25rem 0; font-size: .92rem; }
+.pick .reason .label, .pick .tweaks .label { text-transform: uppercase; letter-spacing: .04em; font-size: .7rem; font-weight: 700; color: var(--muted); margin-right: .4rem; }
+.pick table.compare td.votes.on { font-weight: 700; color: hsl(265 60% 45%); }
+@media (prefers-color-scheme: dark) { .pick table.compare td.votes.on { color: hsl(265 80% 78%); } }
+.considered { margin-top: 1rem; }
+.considered summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
+.considered[open] summary { margin-bottom: .5rem; }
+.tradeoffs table.compare tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: none; }
+.tradeoffs .sub { margin: .9rem 0 .3rem; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; }
+.tradeoffs table.compare tr.own td { color: var(--muted); font-style: italic; }
+.tradeoffs .legend { margin: .6rem 0 0; padding-left: 1.1rem; font-size: .85rem; color: var(--muted); }
+.tradeoffs .legend code { font-size: .82rem; }
+.transfer tr.own td { color: var(--muted); font-style: italic; }
+
 @media (max-width: 560px) {
   .card { grid-template-columns: 1fr; gap: .5rem; }
   .identity { flex-direction: row; align-items: baseline; flex-wrap: wrap; gap: .4rem; }
@@ -168,6 +357,16 @@ h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
 @media (prefers-color-scheme: dark) { .card-head .score.votes.has-votes { color: #0d0f12; background: hsl(var(--tier-hue) 65% 65%); border-color: hsl(var(--tier-hue) 65% 65%); } }
 .music-note { margin: .25rem 0 .5rem; color: var(--muted); font-size: .9rem; }
 .music-note .label { text-transform: uppercase; letter-spacing: .04em; font-size: .7rem; font-weight: 700; margin-right: .35rem; }
+
+.norm {
+  margin: 0 0 .5rem; font-size: .82rem; font-variant-numeric: tabular-nums;
+  padding: .25rem .5rem; border: 1px dashed var(--line); border-radius: 6px;
+  background: hsl(var(--tier-hue) 60% 50% / .05);
+}
+.norm sup { font-size: .65em; }
+.norm .raw { font-size: .95em; }
+.flag.lift { background: hsl(265 70% 55% / .16); color: hsl(265 60% 45%); border-color: hsl(265 70% 55% / .35); }
+@media (prefers-color-scheme: dark) { .flag.lift { color: hsl(265 80% 78%); } }
 
 .highlights li, .combine li { margin: .3rem 0; }
 `;

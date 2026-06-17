@@ -29,7 +29,7 @@ import {
   formatVoteAllocation,
 } from './score-core.mjs';
 import { matchFlag, takePositional } from './cli-args.mjs';
-import { esc, tierHue, chip, NEUTRAL_HUE, RENDER_FINAL_STYLE } from './render-html-shared.mjs';
+import { esc, tierHue, chip, tradeoffsHtml, pickHtml, NEUTRAL_HUE, RENDER_FINAL_STYLE } from './render-html-shared.mjs';
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -118,7 +118,17 @@ function buildModel(music, fitData) {
     }
   }
 
-  return { round: music.round || {}, mode, budget: music.budget || {}, songs, tradeoffs, combine, combineWeights };
+  return {
+    round: music.round || {},
+    mode,
+    budget: music.budget || {},
+    songs,
+    ownSongs: Array.isArray(music.ownSongs) ? music.ownSongs : [],
+    tradeoffs,
+    pick: (fitData && fitData.pick) || music.pick || null,
+    combine,
+    combineWeights,
+  };
 }
 
 function sortSongs(songs, order) {
@@ -252,26 +262,22 @@ function renderCandidates(model, order) {
 function renderTradeoffs(model) {
   const tradeoffs = Array.isArray(model.tradeoffs) ? model.tradeoffs : [];
   const combine = model.combine;
-  if (!tradeoffs.length && !(combine && (combine.note || (combine.options || []).length))) return '';
+  const hasCombine = combine && (combine.note || (combine.options || []).length);
+  if (!tradeoffs.length && !hasCombine) return '';
 
-  const items = tradeoffs
-    .map((t) => {
-      const opts = (t.options || []).map((o) => `<li>${esc(o.label ?? o)}</li>`).join('');
-      return `<li class="tradeoff"><span class="q">${esc(t.question)}</span>${opts ? `<ul>${opts}</ul>` : ''}</li>`;
-    })
-    .join('\n');
-
+  // Distribution forks render as song×option comparison tables (shared helper);
+  // append the qualitative "how to combine" note as a trailing block.
+  const main = tradeoffsHtml(tradeoffs, model.ownSongs);
   let combineBlock = '';
-  if (combine && (combine.note || (combine.options || []).length)) {
+  if (hasCombine) {
     const opts = (combine.options || []).map((o) => `<li>${esc(o)}</li>`).join('');
-    combineBlock = `<li class="tradeoff"><span class="q">${esc(combine.note || 'How to combine')}</span>${opts ? `<ul>${opts}</ul>` : ''}</li>`;
+    combineBlock = `<div class="tradeoff"><p class="q">${esc(combine.note || 'How to combine')}</p>${opts ? `<ul>${opts}</ul>` : ''}</div>`;
   }
 
+  if (main) return `${main}\n${combineBlock}`;
   return `<section class="tradeoffs">
   <h2>Needs your call</h2>
-  <ul>
-${items}${combineBlock ? `\n${combineBlock}` : ''}
-  </ul>
+${combineBlock}
 </section>`;
 }
 
@@ -294,12 +300,24 @@ ${lis}
 }
 
 function renderTransfer(model) {
-  const songs = model.songs.slice().sort((a, b) => (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0));
+  const songs = model.songs.slice();
   const up = songs.reduce((a, s) => a + (s.finalVotes || 0), 0);
   const down = songs.reduce((a, s) => a + (s.finalDownvotes || 0), 0);
   const hasDown = down > 0 || model.budget.downvotesEnabled;
-  const rows = songs
+  const colspan = hasDown ? 2 : 1;
+  // Interleave the owner's own (unvotable) submissions so every raw slot is present.
+  const own = Array.isArray(model.ownSongs) ? model.ownSongs : [];
+  const all = [...songs, ...own].sort((a, b) => (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0));
+  const rows = all
     .map((s) => {
+      if (s.isOwn) {
+        return `<tr class="own">
+      <td class="num">${esc(s.rawOrderIndex)}</td>
+      <td>${esc(s.title)}</td>
+      <td class="muted">${esc(s.artist)}</td>
+      <td class="num votes muted" colspan="${colspan}">— your song</td>
+    </tr>`;
+      }
       const u = s.finalVotes || 0;
       const d = s.finalDownvotes || 0;
       const cls = u || d ? ' class="has-votes"' : '';
@@ -346,6 +364,7 @@ function renderDocument(model, order) {
 ${renderHead(model)}
 ${renderCandidates(model, order)}
 ${renderTradeoffs(model)}
+${pickHtml(model.pick, model.ownSongs)}
 ${renderList('Needs my score (blank boxes)', songs.filter((s) => s.needsUserInput))}
 ${renderList('Needs review', songs.filter((s) => s.needsReview), 'review')}
 ${renderList('Disqualified (no points)', songs.filter((s) => s.isDisqualified))}
