@@ -112,7 +112,11 @@ function renderCard(s, combineLabel, weights) {
     scores.push(
       `<span class="score combined" title="${esc(combineLabel || 'music+fit blend')}">combined ${formatScore(s.combinedScore)}</span>`
     );
-  if (s.draftVotes != null)
+  if (s.draftDownvotes > 0)
+    scores.push(
+      `<span class="score votes has-down" title="draft downvotes">-${formatScore(s.draftDownvotes)} ▼</span>`
+    );
+  else if (s.draftVotes != null)
     scores.push(
       `<span class="score votes${s.draftVotes > 0 ? ' has-votes' : ''}" title="draft upvotes">${formatScore(s.draftVotes)} ▲</span>`
     );
@@ -218,39 +222,47 @@ function renderTransfer(data) {
   const songs = Array.isArray(data.songs) ? data.songs.slice() : [];
   if (!songs.length) return '';
   // Only worth showing once an allocation exists.
-  if (!songs.some((s) => s.draftVotes != null)) return '';
+  if (!songs.some((s) => s.draftVotes != null || s.draftDownvotes != null)) return '';
   // Interleave the owner's own (unvotable) submissions so EVERY raw submission slot
   // is present — the user enters votes by position, so a hidden gap (your own song)
   // risks a misaligned ballot.
   const own = Array.isArray(data.ownSongs) ? data.ownSongs : [];
   const rowsAll = [...songs, ...own].sort((a, b) => (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0));
-  const total = songs.reduce((sum, s) => sum + (Number(s.draftVotes) || 0), 0);
+  const upTotal = songs.reduce((sum, s) => sum + (Number(s.draftVotes) || 0), 0);
+  const downTotal = songs.reduce((sum, s) => sum + (Number(s.draftDownvotes) || 0), 0);
   const rows = rowsAll
-    .map((s) =>
-      s.isOwn
-        ? `<tr class="own">
+    .map((s) => {
+      if (s.isOwn) {
+        return `<tr class="own">
       <td class="num">${esc(s.rawOrderIndex)}</td>
       <td>${esc(s.title)}</td>
       <td class="muted">${esc(s.artist)}</td>
       <td class="num votes muted">— your song</td>
-    </tr>`
-        : `<tr${s.draftVotes > 0 ? ' class="has-votes"' : ''}>
+    </tr>`;
+      }
+      const up = Number(s.draftVotes) || 0;
+      const downv = Number(s.draftDownvotes) || 0;
+      const cell = downv > 0 ? `-${downv}` : String(up);
+      const cls = downv > 0 ? ' class="has-down"' : up > 0 ? ' class="has-votes"' : '';
+      const voteCls = downv > 0 ? 'num votes down' : 'num votes';
+      return `<tr${cls}>
       <td class="num">${esc(s.rawOrderIndex)}</td>
       <td>${esc(s.title)}</td>
       <td class="muted">${esc(s.artist)}</td>
-      <td class="num votes">${formatScore(s.draftVotes ?? 0)}</td>
-    </tr>`
-    )
+      <td class="${voteCls}">${cell}</td>
+    </tr>`;
+    })
     .join('\n');
+  const totalCell = downTotal > 0 ? `${upTotal} ▲ / -${downTotal} ▼` : String(upTotal);
   return `<section class="transfer">
   <h2>Vote transfer (raw order)</h2>
-  <p class="muted">Songs in Music League submission order with the draft upvotes — for entering back into the app.</p>
+  <p class="muted">Songs in Music League submission order with the draft votes (upvotes positive, downvotes negative) — for entering back into the app in one pass.</p>
   <table>
     <thead><tr><th class="num">#</th><th>Title</th><th>Artist</th><th class="num">Votes</th></tr></thead>
     <tbody>
 ${rows}
     </tbody>
-    <tfoot><tr><td></td><td></td><td class="num">Total</td><td class="num">${formatScore(total)}</td></tr></tfoot>
+    <tfoot><tr><td></td><td></td><td class="num">Total</td><td class="num">${totalCell}</td></tr></tfoot>
   </table>
 </section>`;
 }

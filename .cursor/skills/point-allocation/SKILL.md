@@ -20,15 +20,15 @@ Rules: `spec/point-allocation.md` (authoritative over `.cursor/rules/allocation.
 1. **Spend both banks exactly.** Σ upvotes = `upvoteBankSize`; when `downvotesEnabled`, Σ downvotes = `downvoteBankSize`. Neither bank may be partially used or left unspent — Music League requires casting every vote.
 2. **No mixed targets.** Each song is an upvote target, a downvote target, or neither — **never both** on the same song.
 
-## Continuous tier spectrum (up + down)
+## Sequenced tiers (upvotes first, then downvotes)
 
-One ranked opinion curve, not two independent passes:
+One ranked opinion curve, allocated in two ordered passes (not a fixed pre-split):
 
-- **Top slice** → positive upvote tiers (`finalVotes` / `draftVotes`)
-- **Middle** → neither (0 / 0)
-- **Bottom slice** → negative downvote tiers (`finalDownvotes` / `draftDownvotes`; display as `-N`)
+- **Upvotes** → positive tiers over the field minus a minimal down reserve (`finalVotes` / `draftVotes`)
+- **Zeros** → songs the upvote curve didn't fund (a consequence of the curve, not a reserved middle)
+- **Downvotes** → negative tiers over **every** zero-upvote song + any DQ song (`finalDownvotes` / `draftDownvotes`; display as `-N`)
 
-`allocate()` partitions the spectrum (`spectrumTargets`), runs the same bell/relative tier machinery on the top slice for upvotes and the bottom slice for downvotes (inverted rank), then spills remainders within each slice (cap relax as last resort). `enrichProfileWithBudget()` injects `downvotesEnabled`, `downvoteBudget`, `downvoteCap` from the round budget.
+`allocate()` shapes upvotes over `upvotePool()` (whole field minus the smallest cap-safe downvote reserve), then `finishDownvotes()` shapes downvotes over all zero-upvote eligible songs (`downEligible`), worst-first, with DQ/unrankable songs floored below real scores so they pull the most weight. Up and down targets stay disjoint. `enrichProfileWithBudget()` injects `downvotesEnabled`, `downvoteBudget`, `downvoteCap` from the round budget.
 
 ## Quick paths
 
@@ -42,7 +42,14 @@ just parse <name> --shape compressed    # tight tiers (mostly 1s + a couple 2s +
 just parse <name> --shape relative      # legacy floor-anchored (avoid default)
 just parse <name> --tier-count 3        # force 3 final point tiers (e.g. 0/1/2)
 just parse <name> --bucket-count 4       # force K=4 score clusters (lower-level knob)
+just parse <name> --down-shape concentrated  # downvotes: whole bank on the worst song
+just parse <name> --down-shape flat          # downvotes: even 1-each across the worst
+just parse <name> --down-shape curved        # downvotes: graduated bell (default)
 ```
+
+The downvote shape is an axis separate from the upvote `--shape`/A-B-C. Left unset
+it defaults to `curved` and surfaces a `down-structure` proposal (concentrated /
+flat / curved with per-song previews); `--down-shape` pins it.
 
 **Thematic (fit merged):**
 
@@ -70,6 +77,7 @@ Re-run with different flags when the user asks for a different balance — same 
 | `rankBy`      | `music` (default plain), `fit`, `combined` (default with `--fit`)                      |
 | `weights`     | Combined blend; default `{ fit: 0.7, music: 0.3 }`; set via `--weights <fit>:<music>`  |
 | `shape`       | `auto` (mode-centered bell), `bell`, `compressed`, `balanced`, `top-heavy`, `relative` |
+| `downShape`   | Downvote curve (independent of `shape`): `concentrated`, `flat`, `curved` (default); via `--down-shape` |
 | `gate`        | Hard cutoff before tiering — see below                                                 |
 | `overrides`   | `{ rawOrderIndex: votes }` pin a song; rebalance rest. Set via `--pin <index>:<votes>` |
 | `tierCount`   | Force the number of final point tiers (distinct point values); via `--tier-count <n>`  |

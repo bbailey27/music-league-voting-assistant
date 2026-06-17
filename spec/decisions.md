@@ -11,6 +11,117 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-06-17 — `--option` works on music-only rounds, not just the fit-merge path
+
+**Change.** `--option <A|B|C…>` now applies a surfaced `tier-structure` distribution
+on plain (music-only) parses, not only on the `--fit` merge path. Previously the
+`--option` handler lived entirely inside `parse-round.mjs`'s `if (args.fit)` branch,
+so a music-only `just parse <round> --option B` fell through to the unparameterized
+`allocate()` and the flag was **silently ignored** (exit 0, no warning) even though
+the report's tradeoff legend advertised it. The pick/menu logic is now factored into
+two shared helpers — `resolveOptionPick(tradeoffs, spec, baseOverrides)` (pure: maps
+a letter to the chosen option's per-song override map) and `applyOptionPick(...)`
+(re-allocates, builds the pick record, logs it) — called from both branches.
+Music-only picks now also write a `pick` block into `music.json` (consumed by
+`render-final-html.mjs`'s existing `music.pick` read) and a row to
+`analysis/picks.jsonl`. `recordPickToTrainingLog` takes a songs array and falls back
+to `score`/`finalVotes` when `musicScore`/`draftVotes` are absent.
+
+**Why.** The pre-allocation report tells the user to pick with `--option B`, so the
+flag doing nothing on music-only rounds was a silent correctness gap — the workaround
+was `--tier-count <n>`, which only coincidentally reproduces an option. Sharing one
+resolver keeps the two paths from drifting.
+
+**Refs.** `working tree` — `scripts/parse-round.mjs` (`resolveOptionPick`,
+`applyOptionPick`, music-only branch), `scripts/score-core.mjs` (`buildJsonPayload`
+`pick`), `tests/score.test.mjs` (two `resolveOptionPick` cases).
+
+---
+
+## 2026-06-16 — one combined signed ballot; downvotes always negative
+
+**Change.** The `Vote transfer` (raw submission order) section is now the single
+ballot for app entry: one signed `Votes` column where upvotes are positive and
+downvotes are **negative** (`-1`, `-5`), with a `{up} ▲ / -{down} ▼` total. The
+per-option **raw submission order** sub-table was removed from the `tier-structure`
+and `down-structure` comparisons (CLI and HTML) — those now show **by combined
+score only** (for judgment). Downvotes display as negative everywhere they appear:
+comparison tables, card vote badges (fit + final), the `tier-split-down` tie label,
+and the markdown raw-order ballot (already via `formatVoteAllocation`).
+
+**Why.** The bottom transfer table duplicated each option's raw-order column and
+only ever showed the default upvote pick, and downvoted songs read as `0` there —
+so transcribing a ballot meant cross-referencing a separate downvote view and
+walking the list twice. Folding up + down into one signed column lets the whole
+ballot go in on a single pass, and dropping the duplicate per-option raw table
+removes the redundancy. Negative magnitudes are unambiguous even when a table holds
+only downvotes.
+
+**Overruled.** The earlier "two orders per option (combined + raw-for-entry)" layout
+(see 2026-06-16 _clean `--option` picks_ below) — the raw-for-entry half is now the
+shared combined transfer ballot instead of a per-option duplicate.
+
+**Refs.** working tree — `scripts/render-html-shared.mjs` (`tierStructureTableHtml`
+single table + signed down), `scripts/parse-round.mjs` (`printTradeoffCli` drops raw
+table, signs down), `scripts/render-fit-html.mjs` + `scripts/render-final-html.mjs`
+(`renderTransfer` signed combined column; `voteBadge` negative; card down badge),
+`scripts/score-core.mjs` (`tier-split-down` label), `spec/point-allocation.md`.
+
+## 2026-06-16 — downvote shape as its own axis (concentrated / flat / curved)
+
+**Change.** The downvote curve is now chosen independently of the upvote tier
+structure via `downShape` (`concentrated` | `flat` | `curved`), CLI
+`--down-shape`. `concentrated` piles the bank worst-first to cap (uncapped ⇒ all on
+the single worst/invalid song); `flat` spreads 1-each across the worst songs;
+`curved` is the existing graduated bell and the default. When `downShape` is unset
+the allocator surfaces a `down-structure` tradeoff proposing the distinct shapes
+(per-song previews, deduped on the resulting distribution) so the owner picks per
+round; pinning a shape suppresses it. Rendered in the CLI (`printTradeoffCli`) and
+HTML (`tradeoffsHtml` reusing the song×option table) with a `--down-shape` selector.
+
+**Why.** Sequenced allocation sends every zero-upvote song plus DQ to the down
+pass, and no single rule fits every round: concentrating the whole bank on one
+clearly-bad/invalid song and spreading `-1`s across the worst are both legitimate.
+A per-round knob plus a proposal of both (the owner's suggestion) beats hard-coding
+one. Upvote A/B/C options are unchanged.
+
+**Refs.** working tree — `scripts/score-core.mjs` (`allocateDownvotes`,
+`allocateConcentratedDown`, `allocateFlatDown`, `normalizeDownShape`),
+`scripts/parse-round.mjs` (`--down-shape`, `parseDownShape`, `printTradeoffCli`),
+`scripts/render-final-html.mjs`, `scripts/render-html-shared.mjs`,
+`spec/point-allocation.md`.
+
+## 2026-06-16 — sequenced allocation: upvotes first, then downvotes over zero-up + DQ
+
+**Change.** Downvotes are no longer drawn from a pre-partitioned bottom slice of a
+single up/down spectrum. Allocation is now **sequential**: (1) shape upvotes over
+the whole eligible field minus a _minimal_ downvote reserve (the fewest bottom
+songs needed to hold the down bank at its per-song cap — uncapped ⇒ 1), then
+(2) shape downvotes over **every** song the upvote pass left at zero, plus any
+disqualified song. `spectrumTargets` was replaced by `upvotePool` (returns only
+the up pool); `finishDownvotes` now defaults its target set to all zero-upvote
+eligible songs (`downEligible`) instead of the reserved slice. Disqualified /
+unrankable songs (null score → `-Infinity`) are mapped to a finite floor below the
+lowest real score in `allocateBellDown` so they sort worst and pull the most
+downvote weight.
+
+**Why.** With unlimited per-song caps (Music League exports `0` = unlimited), the
+old `spectrumTargets` collapsed the up and down pools to ~1 song each, dumping all
+upvotes on the top song and starving/garbling downvotes. The reserve-as-maximum
+behavior was wrong: the reserve is a _floor_ for cap-safety, and the bell should
+decide reach. Mixing a DQ song's `-Infinity` into the down bell also produced
+`Inf/Inf → NaN` weights, which overspent the down bank (e.g. story-4: down spent
+20 vs a budget of 5, DQ left at 0). Sequencing matches the owner's model:
+distribute upvotes, let the curve zero the bottom naturally, then downvote
+whatever is left at zero (DQ always included).
+
+**Overruled.** An earlier "center split" that pre-assigned an up pool, a down pool,
+and an untouched middle by a statistical center — rejected as an artificial
+boundary; reach is curve/ratio-driven, not capped at a center.
+
+**Refs.** working tree — `scripts/score-core.mjs` (`upvotePool`, `finishDownvotes`,
+`allocateBellDown`), `spec/point-allocation.md` (Allocation model).
+
 ## 2026-06-16 — record picks: reason, manual tweaks, options kept visible + training log
 
 **Change.**
@@ -31,7 +142,7 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 **Why.** A pick used to vanish into a flat pinned allocation — the menu that was
 weighed and the rationale were lost. Keeping the options visible and recording
-*what was shown → what was chosen and why* makes the deliverable auditable and
+_what was shown → what was chosen and why_ makes the deliverable auditable and
 builds a dataset for future allocation/training work. Embedding in `scores.json`
 keeps each round self-contained; the global `picks.jsonl` accumulates across rounds.
 
@@ -86,7 +197,7 @@ shown:
    8+ favorites) into one tier. An explicit `--favorite-band <min>` is still honored.
 2. **Expose `fitNorm` / `musicNorm`** — each axis z-scored over contenders and
    remapped onto the same 75-centered scale, so `combinedScore = w.fit·fitNorm +
-   w.music·musicNorm` exactly. Written back to the merged JSON and rendered on each
+w.music·musicNorm` exactly. Written back to the merged JSON and rendered on each
    card as a `combined = fitⁿ ×w + musicⁿ ×w (raw fit/music)` breakdown line. Raw
    100-point fit alone couldn't explain a jump; the normalized pair can.
 3. **`musicLift` callout** (`flagMusicLifts`) — flags any song whose combined rank
@@ -161,7 +272,7 @@ average contender ≈ 75 and a clear standout reaches ~80 — keeping the stairc
 and the combined HTML sort now order by `combinedScore` with **music as the
 secondary tiebreak**.
 
-**Why.** Fit and music differed in *spread*, not just weight: the AI fit number
+**Why.** Fit and music differed in _spread_, not just weight: the AI fit number
 ranges far wider than music, so the raw blend let a barely-meaningful ~8-point fit
 gap (e.g. `93` vs `85`) dwarf a decisive 1-point music gap — the opposite of what
 `0.7/0.3` implies. Z-scoring puts the weights on comparable scales. The asymmetric
@@ -174,7 +285,7 @@ from 2 votes to 1 and lifted UNKNOWN LOVERZ and Dancing On The Wall (high music)
 2 — music finally counts.
 
 **Overruled.** Symmetric normalization (one floor for both axes) was rejected: after
-dropping low-fit outliers the survivors are a *tighter* fit cluster, which a
+dropping low-fit outliers the survivors are a _tighter_ fit cluster, which a
 round-relative std would then **amplify** — re-inflating the meaningless `93` vs `85`
 gap, the exact opposite of the goal. The high fit floor prevents that. Snapping fit
 to its band anchors (an earlier idea) was rejected to keep granular fit scores

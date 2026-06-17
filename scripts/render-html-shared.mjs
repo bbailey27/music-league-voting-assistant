@@ -34,18 +34,22 @@ export function chip(text, hue) {
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-// A `tier-structure` distribution tradeoff rendered as TWO song×option comparison
-// tables — one in combined/rank order (for judging which songs each option
-// rewards) and one in raw submission order, including the owner's own (unvotable)
-// song (for transcribing a column straight into the app) — plus a legend naming
-// each option's distinct vote shape and its `--option` selector. Falls back
-// gracefully when `perSong` is absent.
+// A distribution tradeoff (`tier-structure` upvotes A/B/C, or `down-structure`
+// downvote shapes) rendered as a single song×option comparison table in
+// combined/rank order — for judging which songs each option rewards — plus a legend
+// naming each option's shape and its selector (`--option` / `--down-shape`).
+// Downvote magnitudes always display as negative. The raw submission-order ballot
+// is NOT duplicated per option here; it lives once, combined across up + down, in
+// the Vote transfer section. Falls back gracefully when `perSong` is absent.
 function tierStructureTableHtml(t, ownSongs = [], chosenIndex = null) {
+  const down = t.kind === 'down-structure';
   const opts = (t.options || []).filter((o) => Array.isArray(o.perSong) && o.perSong.length);
   if (!opts.length) {
     const items = (t.options || []).map((o) => `<li>${esc(o.label ?? o)}</li>`).join('');
     return `<div class="tradeoff"><p class="q">${esc(t.question)}</p><ul>${items}</ul></div>`;
   }
+  // Downvote options carry positive magnitudes but always display as negative.
+  const fmtVote = (v) => (down && v > 0 ? `-${formatScore(v)}` : formatScore(v));
   // A column is "highlighted" if it's the default (live tradeoff) or the chosen one
   // (a recorded pick); the chosen column also gets a stronger `chosen` class.
   const optClass = (i) =>
@@ -53,53 +57,34 @@ function tierStructureTableHtml(t, ownSongs = [], chosenIndex = null) {
   const optHead = opts.map((o, i) => `<th class="num ${optClass(i)}">${OPTION_LETTERS[i]}</th>`).join('');
   const totalsRow = (extraLead = 0) => {
     const cells = opts
-      .map((o, i) => `<td class="num ${optClass(i)}">${o.perSong.reduce((a, s) => a + (s.votes || 0), 0)}</td>`)
+      .map((o, i) => `<td class="num ${optClass(i)}">${fmtVote(o.perSong.reduce((a, s) => a + (s.votes || 0), 0))}</td>`)
       .join('');
     return `<tr>${'<td></td>'.repeat(extraLead)}<td>Total</td>${cells}</tr>`;
   };
 
-  // Combined/rank order.
+  // Combined/rank order. (The raw-submission-order ballot lives once in the Vote
+  // transfer section, combined across up + down — not duplicated per option here.)
   const combinedBody = opts[0].perSong
     .map((r, ri) => {
       const cells = opts
         .map((o, i) => {
           const v = o.perSong[ri]?.votes ?? 0;
-          return `<td class="num ${optClass(i)}${v > 0 ? ' on' : ''}">${formatScore(v)}</td>`;
+          return `<td class="num ${optClass(i)}${v > 0 ? ' on' : ''}">${fmtVote(v)}</td>`;
         })
         .join('');
       return `<tr><td class="num muted">${esc(r.rawOrderIndex)}</td><td>${esc(r.title)}</td><td class="num">${formatScore(r.score ?? r.rank)}</td>${cells}</tr>`;
     })
     .join('\n');
 
-  // Raw submission order, every slot present (incl. own songs).
-  const byIdx = opts.map((o) => new Map(o.perSong.map((s) => [s.rawOrderIndex, s.votes])));
-  const slots = [
-    ...opts[0].perSong.map((s) => ({ i: s.rawOrderIndex, title: s.title, own: false })),
-    ...(Array.isArray(ownSongs) ? ownSongs : []).map((s) => ({ i: s.rawOrderIndex, title: s.title, own: true })),
-  ].sort((a, b) => a.i - b.i);
-  const rawBody = slots
-    .map((r) => {
-      const cells = opts
-        .map((o, i) => {
-          if (r.own) return `<td class="num ${optClass(i)} muted">—</td>`;
-          const v = byIdx[i].get(r.i) ?? 0;
-          return `<td class="num ${optClass(i)}${v > 0 ? ' on' : ''}">${formatScore(v)}</td>`;
-        })
-        .join('');
-      const label = r.own ? `${esc(r.title)} <span class="muted">(your song)</span>` : esc(r.title);
-      return `<tr${r.own ? ' class="own"' : ''}><td class="num muted">${esc(r.i)}</td><td>${label}</td>${cells}</tr>`;
-    })
-    .join('\n');
-
   const legend = opts
-    .map(
-      (o, i) =>
-        `<li><b>${OPTION_LETTERS[i]}</b>${chosenIndex == null && i === 0 ? ' <span class="muted">(default)</span>' : ''}${
-          i === chosenIndex ? ' <span class="muted">(your pick)</span>' : ''
-        } — ${o.tierCount} tier${o.tierCount === 1 ? '' : 's'}, <code>${esc(o.shape)}</code>, <code>--option ${
-          OPTION_LETTERS[i]
-        }</code></li>`
-    )
+    .map((o, i) => {
+      const tag = chosenIndex == null && i === 0 ? ' <span class="muted">(default)</span>' : '';
+      const pick = i === chosenIndex ? ' <span class="muted">(your pick)</span>' : '';
+      const desc = down
+        ? `<code>${esc(o.shape)}</code>, <code>--down-shape ${esc(o.downShape)}</code>`
+        : `${o.tierCount} tier${o.tierCount === 1 ? '' : 's'}, <code>${esc(o.shape)}</code>, <code>--option ${OPTION_LETTERS[i]}</code>`;
+      return `<li><b>${OPTION_LETTERS[i]}</b>${tag}${pick} — ${desc}</li>`;
+    })
     .join('');
 
   const question = t.question ? `<p class="q">${esc(t.question)}</p>` : '';
@@ -112,14 +97,6 @@ function tierStructureTableHtml(t, ownSongs = [], chosenIndex = null) {
 ${combinedBody}
     </tbody>
     <tfoot>${totalsRow(2)}</tfoot>
-  </table>
-  <p class="sub muted">Raw submission order — for entering into the app</p>
-  <table class="compare">
-    <thead><tr><th class="num">#</th><th>Song</th>${optHead}</tr></thead>
-    <tbody>
-${rawBody}
-    </tbody>
-    <tfoot>${totalsRow(1)}</tfoot>
   </table>
   <ul class="legend">${legend}</ul>
 </div>`;
@@ -184,7 +161,8 @@ export function tradeoffsHtml(tradeoffs, ownSongs = []) {
   if (!list.length) return '';
   const blocks = list
     .map((t) => {
-      if (t.kind === 'tier-structure') return tierStructureTableHtml(t, ownSongs);
+      if (t.kind === 'tier-structure' || t.kind === 'down-structure')
+        return tierStructureTableHtml(t, ownSongs);
       const opts = (t.options || []).map((o) => `<li>${esc(o.label ?? o)}</li>`).join('');
       return `<div class="tradeoff"><p class="q">${esc(t.question)}</p>${opts ? `<ul>${opts}</ul>` : ''}</div>`;
     })

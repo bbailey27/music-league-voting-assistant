@@ -57,10 +57,14 @@ export function parseRoundDocument(document, mode) {
       const mm = x.match(re);
       return mm ? Number(mm[1]) : null;
     };
+    // Music League encodes "no per-song limit" as 0; treat it as null (unlimited)
+    // so the allocator never reads it as a literal cap of 0 (which would block all
+    // votes). Bank sizes keep their literal value — a 0 bank is genuinely no votes.
+    const cap = (re) => num(re) || null;
     budget.upvoteBankSize = num(/upvoteBankSize:\s*(\d+)/);
-    budget.maxUpvotesPerSong = num(/maxUpvotesPerSong:\s*(\d+)/);
+    budget.maxUpvotesPerSong = cap(/maxUpvotesPerSong:\s*(\d+)/);
     budget.downvoteBankSize = num(/downvoteBankSize:\s*(\d+)/);
-    budget.maxDownvotesPerSong = num(/maxDownvotesPerSong:\s*(\d+)/);
+    budget.maxDownvotesPerSong = cap(/maxDownvotesPerSong:\s*(\d+)/);
     budget.downvotesEnabled = /downvotesEnabled:\s*true/.test(x);
   }
 

@@ -14,7 +14,14 @@ import {
   buildJsonPayload,
   buildPickRecord,
 } from '../scripts/score-core.mjs';
-import { parseWeights, parsePins, parseTierCount, parseBucketCount } from '../scripts/parse-round.mjs';
+import {
+  parseWeights,
+  parsePins,
+  parseTierCount,
+  parseBucketCount,
+  parseDownShape,
+  resolveOptionPick,
+} from '../scripts/parse-round.mjs';
 
 // ---------------------------------------------------------------------------
 // scoreComment: digit scaling, modifiers, disqualification, fit tokens
@@ -360,6 +367,45 @@ test('tier-structure options carry per-song votes, index-aligned across options 
       'per-song votes total the option budget'
     );
   }
+});
+
+test('resolveOptionPick applies a surfaced distribution by letter (music-only path)', () => {
+  const scores = [78, 77, 76, 75, 74, 73, 72, 71, 70, 69];
+  const g = mk(scores);
+  const { tradeoffs } = allocate(g, 14, 5, { shape: 'auto' });
+  const ts = tradeoffs.find((t) => t.kind === 'tier-structure');
+  assert.ok(ts && ts.options.length >= 2, 'field surfaces at least two options');
+
+  // Pick the non-default option B exactly as the music-only CLI now does: resolve
+  // the per-song override map, feed it back through allocate, and confirm the
+  // applied distribution reproduces option B song-for-song.
+  const { idx, overrides, error } = resolveOptionPick(tradeoffs, 'B');
+  assert.equal(error, null);
+  assert.equal(idx, 1, 'B resolves to the second option');
+  const chosen = ts.options[1];
+
+  const f = mk(scores);
+  const res = allocate(f, 14, 5, { shape: 'auto', overrides });
+  assert.equal(sum(f), 14, 'applied option still spends the full budget');
+  const byIdx = new Map(f.map((s) => [s.rawOrderIndex, s.finalVotes]));
+  for (const ps of chosen.perSong) {
+    assert.equal(byIdx.get(ps.rawOrderIndex), ps.votes, `song ${ps.rawOrderIndex} matches option B`);
+  }
+  assert.ok(
+    !res.tradeoffs.some((t) => t.kind === 'tier-structure'),
+    'a fully-pinned pick is not re-surfaced as a choice'
+  );
+});
+
+test('resolveOptionPick reports an unavailable option without throwing', () => {
+  const scores = [78, 77, 76, 75, 74, 73, 72, 71, 70, 69];
+  const { tradeoffs } = allocate(mk(scores), 14, 5, { shape: 'auto' });
+  const ts = tradeoffs.find((t) => t.kind === 'tier-structure');
+  assert.ok(ts);
+  const { idx, overrides, error } = resolveOptionPick(tradeoffs, 'Z');
+  assert.equal(idx, null);
+  assert.equal(overrides, null);
+  assert.match(error, /not available/);
 });
 
 test('--tier-count forces the number of final point tiers (friendly knob)', () => {
@@ -1113,6 +1159,77 @@ test('downvotes disabled leaves behavior unchanged', () => {
   assert.ok(songs.every((s) => s.finalDownvotes === 0));
 });
 
+// --- Downvote curve shapes (concentrated / flat / curved) ---
+
+test('downShape concentrated piles the whole bank on the single worst song (uncapped)', () => {
+  const songs = mk([90, 85, 80, 75, 70, 65, 60, 55]);
+  allocate(songs, 3, 3, downProfile({ downvoteBudget: 5, downvoteCap: Infinity, downShape: 'concentrated' }));
+  assert.equal(sumDown(songs), 5);
+  const worst = songs.find((s) => s.score === 55);
+  assert.equal(worst.finalDownvotes, 5, 'all downvotes land on the worst song');
+  assert.equal(songs.filter((s) => (s.finalDownvotes || 0) > 0).length, 1, 'only one song downvoted');
+});
+
+test('downShape flat spreads one downvote each across the worst songs (uncapped)', () => {
+  const songs = mk([90, 85, 80, 75, 70, 65, 60, 55]);
+  allocate(songs, 3, 3, downProfile({ downvoteBudget: 5, downvoteCap: Infinity, downShape: 'flat' }));
+  assert.equal(sumDown(songs), 5);
+  const downed = songs.filter((s) => (s.finalDownvotes || 0) > 0);
+  assert.equal(downed.length, 5, 'five songs share the bank');
+  assert.ok(downed.every((s) => s.finalDownvotes === 1), 'flat = one each');
+});
+
+test('downShape curved graduates downvotes toward the worst (uncapped, wide spread)', () => {
+  const songs = mk([90, 85, 80, 75, 70, 65, 60, 55]);
+  allocate(songs, 3, 3, downProfile({ downvoteBudget: 6, downvoteCap: Infinity, downShape: 'curved' }));
+  assert.equal(sumDown(songs), 6);
+  const worst = songs.find((s) => s.score === 55);
+  const otherDowned = songs.filter((s) => (s.finalDownvotes || 0) > 0 && s !== worst);
+  assert.ok(
+    otherDowned.every((s) => worst.finalDownvotes >= s.finalDownvotes),
+    'worst song gets at least as many downvotes as any other'
+  );
+});
+
+test('a disqualified (unscored) song is the strongest downvote target, no NaN overspend', () => {
+  const songs = mk([85, 80, 75, 70, 65]);
+  songs.push({ title: 'DQ', rawOrderIndex: 5, score: null, isDisqualified: true });
+  allocate(songs, 3, 3, downProfile({ downvoteBudget: 5, downvoteCap: Infinity, downShape: 'concentrated' }));
+  const dq = songs.find((s) => s.title === 'DQ');
+  assert.equal(sumDown(songs), 5, 'bank spent exactly (regression: -Infinity → NaN overspend)');
+  assert.equal(dq.finalDownvotes, 5, 'all downvotes land on the disqualified song');
+  assert.ok(songs.every((s) => Number.isFinite(s.finalDownvotes || 0)), 'no NaN counts');
+});
+
+test('default (auto) downvotes never overspend the bank with a disqualified song', () => {
+  const songs = mk([85, 80, 75, 70, 65]);
+  songs.push({ title: 'DQ', rawOrderIndex: 5, score: null, isDisqualified: true });
+  allocate(songs, 3, 3, downProfile({ downvoteBudget: 5, downvoteCap: Infinity }));
+  assert.equal(sumDown(songs), 5);
+});
+
+test('down-structure tradeoff is surfaced (auto) and suppressed when --down-shape is pinned', () => {
+  const songs = mk([90, 85, 80, 75, 70, 65, 60, 55]);
+  const { tradeoffs } = allocate(songs, 3, 3, downProfile({ downvoteBudget: 5, downvoteCap: Infinity }));
+  const ds = tradeoffs.find((t) => t.kind === 'down-structure');
+  assert.ok(ds, 'auto surfaces the downvote-shape choice');
+  assert.ok(ds.options.length >= 2, 'at least two distinct shapes offered');
+  assert.equal(ds.options[0].downShape, 'curved', 'curved is the default (first) option');
+  assert.ok(
+    ds.options.every((o) => o.perSong.reduce((a, p) => a + (p.votes || 0), 0) === 5),
+    'every proposed shape spends the full down bank'
+  );
+
+  const songs2 = mk([90, 85, 80, 75, 70, 65, 60, 55]);
+  const { tradeoffs: t2 } = allocate(
+    songs2,
+    3,
+    3,
+    downProfile({ downvoteBudget: 5, downvoteCap: Infinity, downShape: 'concentrated' })
+  );
+  assert.ok(!t2.find((t) => t.kind === 'down-structure'), 'a pinned shape suppresses the proposal');
+});
+
 // ---------------------------------------------------------------------------
 // parseWeights: CLI --weights <fit>:<music>, normalized to sum 1
 // ---------------------------------------------------------------------------
@@ -1182,6 +1299,17 @@ test('parseTierCount rejects non-positive or non-integer specs', () => {
   assert.throws(() => parseTierCount('-1'));
   assert.throws(() => parseTierCount('2.5'));
   assert.throws(() => parseTierCount('x'));
+});
+
+test('parseDownShape canonicalizes shape names and rejects unknown specs', () => {
+  assert.equal(parseDownShape('concentrated'), 'concentrated');
+  assert.equal(parseDownShape('worst'), 'concentrated');
+  assert.equal(parseDownShape('FLAT'), 'flat');
+  assert.equal(parseDownShape('even'), 'flat');
+  assert.equal(parseDownShape('bell'), 'curved');
+  assert.equal(parseDownShape(''), undefined);
+  assert.equal(parseDownShape(null), undefined);
+  assert.throws(() => parseDownShape('sideways'));
 });
 
 test('parseBucketCount parses a positive integer and rejects bad specs', () => {

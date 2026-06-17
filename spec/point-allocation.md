@@ -84,15 +84,47 @@ typical (low) ratios they fall out naturally; see _Standing shape preference_.
 
 **0 is the neutral band; downvotes extend the tier spectrum below it.** Without
 downvotes the point curve runs from 0 upward — positive tiers only, anchored on
-the opinion center. When `downvotesEnabled`, allocation is **one continuous
-ranked tier spectrum**: the top slice receives positive upvote tiers (best songs →
-most upvotes), the bottom slice receives negative downvote tiers (worst songs →
-most downvotes), and the middle earns neither. The same mode-centered bell
-machinery shapes magnitudes on both sides of zero; downvotes are not a separate
-ad-hoc pass bolted onto upvotes.
+the opinion center. When `downvotesEnabled`, the two banks are allocated
+**sequentially, upvotes first**:
+
+1. **Upvotes** are shaped over the whole eligible field minus a minimal downvote
+   reserve at the bottom. The reserve is the fewest bottom songs needed to
+   physically hold the downvote bank at its per-song cap (uncapped ⇒ 1; it grows
+   only when a tight down cap binds), which guarantees enough zero-upvote songs
+   survive that a finite down cap can always be honored. The bell decides how far
+   down upvotes actually reach and zeroes the rest — the zeros are a consequence
+   of the curve, not a reserved band.
+2. **Downvotes** are then shaped over **every zero-upvote song** the first pass
+   left behind, plus any disqualified song (a DQ entry is always in the down
+   pool). Worst songs → most downvotes. Up and down targets stay disjoint because
+   a song that earned upvotes is never downvote-eligible.
+
+The same mode-centered bell machinery shapes magnitudes on both sides of zero.
+Disqualified/unrankable songs (no score) sort below all real scores via a finite
+floor — a full spread under the lowest real score — so they pull the most
+downvote weight without the degenerate math a literal `-Infinity` would cause.
 
 Downvote tiers are usually fewer songs and lower magnitudes than the upvote side
 (`-1` common, `-2`+ rare), reflecting the typical downvote-bank ratio.
+
+### Downvote shape is its own axis (`downShape`)
+
+The downvote curve is chosen independently of the upvote tier structure (A/B/C),
+because no single rule fits every round — when the down cap is unbounded, dumping
+the whole bank on the single worst/invalid song and spreading it across the worst
+songs are both valid. Three shapes (over the down pool, worst-first; budget `B`,
+cap `C`):
+
+- **concentrated** — pile worst-first up to `C`; uncapped ⇒ all `B` on the single
+  worst song.
+- **flat** — even 1-each spread across the worst songs (round-robin), then 2-each, …
+- **curved** _(default)_ — the graduated bell; worst gets the most, tapering.
+
+`downShape` (CLI `--down-shape concentrated|flat|curved`) pins the shape. When it's
+unset (`auto`), allocation defaults to **curved** and surfaces a `down-structure`
+tradeoff proposing the distinct shapes (deduped on the resulting distribution, so
+identical shapes collapse) with per-song previews, selectable per round. The
+`relative` upvote shape keeps its proportional down pass unless `downShape` is set.
 
 **Match the variance too:** a tightly-clustered opinion curve uses fewer tiers; a
 widely-spread one uses more. `auto` reads both the ratio (point-curve width) and
@@ -284,6 +316,12 @@ pass)`: a `maybe` never earns more points than the lowest-funded pass. By
   - presets `compressed` / `balanced` / `top-heavy`: width/skew overrides.
   - `relative` (legacy): `score − lowest numeric score`. Anchors on the floor
     (wrong, per above); kept selectable but not default.
+- **`downShape`** — the downvote curve, **independent of `shape`**: `concentrated`
+  (whole bank on the worst, worst-first to cap), `flat` (even 1-each spread), or
+  `curved` (graduated bell — default). Set via `--down-shape <…>`. When unset the
+  allocator defaults to `curved` and surfaces a `down-structure` tradeoff proposing
+  the distinct shapes (per-song previews, deduped); pinning it suppresses the
+  proposal. See _Downvote shape is its own axis_.
 - **`overrides`** — `{ rawOrderIndex: votes }` pins a song's votes; the remaining
   budget is shaped around it (also how the web re-runs after a tradeoff pick).
 - **`favoriteBand`** — controls the R2 favorite top-band merge (scores ≥ 80 share
@@ -303,9 +341,11 @@ pass)`: a `maybe` never earns more points than the lowest-funded pass. By
   applies that exact distribution (deterministic sugar over per-song pins), so a
   pick is one clean flag even when two options share a tier/bucket-count label. Each
   option also carries a `shape` signature (e.g. `2×4 / 1×2 / 0×5`) so the legend and
-  labels are always distinguishable.
+  labels are always distinguishable. Works on **both** paths — the `--fit` merge and
+  plain music-only parses (`just parse <round> --option B`).
 - **`--reason "why"`** — attaches a free-text rationale to an `--option` pick (no-op
-  without `--option`). Picking writes a durable **pick record** to `fitData.pick`
+  without `--option`). Picking writes a durable **pick record** to the round's JSON
+  (`scores.json` `pick` on the merge path, `music.json` `pick` on music-only)
   (chosen option, every option that was presented, the reason, and any **manual
   tweaks** — final votes that deviate from the chosen option's canonical
   distribution, e.g. an extra `--pin`) and appends one line to the global
@@ -314,10 +354,14 @@ pass)`: a `maybe` never earns more points than the lowest-funded pass. By
   focused **Your pick** table plus a collapsed **Options considered** comparison with
   the chosen column highlighted.
 
-The `tier-structure` tradeoff renders as a song×option comparison in **two orders** —
-by combined score (judgment) and by **raw submission order** (app entry) — and the
-raw-order view (plus the `Vote transfer` table) interleaves the owner's own
-(unvotable) song so every submission slot is present and the ballot can't misalign.
+The `tier-structure` and `down-structure` tradeoffs render as a song×option
+comparison in **combined-score order only** (for judgment). The raw
+submission-order ballot is **not** duplicated per option; it lives once in the
+**Vote transfer** section as a single combined ballot — upvotes positive, downvotes
+**negative**, one signed `Votes` column — so the whole ballot is entered in one pass.
+It interleaves the owner's own (unvotable) song so every submission slot is present
+and the ballot can't misalign. Downvotes always display as negative everywhere
+(comparison tables, cards, transfer, markdown).
 
 ## Same score = same tier (scoring-type aware)
 
@@ -392,8 +436,8 @@ one-off script:
 1. **Spend both banks.** Use the entire upvote bank and the entire downvote bank
    (when enabled), exactly. Neither bank may be partially used or left unspent.
 2. **No mixed targets.** A single song may receive upvotes, downvotes, or
-   neither — never both. The continuous spectrum partition (top slice / middle /
-   bottom slice) enforces this by construction.
+   neither — never both. The sequenced passes enforce this by construction:
+   downvotes only target songs the upvote pass left at zero (plus DQ songs).
 
 ## Output fields
 
@@ -424,6 +468,9 @@ deciding. Each is `{ kind, question, options: [{ label, value }] }`:
 - `forced-spill` — leftover upvote points had to land on gated-out/invalid songs.
 - `forced-spill-down` — leftover downvote points spilled outside the primary down slice.
 - `tier-split-down` — equal low-tier group can't split downvotes evenly.
+- `down-structure` — which **downvote shape** (concentrated / flat / curved), with
+  per-song previews; selectable via `--down-shape`. Surfaced only when the shapes
+  diverge and `downShape` isn't pinned.
 
 Consumers: CLI prints them (and `--pick`/overrides re-run), the web app renders
 choice cards, markdown lists a "Needs your call" section.

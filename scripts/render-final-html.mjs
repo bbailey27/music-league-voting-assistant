@@ -28,6 +28,7 @@ import {
   flagsOf,
   formatVoteAllocation,
 } from './score-core.mjs';
+import { parseDownShape } from './parse-round.mjs';
 import { matchFlag, takePositional } from './cli-args.mjs';
 import { esc, tierHue, chip, tradeoffsHtml, pickHtml, NEUTRAL_HUE, RENDER_FINAL_STYLE } from './render-html-shared.mjs';
 
@@ -35,11 +36,18 @@ import { esc, tierHue, chip, tradeoffsHtml, pickHtml, NEUTRAL_HUE, RENDER_FINAL_
 // CLI
 // ---------------------------------------------------------------------------
 function parseArgs(argv) {
-  const args = { file: null, fit: null, out: null, order: 'votes' };
+  const args = { file: null, fit: null, out: null, order: 'votes', downShape: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     let next = matchFlag(argv, i, 'fit', (v) => {
       args.fit = v;
+    });
+    if (next != null) {
+      i = next;
+      continue;
+    }
+    next = matchFlag(argv, i, 'down-shape', (v) => {
+      args.downShape = v;
     });
     if (next != null) {
       i = next;
@@ -81,8 +89,8 @@ function voteBadge(s) {
   const up = s.finalVotes || 0;
   const down = s.finalDownvotes || 0;
   if (formatVoteAllocation(s).includes('⚠'))
-    return `<span class="score votes has-votes" title="draft votes">${up} ▲ / ${down} ▼ ⚠</span>`;
-  if (down) return `<span class="score votes has-down" title="draft downvotes">${down} ▼</span>`;
+    return `<span class="score votes has-votes" title="draft votes">${up} ▲ / -${down} ▼ ⚠</span>`;
+  if (down) return `<span class="score votes has-down" title="draft downvotes">-${down} ▼</span>`;
   return `<span class="score votes${up > 0 ? ' has-votes' : ''}" title="draft upvotes">${up} ▲</span>`;
 }
 
@@ -90,7 +98,7 @@ function voteBadge(s) {
 // Build the model: music JSON is authoritative; the fit sidecar (when present)
 // is merged deterministically so votes/combined/tradeoffs stay consistent.
 // ---------------------------------------------------------------------------
-function buildModel(music, fitData) {
+function buildModel(music, fitData, downShape = null) {
   const mode = music.mode || 'objective';
   // Rehydrate each song's scoring signals from its comment so a manual fit
   // token (e.g. "8 fit") keeps precedence over the LLM during the merge — this
@@ -107,7 +115,7 @@ function buildModel(music, fitData) {
   if (fitData) {
     const parsed = { songs, budget: music.budget || {} };
     const weights = fitData.combineWeights || undefined;
-    const result = mergeFitJson(parsed, fitData, { rankBy: 'combined', weights });
+    const result = mergeFitJson(parsed, fitData, { rankBy: 'combined', weights, downShape });
     tradeoffs = result.tradeoffs || [];
     combine = fitData.combine || null;
     combineWeights = fitData.combineWeights || null;
@@ -304,7 +312,6 @@ function renderTransfer(model) {
   const up = songs.reduce((a, s) => a + (s.finalVotes || 0), 0);
   const down = songs.reduce((a, s) => a + (s.finalDownvotes || 0), 0);
   const hasDown = down > 0 || model.budget.downvotesEnabled;
-  const colspan = hasDown ? 2 : 1;
   // Interleave the owner's own (unvotable) submissions so every raw slot is present.
   const own = Array.isArray(model.ownSongs) ? model.ownSongs : [];
   const all = [...songs, ...own].sort((a, b) => (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0));
@@ -315,29 +322,31 @@ function renderTransfer(model) {
       <td class="num">${esc(s.rawOrderIndex)}</td>
       <td>${esc(s.title)}</td>
       <td class="muted">${esc(s.artist)}</td>
-      <td class="num votes muted" colspan="${colspan}">— your song</td>
+      <td class="num votes muted">— your song</td>
     </tr>`;
       }
       const u = s.finalVotes || 0;
       const d = s.finalDownvotes || 0;
-      const cls = u || d ? ' class="has-votes"' : '';
+      const cell = d > 0 ? `-${d}` : String(u);
+      const cls = d > 0 ? ' class="has-down"' : u > 0 ? ' class="has-votes"' : '';
       return `<tr${cls}>
       <td class="num">${esc(s.rawOrderIndex)}</td>
       <td>${esc(s.title)}</td>
       <td class="muted">${esc(s.artist)}</td>
-      <td class="num votes">${u || ''}</td>${hasDown ? `<td class="num votes down">${d || ''}</td>` : ''}
+      <td class="num votes${d > 0 ? ' down' : ''}">${cell}</td>
     </tr>`;
     })
     .join('\n');
+  const totalCell = hasDown && down > 0 ? `${up} ▲ / -${down} ▼` : String(up);
   return `<section class="transfer">
   <h2>Vote transfer (raw order)</h2>
-  <p class="muted">Songs in submission order with the draft votes — for entering back into the app.</p>
+  <p class="muted">Songs in submission order with the draft votes (upvotes positive, downvotes negative) — for entering back into the app in one pass.</p>
   <table>
-    <thead><tr><th class="num">#</th><th>Title</th><th>Artist</th><th class="num">▲</th>${hasDown ? '<th class="num">▼</th>' : ''}</tr></thead>
+    <thead><tr><th class="num">#</th><th>Title</th><th>Artist</th><th class="num">Votes</th></tr></thead>
     <tbody>
 ${rows}
     </tbody>
-    <tfoot><tr><td></td><td></td><td class="num">Total</td><td class="num">${up}</td>${hasDown ? `<td class="num">${down}</td>` : ''}</tr></tfoot>
+    <tfoot><tr><td></td><td></td><td class="num">Total</td><td class="num">${totalCell}</td></tr></tfoot>
   </table>
 </section>`;
 }
@@ -413,7 +422,7 @@ async function main() {
     }
   }
 
-  const model = buildModel(music, fitData);
+  const model = buildModel(music, fitData, parseDownShape(args.downShape));
   const html = renderDocument(model, args.order);
 
   const outPath =

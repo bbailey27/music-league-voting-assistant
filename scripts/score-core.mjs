@@ -404,41 +404,27 @@ function opinionCenter(songs, profile) {
   return vals.length ? estimateCenter(vals) : 0;
 }
 
-// One continuous rank order: top slice → upvote tiers, bottom slice → downvote
-// tiers, middle → neither. Disjoint by construction.
-function spectrumTargets(songs, profile, upBudget, upCap, downBudget, downCap) {
+// Up pool for a sequenced (upvotes-first) allocation: the whole eligible field
+// minus a minimal downvote reserve at the bottom. The reserve is the fewest bottom
+// songs needed to physically hold the down bank at its per-song cap (uncapped => 1:
+// all downvotes may validly land on the single worst/invalid song; it grows only
+// when a tight down cap binds). Excluding the reserve from the up pool guarantees at
+// least that many zero-upvote songs survive, so a finite down cap can always be
+// honored. The up bell then decides how far down upvotes actually reach and zeroes
+// the rest; the downvote pass later targets EVERY zero-upvote song (the reserve plus
+// whatever the curve left at zero, plus any disqualified song), not just this slice.
+function upvotePool(songs, profile, upBudget, downBudget, downCap) {
   const eligible = songs.filter((s) => !s.needsUserInput).sort(rankSort(profile));
   const n = eligible.length;
-  const allUp = new Set(eligible);
-  if (!n || !(downBudget > 0)) return { upSet: allUp, downSet: new Set() };
+  if (!n || !(downBudget > 0)) return new Set(eligible);
 
   let downCount = Math.min(n, Math.max(1, Math.ceil(downBudget / Math.max(1, downCap))));
-  let upCount = Math.min(
-    n - downCount,
-    Math.max(1, Math.ceil(upBudget / Math.max(1, upCap)))
-  );
-  while (upCount + downCount > n) {
-    if (upCount >= downCount) upCount--;
-    else downCount--;
-  }
-  while (upCount * upCap < upBudget && upCount + downCount < n) upCount++;
-  while (downCount * downCap < downBudget && upCount + downCount < n) downCount++;
-  while (upCount + downCount > n) {
-    if (upCount >= downCount) upCount--;
-    else downCount--;
-  }
-  if (upCount < 1 && upBudget > 0) upCount = 1;
-  if (downCount < 1 && downBudget > 0) downCount = 1;
-  while (upCount + downCount > n) {
-    if (upCount >= downCount) upCount--;
-    else downCount--;
-  }
+  while (downCount < n && downCount * downCap < downBudget) downCount++;
+  // Always leave at least one song for the up bank to spend on.
+  if (upBudget > 0 && downCount >= n) downCount = n - 1;
 
-  const upSlice = eligible.slice(0, upCount);
-  const downSlice = eligible.slice(n - downCount);
-  const upSet = new Set(upSlice);
-  const downSet = new Set(downSlice.filter((s) => !upSet.has(s)));
-  return { upSet, downSet };
+  const upCount = Math.max(0, n - downCount);
+  return new Set(eligible.slice(0, upCount));
 }
 
 // ---------------------------------------------------------------------------
@@ -461,7 +447,7 @@ export function allocate(songs, budget, cap = Infinity, profile = {}) {
   const totalBudget = budget;
   const downBudget = profile.downvotesEnabled ? profile.downvoteBudget ?? 0 : 0;
   const downCap = profile.downvoteCap ?? Infinity;
-  const { upSet, downSet } = spectrumTargets(songs, profile, budget, cap, downBudget, downCap);
+  const upSet = upvotePool(songs, profile, budget, downBudget, downCap);
 
   const scored = songs.filter(
     (s) =>
@@ -471,7 +457,7 @@ export function allocate(songs, budget, cap = Infinity, profile = {}) {
       !s.needsUserInput
   );
   if (!scored.length || budget <= 0) {
-    finishDownvotes(songs, profile, tradeoffs, downSet);
+    finishDownvotes(songs, profile, tradeoffs);
     return { candidates: [], tradeoffs };
   }
 
@@ -486,7 +472,7 @@ export function allocate(songs, budget, cap = Infinity, profile = {}) {
   if (!open.length || budget <= 0) {
     spillRemainder(songs, totalBudget, cap, profile, tradeoffs, new Set(scored), upSet);
     flagUncertainBoundaries(scored, profile);
-    finishDownvotes(songs, profile, tradeoffs, downSet);
+    finishDownvotes(songs, profile, tradeoffs);
     return { candidates: scored, tradeoffs };
   }
 
@@ -610,7 +596,7 @@ export function allocate(songs, budget, cap = Infinity, profile = {}) {
   // The vote budget must be spent exactly; spill any cap-blocked remainder.
   spillRemainder(songs, totalBudget, cap, profile, tradeoffs, new Set(candidates), upSet);
   flagUncertainBoundaries(candidates, profile);
-  finishDownvotes(songs, profile, tradeoffs, downSet);
+  finishDownvotes(songs, profile, tradeoffs);
   return { candidates, tradeoffs };
 }
 
@@ -631,6 +617,27 @@ function downEligible(s) {
   return !s.needsUserInput && !(s.finalVotes || 0);
 }
 
+const DOWN_SHAPES = ['curved', 'flat', 'concentrated'];
+const DOWN_SHAPE_LABEL = {
+  curved: 'Curved (bell)',
+  flat: 'Flat (even)',
+  concentrated: 'Concentrated (worst-first)',
+};
+
+// The downvote curve is its own axis, independent of the upvote tier structure
+// (A/B/C). `downShape` picks it: `concentrated` (pile worst-first to cap; uncapped
+// => the whole bank on the single worst/invalid song), `flat` (even 1-each spread
+// across the worst songs), or `curved` (the graduated bell — default). `relative`
+// upvote mode keeps its proportional down pass unless a downShape is pinned.
+function normalizeDownShape(v) {
+  if (v == null) return null;
+  const s = String(v).toLowerCase().trim();
+  if (s === 'concentrated' || s === 'concentrate' || s === 'worst') return 'concentrated';
+  if (s === 'flat' || s === 'even') return 'flat';
+  if (s === 'curved' || s === 'curve' || s === 'bell') return 'curved';
+  return null;
+}
+
 function allocateDownvotes(songs, budget, cap, profile, tradeoffs, downSet) {
   const totalBudget = budget;
   const pool = songs.filter((s) => downSet.has(s) && downEligible(s));
@@ -640,12 +647,115 @@ function allocateDownvotes(songs, budget, cap, profile, tradeoffs, downSet) {
   }
 
   const shape = profile.shape || 'auto';
-  if (shape === 'relative') {
+  const pin = normalizeDownShape(profile.downShape);
+  if (shape === 'relative' && !pin) {
     allocateRelativeDown(pool, budget, cap, profile);
-  } else {
-    allocateBellDown(pool, budget, cap, shape, profile, tradeoffs, songs);
+    spillDownRemainder(songs, totalBudget, cap, profile, tradeoffs, new Set(pool), downSet);
+    return;
   }
+
+  const resetDown = () => {
+    for (const s of songs) s.finalDownvotes = 0;
+  };
+  const applyShape = (which, trSink) => {
+    if (which === 'concentrated') allocateConcentratedDown(pool, budget, cap, profile);
+    else if (which === 'flat') allocateFlatDown(pool, budget, cap, profile);
+    else allocateBellDown(pool, budget, cap, shape, profile, trSink, songs);
+  };
+  // Full distribution (allocation + spill) for a shape, captured best-first over the
+  // pool; resets the down state so each candidate is computed cleanly.
+  const distFor = (which) => {
+    resetDown();
+    const tr = [];
+    applyShape(which, tr);
+    spillDownRemainder(songs, totalBudget, cap, profile, tr, new Set(pool), downSet);
+    const ordered = [...pool].sort(rankSort(profile));
+    const perSong = ordered.map((s) => ({
+      rawOrderIndex: s.rawOrderIndex,
+      title: s.title,
+      score: s.combinedScore ?? s.score ?? null,
+      votes: s.finalDownvotes || 0,
+    }));
+    return { shape: which, perSong, sig: perSong.map((p) => p.votes).join(',') };
+  };
+
+  const chosen = pin || 'curved';
+
+  // Propose the alternatives (deduped on the resulting distribution) when the owner
+  // hasn't pinned a shape — mirrors the upvote tier-structure fork.
+  if (!pin) {
+    const seen = new Set();
+    const distinct = [];
+    for (const which of DOWN_SHAPES) {
+      const c = distFor(which);
+      if (seen.has(c.sig)) continue;
+      seen.add(c.sig);
+      distinct.push(c);
+    }
+    if (distinct.length >= 2) {
+      tradeoffs.push({
+        kind: 'down-structure',
+        question: `Which downvote shape? Default is ${DOWN_SHAPE_LABEL[chosen]}; pick another with --down-shape <concentrated|flat|curved>.`,
+        options: distinct.map((c) => ({
+          label: `${DOWN_SHAPE_LABEL[c.shape]} — ${summarizeDownPerSong(c.perSong)}`,
+          value: c.shape,
+          downShape: c.shape,
+          shape: DOWN_SHAPE_LABEL[c.shape],
+          perSong: c.perSong,
+        })),
+      });
+    }
+  }
+
+  // Commit the chosen shape for real (its bell tier-split-down tradeoffs, if any,
+  // land on the live list).
+  resetDown();
+  applyShape(chosen, tradeoffs);
   spillDownRemainder(songs, totalBudget, cap, profile, tradeoffs, new Set(pool), downSet);
+}
+
+// Pile downvotes worst-first up to the per-song cap; uncapped => the whole bank on
+// the single worst song. Any cap-blocked remainder is handled by spillDownRemainder.
+function allocateConcentratedDown(pool, budget, cap, profile) {
+  const ranked = [...pool].sort(rankSortAsc(profile));
+  for (const s of ranked) s.finalDownvotes = 0;
+  let remaining = budget;
+  for (const s of ranked) {
+    if (remaining <= 0) break;
+    const take = Math.min(cap, remaining);
+    s.finalDownvotes = take;
+    remaining -= take;
+  }
+}
+
+// Spread downvotes as evenly as possible, worst-first round-robin: the worst songs
+// take the first 1 each, then a second pass, etc. (ties broken toward worst).
+function allocateFlatDown(pool, budget, cap, profile) {
+  const ranked = [...pool].sort(rankSortAsc(profile));
+  for (const s of ranked) s.finalDownvotes = 0;
+  let remaining = budget;
+  let progress = true;
+  while (remaining > 0 && progress) {
+    progress = false;
+    for (const s of ranked) {
+      if ((s.finalDownvotes || 0) >= cap) continue;
+      s.finalDownvotes = (s.finalDownvotes || 0) + 1;
+      remaining--;
+      progress = true;
+      if (remaining <= 0) break;
+    }
+  }
+}
+
+// "-N×count" signature for a downvote distribution (worst tiers first, trailing 0s
+// summarized), e.g. "-5×1 / 0×7" (concentrated) vs "-1×5 / 0×3" (flat).
+function summarizeDownPerSong(perSong) {
+  const byLevel = new Map();
+  for (const p of perSong) byLevel.set(p.votes, (byLevel.get(p.votes) || 0) + 1);
+  const levels = [...byLevel.keys()].sort((a, b) => b - a);
+  return levels
+    .map((lv) => `${lv > 0 ? `-${lv}` : '0'}×${byLevel.get(lv)}`)
+    .join(' / ');
 }
 
 // Weights below the shared opinion center — mirrors bellWeights above center.
@@ -689,7 +799,18 @@ function allocateRelativeDown(cands, budget, cap, profile) {
 
 function allocateBellDown(cands, budget, cap, shape, profile, tradeoffs, allSongs) {
   const ranked = [...cands].sort(rankSortAsc(profile));
-  const values = ranked.map((c) => rankValue(c, profile) ?? -Infinity);
+  // Unrankable songs (a disqualified entry with no score) must be the strongest
+  // downvote magnet, but a literal -Infinity poisons the bell math (Inf/Inf => NaN
+  // weights, runaway spill). Map them to a finite floor a full spread below the
+  // lowest real score so they sort worst and pull the most weight, cleanly.
+  const finite = ranked.map((c) => rankValue(c, profile)).filter((v) => Number.isFinite(v));
+  const minFinite = finite.length ? Math.min(...finite) : 0;
+  const maxFinite = finite.length ? Math.max(...finite) : 0;
+  const floor = minFinite - (Math.max(1, maxFinite - minFinite));
+  const values = ranked.map((c) => {
+    const v = rankValue(c, profile);
+    return Number.isFinite(v) ? v : floor;
+  });
   const center = opinionCenter(allSongs, profile);
   const spread = Math.max(...values) - Math.min(...values);
   const ratio = budget / ranked.length;
@@ -752,7 +873,7 @@ function allocateBellDown(cands, budget, cap, shape, profile, tradeoffs, allSong
         kind: 'tier-split-down',
         question: `Tied low score ${formatScore(t.value)} can't split ${t.points} downvote(s) evenly across ${t.members.length} songs, and no +/− breaks the tie.`,
         options: ordered.map((m) => ({
-          label: `${cell(m.title)} — ${m.finalDownvotes}`,
+          label: `${cell(m.title)} — -${m.finalDownvotes}`,
           value: m.rawOrderIndex,
         })),
       });
@@ -2049,11 +2170,12 @@ export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mo
   return L.join('\n');
 }
 
-export function buildJsonPayload({ round, budget, songs, totalSongs, ownSkipped, mode, tradeoffs, ownSongs = [] }) {
+export function buildJsonPayload({ round, budget, songs, totalSongs, ownSkipped, mode, tradeoffs, ownSongs = [], pick = null }) {
   return {
     round,
     mode,
     budget,
+    ...(pick ? { pick } : {}),
     totals: {
       totalSongs,
       ownSkipped,
