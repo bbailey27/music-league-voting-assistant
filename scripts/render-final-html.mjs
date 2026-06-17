@@ -93,7 +93,7 @@ function voteBadge(s) {
 function buildModel(music, fitData) {
   const mode = music.mode || 'objective';
   // Rehydrate each song's scoring signals from its comment so a manual fit
-  // token (e.g. "fit 8") keeps precedence over the LLM during the merge — this
+  // token (e.g. "8 fit") keeps precedence over the LLM during the merge — this
   // reproduces what parse-round did from the original round.
   const songs = (music.songs || []).map((s) => ({
     ...s,

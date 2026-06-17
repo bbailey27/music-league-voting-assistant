@@ -50,9 +50,10 @@ music score, so thematic/blended rounds can be scored without an LLM when you
 already know the fit. The fit signal feeds the same shape the LLM fit JSON
 produces (`fitScore` / `fitTier` / `gate`, `fitSource: 'manual'`).
 
-- **Explicit fit score:** `fit 8`, `fit85`, or `8 fit` — same digit-scaling as
-  music (`8`→80, `85`→85, `855`→85.5). So `72 music, fit 8` ⇒ music 72, fit 80.
-  A bare `fit 8` with no other number is a fit note only, not a music score.
+- **Explicit fit score:** `8 fit`, `85 fit`, or the reverse `fit 8` — same
+  digit-scaling as music (`8`→80, `85`→85, `855`→85.5). So `7 music, 8 fit` ⇒
+  music 70, fit 80. A bare `8 fit` with no other number is a fit note only, not a
+  music score.
 - **Fit tier word:** `excellent | strong | solid | moderate | weak`, with
   synonyms (`perfect`→excellent, `single keyword`→weak, `on-theme`→solid, …).
   Tier words are only honored when the comment is **armed** with the literal word

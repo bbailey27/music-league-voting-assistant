@@ -66,7 +66,7 @@ export function scoreComment(rawComment, mode) {
   };
 
   // First numeric token (optional single decimal) plus any trailing modifiers.
-  // Strip explicit fit-number tokens first so "fit 8" isn't read as music 80.
+  // Strip explicit fit-number tokens first so "8 fit" isn't read as music 80.
   const musicText = comment
     .replace(/\bfit\s*\d{1,3}(\.\d)?\b/i, ' ')
     .replace(/\b\d{1,3}(\.\d)?\s*fit\b/i, ' ');
@@ -181,7 +181,7 @@ const GATE_WORDS = [
 ];
 
 // Extract a manual fit signal from a comment: an explicit fit score
-// ("fit 8", "fit85", "8 fit", "f8"), a tier word, and/or a gate flag.
+// ("8 fit", "85 fit", or reverse "fit 8"), a tier word, and/or a gate flag.
 function parseFitTokens(comment) {
   const out = { fitScore: null, fitTier: null, gate: null };
   if (!comment) return out;

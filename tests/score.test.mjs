@@ -55,13 +55,17 @@ test('scoreComment disqualification + needs-input', () => {
 
 test('scoreComment manual fit notation', () => {
   // Explicit fit number alongside a music score (digit-scaled like music).
-  const both = scoreComment('78 music, fit 8', 'subjective');
+  // Primary style is number-then-word ("8 fit"); the reverse ("fit 8") also parses.
+  const both = scoreComment('78 music, 8 fit', 'subjective');
   assert.equal(both.score, 78, 'music score preserved');
-  assert.equal(both.fitScore, 80, 'fit 8 -> 80');
+  assert.equal(both.fitScore, 80, '8 fit -> 80');
   assert.equal(both.fitSource, 'manual');
+  const reversed = scoreComment('78 music, fit 8', 'subjective');
+  assert.equal(reversed.score, 78, 'reverse ordering: music score preserved');
+  assert.equal(reversed.fitScore, 80, 'reverse ordering: fit 8 -> 80');
 
-  // "fit 8" alone is a fit note, not a music score.
-  const fitOnly = scoreComment('fit 8', 'subjective');
+  // "8 fit" alone is a fit note, not a music score.
+  const fitOnly = scoreComment('8 fit', 'subjective');
   assert.equal(fitOnly.score, null, 'no music score leaks from the fit token');
   assert.equal(fitOnly.fitScore, 80);
 

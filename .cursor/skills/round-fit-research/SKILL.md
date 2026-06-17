@@ -137,7 +137,7 @@ Optional top-level narrative: `highlights[]`, `combine: { note, options[] }`.
 | LLM fit JSON                         | Fills fit-silent songs only                                     |
 | Submitter quote                      | Context in rationale only                                       |
 
-Manual notation reference: `spec/score-parsing.md` (`fit 8`, `strong fit`, `pass`, etc.).
+Manual notation reference: `spec/score-parsing.md` (`8 fit`, `strong fit`, `pass`, etc.).
 
 ## Do not
 
