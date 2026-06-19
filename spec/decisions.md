@@ -32,40 +32,79 @@ flag doing nothing on music-only rounds was a silent correctness gap — the wor
 was `--tier-count <n>`, which only coincidentally reproduces an option. Sharing one
 resolver keeps the two paths from drifting.
 
-**Refs.** `working tree` — `scripts/parse-round.mjs` (`resolveOptionPick`,
+**Refs.** `50556da` — `scripts/parse-round.mjs` (`resolveOptionPick`,
 `applyOptionPick`, music-only branch), `scripts/score-core.mjs` (`buildJsonPayload`
 `pick`), `tests/score.test.mjs` (two `resolveOptionPick` cases).
 
 ---
 
-## 2026-06-16 — one combined signed ballot; downvotes always negative
+## 2026-06-17 — downvote pins via signed `--pin`
 
-**Change.** The `Vote transfer` (raw submission order) section is now the single
-ballot for app entry: one signed `Votes` column where upvotes are positive and
-downvotes are **negative** (`-1`, `-5`), with a `{up} ▲ / -{down} ▼` total. The
-per-option **raw submission order** sub-table was removed from the `tier-structure`
-and `down-structure` comparisons (CLI and HTML) — those now show **by combined
-score only** (for judgment). Downvotes display as negative everywhere they appear:
-comparison tables, card vote badges (fit + final), the `tier-split-down` tie label,
-and the markdown raw-order ballot (already via `formatVoteAllocation`).
+**Change.** `--pin <i>:<v>` now accepts a **negative** value to pin downvotes
+(`--pin 6:-2` = two downvotes on song 6); positive still pins upvotes. `parsePins`
+returns `{ overrides, downOverrides }`, threaded into `profile.downOverrides`. In the
+allocator: a down-pinned song is dropped from the upvote pool (and leftover-spill
+targets) so it earns **zero upvotes**; in `allocateDownvotes` the pinned magnitudes
+are committed first, excluded from the shaped pool and from `spillDownRemainder` (so
+they're never topped up past the pin), and the residual bank is shaped around them.
+Pinned songs still appear (at their fixed magnitude) in every surfaced
+`down-structure` option's `perSong`, so the combo ballot shows them. `buildPickRecord`
+records pins as signed `downTweaks` for the training log.
 
-**Why.** The bottom transfer table duplicated each option's raw-order column and
-only ever showed the default upvote pick, and downvoted songs read as `0` there —
-so transcribing a ballot meant cross-referencing a separate downvote view and
-walking the list twice. Folding up + down into one signed column lets the whole
-ballot go in on a single pass, and dropping the duplicate per-option raw table
-removes the redundancy. Negative magnitudes are unambiguous even when a table holds
-only downvotes.
+**Why.** Downvotes had no manual override — the only knob was the global
+`--down-shape`. Punishing a specific song (e.g. `-2` on a DQ, `-1` on a few others)
+required hand-editing. Signed `--pin` reuses the existing up-pin mental model and
+matches the signed ballot's `+`/`-` display.
 
-**Overruled.** The earlier "two orders per option (combined + raw-for-entry)" layout
-(see 2026-06-16 _clean `--option` picks_ below) — the raw-for-entry half is now the
-shared combined transfer ballot instead of a per-option duplicate.
+**Overruled.** None. Considered and skipped: a down `preallocation-overflow` tradeoff
+when pins exceed the bank — `--pin` upvotes have no such guard, so down pins stay
+symmetric (a pin is a deliberate override).
 
-**Refs.** working tree — `scripts/render-html-shared.mjs` (`tierStructureTableHtml`
-single table + signed down), `scripts/parse-round.mjs` (`printTradeoffCli` drops raw
-table, signs down), `scripts/render-fit-html.mjs` + `scripts/render-final-html.mjs`
-(`renderTransfer` signed combined column; `voteBadge` negative; card down badge),
-`scripts/score-core.mjs` (`tier-split-down` label), `spec/point-allocation.md`.
+**Refs.** working tree — `scripts/parse-round.mjs` (`parsePins` signed split,
+`profile.downOverrides`, usage), `scripts/score-core.mjs` (`allocate` up-pool prune,
+`allocateDownvotes` pin handling, `buildPickRecord` `downTweaks`),
+`tests/score.test.mjs` (parse + engine cases), `spec/point-allocation.md`.
+
+## 2026-06-16 — combo ballot (one column per up×down) + downvotes always negative
+
+**Change.** The raw submission-order ballot moved out of the per-option comparison
+tables into one **Ballot (raw order)** section with **one column per up-option ×
+down-shape combo**. Each column is a complete signed ballot (upvotes positive,
+downvotes **negative**) read straight down, so any combination is transcribable
+without first committing to `--option`/`--down-shape`. Each combo is built
+independently (apply the up option, then the down shape); a song the up option
+upvotes **and** the down shape downvotes is a `!` **conflict** cell — never silently
+dropped or netted — and per-column totals still report each axis's intended budget
+plus a conflict count. Identical full-ballot columns are deduped (header lists the
+equivalent selectors). The per-axis comparison tables (`tier-structure`,
+`down-structure`) now show **by combined score only** (judgment). Downvotes display
+as negative everywhere: comparison tables, card vote badges (fit + final), the
+`tier-split-down` tie label, and the markdown raw-order ballot (via
+`formatVoteAllocation`). Built by a pure `buildComboBallot` shared by both HTML
+reports and the CLI (`printBallotCli`).
+
+**Why.** The old bottom transfer table duplicated each option's raw-order column and
+only showed the default pick, while downvotes lived in a separate view and read as
+`0` in the up table — so transcribing meant cross-referencing two tables and walking
+the list twice. A per-combo column makes entry a single-column read. The per-option
+raw tables were intentionally kept (transcribe any option without picking first), so
+deleting them was wrong; folding them into combos preserves that while combining up +
+down. A combo can't always be made internally valid (down shapes are computed for the
+default up pool, so a different up option may upvote a down-targeted song); rather
+than recompute per option or silently net to a smaller total, we flag the cell and
+leave the fix to the user (per their call).
+
+**Overruled.** The mid-session "single signed `Votes` column" ballot (never shipped)
+— replaced by per-combo columns after the per-option raw tables turned out to be
+deliberate. Also overrides the "raw-for-entry sub-table per option" half of the
+2026-06-16 _clean `--option` picks_ layout below.
+
+**Refs.** working tree — `scripts/render-html-shared.mjs` (`buildComboBallot`,
+`comboBallotHtml`, `.ballot` styles; removed dead `.transfer` styles),
+`scripts/render-fit-html.mjs` + `scripts/render-final-html.mjs` (call `comboBallotHtml`,
+dropped `renderTransfer`), `scripts/parse-round.mjs` (`printBallotCli`),
+`scripts/score-core.mjs` (`tier-split-down` label sign), `tests/score.test.mjs`
+(`buildComboBallot` cases), `spec/point-allocation.md`.
 
 ## 2026-06-16 — downvote shape as its own axis (concentrated / flat / curved)
 
@@ -85,7 +124,7 @@ clearly-bad/invalid song and spreading `-1`s across the worst are both legitimat
 A per-round knob plus a proposal of both (the owner's suggestion) beats hard-coding
 one. Upvote A/B/C options are unchanged.
 
-**Refs.** working tree — `scripts/score-core.mjs` (`allocateDownvotes`,
+**Refs.** `50556da` — `scripts/score-core.mjs` (`allocateDownvotes`,
 `allocateConcentratedDown`, `allocateFlatDown`, `normalizeDownShape`),
 `scripts/parse-round.mjs` (`--down-shape`, `parseDownShape`, `printTradeoffCli`),
 `scripts/render-final-html.mjs`, `scripts/render-html-shared.mjs`,
@@ -119,7 +158,7 @@ whatever is left at zero (DQ always included).
 and an untouched middle by a statistical center — rejected as an artificial
 boundary; reach is curve/ratio-driven, not capped at a center.
 
-**Refs.** working tree — `scripts/score-core.mjs` (`upvotePool`, `finishDownvotes`,
+**Refs.** `50556da` — `scripts/score-core.mjs` (`upvotePool`, `finishDownvotes`,
 `allocateBellDown`), `spec/point-allocation.md` (Allocation model).
 
 ## 2026-06-16 — record picks: reason, manual tweaks, options kept visible + training log

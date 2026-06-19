@@ -72,17 +72,18 @@ Re-run with different flags when the user asks for a different balance — same 
 
 ## Profile knobs
 
-| Field         | Purpose                                                                                |
-| ------------- | -------------------------------------------------------------------------------------- |
-| `rankBy`      | `music` (default plain), `fit`, `combined` (default with `--fit`)                      |
-| `weights`     | Combined blend; default `{ fit: 0.7, music: 0.3 }`; set via `--weights <fit>:<music>`  |
-| `shape`       | `auto` (mode-centered bell), `bell`, `compressed`, `balanced`, `top-heavy`, `relative` |
-| `downShape`   | Downvote curve (independent of `shape`): `concentrated`, `flat`, `curved` (default); via `--down-shape` |
-| `gate`        | Hard cutoff before tiering — see below                                                 |
-| `overrides`   | `{ rawOrderIndex: votes }` pin a song; rebalance rest. Set via `--pin <index>:<votes>` |
-| `tierCount`   | Force the number of final point tiers (distinct point values); via `--tier-count <n>`  |
-| `bucketCount` | Force K, the number of score clusters (buckets); via `--bucket-count <n>`              |
-| `leniency`    | Funds more `maybe`-band songs when gate allows                                         |
+| Field           | Purpose                                                                                                                          |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `rankBy`        | `music` (default plain), `fit`, `combined` (default with `--fit`)                                                                |
+| `weights`       | Combined blend; default `{ fit: 0.7, music: 0.3 }`; set via `--weights <fit>:<music>`                                            |
+| `shape`         | `auto` (mode-centered bell), `bell`, `compressed`, `balanced`, `top-heavy`, `relative`                                           |
+| `downShape`     | Downvote curve (independent of `shape`): `concentrated`, `flat`, `curved` (default); via `--down-shape`                          |
+| `gate`          | Hard cutoff before tiering — see below                                                                                           |
+| `overrides`     | `{ rawOrderIndex: votes }` pin a song's upvotes; rebalance rest. Set via `--pin <index>:<votes>`                                 |
+| `downOverrides` | `{ rawOrderIndex: magnitude }` pin a song's downvotes; forces it to 0 upvotes. Set via a **negative** `--pin`, e.g. `--pin 6:-2` |
+| `tierCount`     | Force the number of final point tiers (distinct point values); via `--tier-count <n>`                                            |
+| `bucketCount`   | Force K, the number of score clusters (buckets); via `--bucket-count <n>`                                                        |
+| `leniency`      | Funds more `maybe`-band songs when gate allows                                                                                   |
 
 ### Gates
 
@@ -143,17 +144,18 @@ Printed by CLI after parse/merge; listed in markdown "Needs your call". Re-run w
 
 Map natural language → profile:
 
-| User wants                                     | Try                                              |
-| ---------------------------------------------- | ------------------------------------------------ |
-| More separation / taller tiers                 | `--shape auto` or `--shape balanced`             |
-| Concentrate on favorites                       | `--shape top-heavy`                              |
-| Flat / mostly 1s                               | `--shape compressed`                             |
-| Fewer / more tiers                             | `--tier-count <n>` or accept `tier-structure`    |
-| Force cluster count                            | `--bucket-count <n>`                             |
-| Fit vs music balance                           | `--rank combined --weights <fit>:<music>`        |
-| Off-theme gets nothing                         | `--cutoff fit:68` or `--gate passFail`           |
-| Reward borderline fits                         | `--gate passFailMaybe` + `maybe-band` tradeoff     |
-| Pin a song                                     | `--pin <index>:<votes>`                          |
+| User wants                                      | Try                                            |
+| ----------------------------------------------- | ---------------------------------------------- |
+| More separation / taller tiers                  | `--shape auto` or `--shape balanced`           |
+| Concentrate on favorites                        | `--shape top-heavy`                            |
+| Flat / mostly 1s                                | `--shape compressed`                           |
+| Fewer / more tiers                              | `--tier-count <n>` or accept `tier-structure`  |
+| Force cluster count                             | `--bucket-count <n>`                           |
+| Fit vs music balance                            | `--rank combined --weights <fit>:<music>`      |
+| Off-theme gets nothing                          | `--cutoff fit:68` or `--gate passFail`         |
+| Reward borderline fits                          | `--gate passFailMaybe` + `maybe-band` tradeoff |
+| Pin a song's upvotes                            | `--pin <index>:<votes>`                        |
+| Pin a song's downvotes (punish a specific song) | `--pin <index>:-<n>` (e.g. `6:-2`)             |
 
 Dense/oversubscribed rounds (below ~1:1) naturally push more songs to 0 — expected and on-preference; rebalance manually or adjust shape only if a field calls for it.
 

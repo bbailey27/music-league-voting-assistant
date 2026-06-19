@@ -43,9 +43,9 @@ conversation that happens **after** the blocking gate is clear.
   song (`maxUpvotesPerSong`).
 - When `downvotesEnabled`: **downvote bank** = `downvoteBankSize`; **downvote
   cap** = `maxDownvotesPerSong`.
-- **profile**: `{ rankBy, gate, shape, weights, overrides, leniency, favoriteBand,
-tierCount, bucketCount }` plus downvote fields injected from the round budget via
-  `enrichProfileWithBudget()`.
+- **profile**: `{ rankBy, gate, shape, weights, overrides, downOverrides, leniency,
+favoriteBand, tierCount, bucketCount }` plus downvote fields injected from the round
+  budget via `enrichProfileWithBudget()`.
 - Each song carries a music `score` and an optional canonical fit signal
   (`fitScore` / `fitTier` / `gate`, see [fit-evaluation.md](fit-evaluation.md)).
 
@@ -322,8 +322,16 @@ pass)`: a `maybe` never earns more points than the lowest-funded pass. By
   allocator defaults to `curved` and surfaces a `down-structure` tradeoff proposing
   the distinct shapes (per-song previews, deduped); pinning it suppresses the
   proposal. See _Downvote shape is its own axis_.
-- **`overrides`** — `{ rawOrderIndex: votes }` pins a song's votes; the remaining
-  budget is shaped around it (also how the web re-runs after a tradeoff pick).
+- **`overrides`** — `{ rawOrderIndex: votes }` pins a song's **up**votes; the
+  remaining budget is shaped around it (also how the web re-runs after a tradeoff
+  pick). CLI: `--pin <i>:<v>`.
+- **`downOverrides`** — `{ rawOrderIndex: magnitude }` pins a song's **down**votes.
+  CLI: a **negative** `--pin` value (`--pin 6:-2` = two downvotes on song 6). A
+  down-pinned song is forced off the upvote axis (zero upvotes), its pinned magnitude
+  is committed first and is excluded from both the shaped pool and spill (never topped
+  up past the pin), and the rest of the down bank is shaped around it. Like up pins,
+  a pin can exceed the bank (deliberate manual override); there is no separate
+  overflow tradeoff, matching `--pin`'s upvote behavior.
 - **`favoriteBand`** — controls the R2 favorite top-band merge (scores ≥ 80 share
   the top tier). Default merges at `80` **for raw-score rounds only**; it is **off by
   default when `rankBy = combined`** (the `80` floor is a raw-music anchor). `{ min }`
@@ -355,13 +363,18 @@ pass)`: a `maybe` never earns more points than the lowest-funded pass. By
   the chosen column highlighted.
 
 The `tier-structure` and `down-structure` tradeoffs render as a song×option
-comparison in **combined-score order only** (for judgment). The raw
-submission-order ballot is **not** duplicated per option; it lives once in the
-**Vote transfer** section as a single combined ballot — upvotes positive, downvotes
-**negative**, one signed `Votes` column — so the whole ballot is entered in one pass.
-It interleaves the owner's own (unvotable) song so every submission slot is present
-and the ballot can't misalign. Downvotes always display as negative everywhere
-(comparison tables, cards, transfer, markdown).
+comparison in **combined-score order only** (for judgment). The raw submission-order
+ballot lives once, in the **Ballot (raw order)** section, as **one column per
+up-option × down-shape combo** — each column a complete signed ballot (upvotes
+positive, downvotes **negative**) you transcribe straight down without committing to
+`--option`/`--down-shape` first. Each combo is built independently (apply the up
+option, then that down shape); a song the up option upvotes **and** the down shape
+downvotes is a `!` **conflict** cell — never silently dropped or netted, and the
+per-column totals still report each axis's intended budget plus a conflict count, so
+you resolve it by hand (or with a downvote pin). Identical full-ballot columns are
+deduped (one header lists the equivalent selectors). Own (unvotable) songs render a
+dash in every column so no submission slot is skipped. Downvotes always display as
+negative everywhere (comparison tables, cards, ballot, markdown).
 
 ## Same score = same tier (scoring-type aware)
 

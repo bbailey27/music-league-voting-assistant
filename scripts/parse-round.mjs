@@ -22,6 +22,7 @@ import {
 } from './score-core.mjs';
 import { parseRoundDocument, recoverEscapedSource } from './extract-html.mjs';
 import { parseRoundText } from './parse-text.mjs';
+import { buildComboBallot } from './render-html-shared.mjs';
 import { matchFlag, takePositional } from './cli-args.mjs';
 import {
   roundIdFromInput,
@@ -125,26 +126,34 @@ function parseArgs(argv) {
   return args;
 }
 
-// Parse manual vote pins from "<rawOrderIndex>:<votes>" specs (repeatable and/or
-// comma-separated, e.g. --pin 2:2,8:2). Returns an overrides map { index: votes }
-// for profile.overrides, or undefined when nothing is pinned. Throws on garbage.
+// Parse manual vote pins from signed "<rawOrderIndex>:<votes>" specs (repeatable
+// and/or comma-separated, e.g. --pin 2:2,8:2,6:-2). A positive value pins upvotes,
+// a NEGATIVE value pins that many downvotes (6:-2 => two downvotes on song 6).
+// Returns { overrides, downOverrides } (each a { index: magnitude } map or undefined)
+// for profile.overrides / profile.downOverrides, or undefined when nothing is
+// pinned. Throws on garbage.
 export function parsePins(specs) {
   const list = (Array.isArray(specs) ? specs : [specs]).filter(Boolean);
   if (!list.length) return undefined;
   const overrides = {};
+  const downOverrides = {};
   for (const chunk of list) {
     for (const pair of String(chunk).split(',')) {
       if (!pair.trim()) continue;
       const [idx, votes] = pair.split(':');
       const i = Number(idx);
       const v = Number(votes);
-      if (!Number.isInteger(i) || i < 0 || !Number.isInteger(v) || v < 0) {
-        throw new Error(`Invalid --pin "${pair}" (use <rawOrderIndex>:<votes>, e.g. 2:2)`);
+      if (!Number.isInteger(i) || i < 0 || !Number.isInteger(v)) {
+        throw new Error(`Invalid --pin "${pair}" (use <rawOrderIndex>:<votes>, negative for downvotes, e.g. 2:2 or 6:-2)`);
       }
-      overrides[i] = v;
+      if (v < 0) downOverrides[i] = -v;
+      else overrides[i] = v;
     }
   }
-  return Object.keys(overrides).length ? overrides : undefined;
+  const hasUp = Object.keys(overrides).length > 0;
+  const hasDown = Object.keys(downOverrides).length > 0;
+  if (!hasUp && !hasDown) return undefined;
+  return { overrides: hasUp ? overrides : undefined, downOverrides: hasDown ? downOverrides : undefined };
 }
 
 // Validate a positive-integer count flag (shared by --tier-count / --bucket-count).
@@ -291,7 +300,7 @@ export function resolveOptionPick(tradeoffs, optionSpec, baseOverrides = {}) {
 // manual tweak ON TOP of the chosen option rather than getting baked into the menu
 // (a pinned song is otherwise pulled out of the tier pool and would vanish from every
 // option). Exits the process on an unavailable option spec.
-function applyOptionPick({ optionSpec, reason, reallocate, initialTradeoffs, baseOverrides, songs }) {
+function applyOptionPick({ optionSpec, reason, reallocate, initialTradeoffs, baseOverrides, downOverrides, songs }) {
   const hasPins = baseOverrides && Object.keys(baseOverrides).length > 0;
   const menuTradeoffs = hasPins ? reallocate(undefined) : initialTradeoffs;
   const { idx, presented, overrides, error } = resolveOptionPick(menuTradeoffs, optionSpec, baseOverrides);
@@ -300,7 +309,7 @@ function applyOptionPick({ optionSpec, reason, reallocate, initialTradeoffs, bas
     process.exit(1);
   }
   const tradeoffs = reallocate(overrides);
-  const pick = buildPickRecord({ options: presented, chosenIndex: idx, songs, reason });
+  const pick = buildPickRecord({ options: presented, chosenIndex: idx, songs, reason, downOverrides });
   console.log(
     `Applied option ${pick.chosen} — ${pick.tierCount} tier${pick.tierCount === 1 ? '' : 's'}, ${pick.shape}.` +
       (pick.tweaks.length ? ` (${pick.tweaks.length} manual tweak${pick.tweaks.length === 1 ? '' : 's'})` : '') +
@@ -324,8 +333,8 @@ function printTextTable(headers, rows, songCol) {
 // song×option comparison table in combined/rank order (for judgment), plus a legend
 // naming each option's shape and its selector (--option / --down-shape). Downvote
 // magnitudes always display as negative. The raw submission-order ballot is shown
-// once, combined across up + down, in the report's Vote transfer section.
-function printTradeoffCli(t, ownSongs = []) {
+// once by printBallotCli, with a column per up×down combo.
+function printTradeoffCli(t) {
   console.log(`  • ${t.question}`);
   const opts = (t.options || []).filter((o) => Array.isArray(o.perSong) && o.perSong.length);
   const isTable = t.kind === 'tier-structure' || t.kind === 'down-structure';
@@ -357,6 +366,46 @@ function printTradeoffCli(t, ownSongs = []) {
       : `${o.tierCount} tier${o.tierCount === 1 ? '' : 's'} · ${o.shape}`;
     console.log(`      ${letters[i]}${i === 0 ? ' (default)' : ''}: ${desc} · ${selector}`);
   });
+}
+
+// The raw-order ballot: one column per up-option × down-shape combo, each a full
+// signed ballot you transcribe straight down. A song an up option upvotes AND a down
+// shape downvotes is a `!` conflict (the two disagree) — flagged, never dropped.
+function printBallotCli(tradeoffs, songs = [], ownSongs = []) {
+  const { combos, rows } = buildComboBallot(tradeoffs, songs, ownSongs);
+  if (!combos.length || !rows.length) return;
+  if (!combos.some((c) => c.totals.up > 0 || c.totals.down > 0)) return;
+  const trunc = (s) => (String(s).length > 28 ? `${String(s).slice(0, 27)}…` : String(s));
+  const codeOf = (c) => c.members.map((m) => m.code).join('/');
+  const fmt = (v) => {
+    if (v === 'own') return '—';
+    if (v === 'conflict') return '!';
+    if (v > 0) return `+${v}`;
+    if (v < 0) return String(v);
+    return '·';
+  };
+  const headers = ['#', 'Song', ...combos.map(codeOf)];
+  const dataRows = rows.map((r) => [
+    String(r.rawOrderIndex),
+    trunc(r.title),
+    ...combos.map((c) => fmt(c.perIndex.get(r.rawOrderIndex))),
+  ]);
+  dataRows.push([
+    '',
+    'Total ▲/▼',
+    ...combos.map((c) => {
+      const base = c.totals.down > 0 ? `${c.totals.up}/-${c.totals.down}` : `${c.totals.up}`;
+      return c.totals.conflicts > 0 ? `${base} !${c.totals.conflicts}` : base;
+    }),
+  ]);
+  console.log('\nBallot (raw order) — each column is one full ballot (+up / -down); pick one and transcribe straight down:');
+  printTextTable(headers, dataRows, 1);
+  for (const c of combos) {
+    console.log(`  ${codeOf(c)} = ${c.members.map((m) => m.selector || 'default').join(' | ')}`);
+  }
+  if (combos.some((c) => c.totals.conflicts > 0)) {
+    console.log('  ! = up option and down shape disagree for that song — resolve by hand (or pin the downvote).');
+  }
 }
 
 // Append one self-contained line to the global training log (analysis/picks.jsonl):
@@ -422,7 +471,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.file) {
     console.error(
-      'Usage: node scripts/parse-round.mjs <round.html|round.txt> [--mode objective|subjective] [--no-json] [--lenient] [--shape ...] [--down-shape concentrated|flat|curved] [--tier-count <n>] [--bucket-count <n>] [--option <A|B|C> [--reason "why"]] [--favorite-band <min>|--no-favorite-band] [--pin <i>:<v>] [--fit <fit.json> [--rank combined] [--weights <fit>:<music>] [--gate ...] [--cutoff ...]]'
+      'Usage: node scripts/parse-round.mjs <round.html|round.txt> [--mode objective|subjective] [--no-json] [--lenient] [--shape ...] [--down-shape concentrated|flat|curved] [--tier-count <n>] [--bucket-count <n>] [--option <A|B|C> [--reason "why"]] [--favorite-band <min>|--no-favorite-band] [--pin <i>:<v> (negative <v> pins downvotes, e.g. 6:-2)] [--fit <fit.json> [--rank combined] [--weights <fit>:<music>] [--gate ...] [--cutoff ...]]'
     );
     process.exit(1);
   }
@@ -447,13 +496,15 @@ async function main() {
 
   const gate = buildGate(args);
   const weights = parseWeights(args.weights);
-  const overrides = parsePins(args.pin);
+  const pins = parsePins(args.pin);
+  const overrides = pins?.overrides;
+  const downOverrides = pins?.downOverrides;
   const tierCount = parseTierCount(args.tierCount);
   const bucketCount = parseBucketCount(args.bucketCount);
   const favoriteBand = parseFavoriteBand(args.favoriteBand);
   const downShape = parseDownShape(args.downShape);
   const profile = enrichProfileWithBudget(
-    { shape: args.shape, downShape, gate, weights, overrides, tierCount, bucketCount, favoriteBand },
+    { shape: args.shape, downShape, gate, weights, overrides, downOverrides, tierCount, bucketCount, favoriteBand },
     parsed.budget
   );
   if (args.rank) profile.rankBy = args.rank;
@@ -486,6 +537,7 @@ async function main() {
         reallocate: (overrides) => mergeFitJson(parsed, fitData, { ...mergeProfile, overrides }).tradeoffs,
         initialTradeoffs: tradeoffs,
         baseOverrides: profile.overrides,
+        downOverrides: profile.downOverrides,
         songs: parsed.songs,
       });
       tradeoffs = picked.tradeoffs;
@@ -501,8 +553,9 @@ async function main() {
     console.log(`Wrote ${scoresOut} (merged scores + draftVotes; fit-only source unchanged: ${args.fit})`);
     if (tradeoffs.length) {
       console.log(`\n${tradeoffs.length} tradeoff(s) need your call:`);
-      for (const t of tradeoffs) printTradeoffCli(t, parsed.ownSongs);
+      for (const t of tradeoffs) printTradeoffCli(t);
     }
+    printBallotCli(tradeoffs, fitData.songs, parsed.ownSongs);
     return;
   }
 
@@ -522,6 +575,7 @@ async function main() {
       reallocate: (overrides) => allocate(parsed.songs, budget, cap, { ...profile, overrides }).tradeoffs,
       initialTradeoffs: tradeoffs,
       baseOverrides: profile.overrides,
+      downOverrides: profile.downOverrides,
       songs: parsed.songs,
     });
     tradeoffs = picked.tradeoffs;

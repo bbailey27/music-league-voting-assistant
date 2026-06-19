@@ -39,9 +39,9 @@ const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 // combined/rank order — for judging which songs each option rewards — plus a legend
 // naming each option's shape and its selector (`--option` / `--down-shape`).
 // Downvote magnitudes always display as negative. The raw submission-order ballot
-// is NOT duplicated per option here; it lives once, combined across up + down, in
-// the Vote transfer section. Falls back gracefully when `perSong` is absent.
-function tierStructureTableHtml(t, ownSongs = [], chosenIndex = null) {
+// is NOT duplicated per option here; it lives once, with a column per up×down combo,
+// in the "Ballot (raw order)" section. Falls back gracefully when `perSong` is absent.
+function tierStructureTableHtml(t, chosenIndex = null) {
   const down = t.kind === 'down-structure';
   const opts = (t.options || []).filter((o) => Array.isArray(o.perSong) && o.perSong.length);
   if (!opts.length) {
@@ -62,8 +62,8 @@ function tierStructureTableHtml(t, ownSongs = [], chosenIndex = null) {
     return `<tr>${'<td></td>'.repeat(extraLead)}<td>Total</td>${cells}</tr>`;
   };
 
-  // Combined/rank order. (The raw-submission-order ballot lives once in the Vote
-  // transfer section, combined across up + down — not duplicated per option here.)
+  // Combined/rank order. (The raw-submission-order ballot lives once in the
+  // "Ballot (raw order)" section, with a column per up×down combo — not here.)
   const combinedBody = opts[0].perSong
     .map((r, ri) => {
       const cells = opts
@@ -102,11 +102,11 @@ ${combinedBody}
 </div>`;
 }
 
-// Render a recorded pick: the chosen distribution as a focused combined+raw table
-// (incl. the owner's own song), the reason + any manual tweaks, and a collapsed
-// "options considered" comparison (all options, chosen column highlighted) so the
-// alternatives stay visible and auditable after the pick.
-export function pickHtml(pick, ownSongs = []) {
+// Render a recorded pick: the chosen distribution as a focused combined-score table,
+// the reason + any manual tweaks, and a collapsed "options considered" comparison
+// (all options, chosen column highlighted) so the alternatives stay visible and
+// auditable after the pick.
+export function pickHtml(pick) {
   if (!pick || !Array.isArray(pick.options) || !pick.options.length) return '';
   const ci = pick.chosenIndex ?? pick.options.findIndex((o) => o.isChosen);
   const chosen = pick.options[ci];
@@ -135,7 +135,7 @@ export function pickHtml(pick, ownSongs = []) {
 
   const considered = `<details class="considered">
   <summary>Options considered (${pick.options.map((o) => esc(o.letter)).join(' / ')})</summary>
-  ${tierStructureTableHtml({ kind: 'tier-structure', question: '', options: pick.options }, ownSongs, ci)}
+  ${tierStructureTableHtml({ kind: 'tier-structure', question: '', options: pick.options }, ci)}
 </details>`;
 
   return `<section class="pick tradeoffs">
@@ -156,13 +156,13 @@ ${combinedRows}
 
 // Render an allocator "needs your call" tradeoff list: distribution forks become
 // comparison tables; every other kind stays a compact bulleted choice list.
-export function tradeoffsHtml(tradeoffs, ownSongs = []) {
+export function tradeoffsHtml(tradeoffs) {
   const list = Array.isArray(tradeoffs) ? tradeoffs : [];
   if (!list.length) return '';
   const blocks = list
     .map((t) => {
       if (t.kind === 'tier-structure' || t.kind === 'down-structure')
-        return tierStructureTableHtml(t, ownSongs);
+        return tierStructureTableHtml(t);
       const opts = (t.options || []).map((o) => `<li>${esc(o.label ?? o)}</li>`).join('');
       return `<div class="tradeoff"><p class="q">${esc(t.question)}</p>${opts ? `<ul>${opts}</ul>` : ''}</div>`;
     })
@@ -170,6 +170,194 @@ export function tradeoffsHtml(tradeoffs, ownSongs = []) {
   return `<section class="tradeoffs">
   <h2>Needs your call</h2>
 ${blocks}
+</section>`;
+}
+
+// Short codes for the down-shape axis in combo column labels (e.g. "A·cv").
+const DOWN_SHORT = { curved: 'cv', flat: 'fl', concentrated: 'cc' };
+const downShort = (shape) => DOWN_SHORT[shape] || String(shape || '').slice(0, 2);
+
+// Read the live allocation off a song regardless of report source: final-html uses
+// `finalVotes`/`finalDownvotes`, fit-html uses `draftVotes`/`draftDownvotes`.
+const ballotUp = (s) => Number(s.finalVotes ?? s.draftVotes ?? 0) || 0;
+const ballotDown = (s) => Number(s.finalDownvotes ?? s.draftDownvotes ?? 0) || 0;
+
+// Build the raw-order ballot as one column per up-option × down-shape COMBO. Each
+// column is a complete signed ballot (upvotes positive, downvotes negative) that
+// reads straight down. A song that an up option upvotes AND a down shape also
+// downvotes is a `'conflict'` cell: the two axes disagree for that combo, so we
+// neither silently drop the downvote nor shrink the total — we flag it and let the
+// user resolve it by hand (or via a downvote pin). Per-column totals report each
+// axis's intended budget plus a conflict count. Identical columns are deduped.
+// Pure; consumed by both the HTML report and the CLI.
+export function buildComboBallot(tradeoffs, songs = [], ownSongs = []) {
+  const list = Array.isArray(tradeoffs) ? tradeoffs : [];
+  const upTr = list.find((t) => t.kind === 'tier-structure');
+  const downTr = list.find((t) => t.kind === 'down-structure');
+
+  const mapVotes = (perSong) => {
+    const m = new Map();
+    for (const p of perSong || []) {
+      const v = Number(p.votes) || 0;
+      if (v) m.set(p.rawOrderIndex, v);
+    }
+    return m;
+  };
+  const defaultMap = (read) => {
+    const m = new Map();
+    for (const s of songs || []) {
+      const v = read(s);
+      if (v) m.set(s.rawOrderIndex, v);
+    }
+    return m;
+  };
+
+  // Up axis: tier-structure options if present, else the single live allocation.
+  const upOptions =
+    upTr && Array.isArray(upTr.options) && upTr.options.length
+      ? upTr.options.map((o, i) => ({
+          code: OPTION_LETTERS[i],
+          selector: `--option ${OPTION_LETTERS[i]}`,
+          votes: mapVotes(o.perSong),
+        }))
+      : [{ code: null, selector: null, votes: defaultMap(ballotUp) }];
+
+  // Down axis: down-structure shapes if present, else the single live down shape,
+  // else none at all (up-only columns).
+  let downOptions;
+  if (downTr && Array.isArray(downTr.options) && downTr.options.length) {
+    downOptions = downTr.options.map((o) => ({
+      code: downShort(o.downShape),
+      selector: `--down-shape ${o.downShape}`,
+      down: mapVotes(o.perSong),
+    }));
+  } else {
+    const dmap = defaultMap(ballotDown);
+    downOptions = dmap.size ? [{ code: '▼', selector: null, down: dmap }] : [null];
+  }
+
+  const rows = [
+    ...(songs || []).map((s) => ({ rawOrderIndex: s.rawOrderIndex, title: s.title, artist: s.artist, isOwn: false })),
+    ...(ownSongs || []).map((s) => ({ rawOrderIndex: s.rawOrderIndex, title: s.title, artist: s.artist, isOwn: true })),
+  ].sort((a, b) => (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0));
+
+  const raw = [];
+  for (const up of upOptions) {
+    for (const down of downOptions) {
+      const perIndex = new Map();
+      let upTotal = 0;
+      let downTotal = 0;
+      let conflicts = 0;
+      for (const r of rows) {
+        if (r.isOwn) {
+          perIndex.set(r.rawOrderIndex, 'own');
+          continue;
+        }
+        const u = up.votes.get(r.rawOrderIndex) || 0;
+        const d = down ? down.down.get(r.rawOrderIndex) || 0 : 0;
+        upTotal += u;
+        downTotal += d;
+        let cell;
+        if (u > 0 && d > 0) {
+          cell = 'conflict';
+          conflicts++;
+        } else if (u > 0) cell = u;
+        else if (d > 0) cell = -d;
+        else cell = 0;
+        perIndex.set(r.rawOrderIndex, cell);
+      }
+      const code = [up.code, down && down.code].filter(Boolean).join('·') || '▲';
+      const selector = [up.selector, down && down.selector].filter(Boolean).join(' ') || null;
+      raw.push({ code, selector, perIndex, totals: { up: upTotal, down: downTotal, conflicts } });
+    }
+  }
+
+  // Dedup columns that produce an identical ballot; merge their selectors.
+  const bySig = new Map();
+  const combos = [];
+  for (const c of raw) {
+    const sig = rows.map((r) => c.perIndex.get(r.rawOrderIndex)).join('|');
+    const hit = bySig.get(sig);
+    if (hit) {
+      hit.members.push({ code: c.code, selector: c.selector });
+      continue;
+    }
+    const col = { perIndex: c.perIndex, totals: c.totals, members: [{ code: c.code, selector: c.selector }] };
+    bySig.set(sig, col);
+    combos.push(col);
+  }
+
+  return { combos, rows };
+}
+
+// Render the combo ballot as a (horizontally scrollable) table: rows are raw
+// submission slots (own songs interleaved as dashes), columns are deduped combos.
+export function comboBallotHtml(tradeoffs, songs = [], ownSongs = []) {
+  const { combos, rows } = buildComboBallot(tradeoffs, songs, ownSongs);
+  if (!combos.length || !rows.length) return '';
+  if (!combos.some((c) => c.totals.up > 0 || c.totals.down > 0)) return '';
+  const anyConflict = combos.some((c) => c.totals.conflicts > 0);
+
+  const headCols = combos
+    .map((c) => {
+      const title = c.members.map((m) => m.selector || 'default').join('  ·  ');
+      return `<th class="num c" title="${esc(title)}">${esc(c.members.map((m) => m.code).join(' / '))}</th>`;
+    })
+    .join('');
+
+  const body = rows
+    .map((r) => {
+      const cells = combos
+        .map((c) => {
+          const v = c.perIndex.get(r.rawOrderIndex);
+          if (r.isOwn || v === 'own') return '<td class="c zero">—</td>';
+          if (v === 'conflict')
+            return '<td class="c conflict" title="Conflict: upvoted by this option and downvoted by this shape — resolve by hand">!</td>';
+          if (v > 0) return `<td class="c up">+${v}</td>`;
+          if (v < 0) return `<td class="c down">${v}</td>`;
+          return '<td class="c zero">·</td>';
+        })
+        .join('');
+      const id = `<td class="num muted">${esc(r.rawOrderIndex)}</td><td>${esc(r.title)}</td><td class="muted">${esc(r.artist)}</td>`;
+      return `<tr${r.isOwn ? ' class="own"' : ''}>${id}${cells}</tr>`;
+    })
+    .join('\n');
+
+  const foot = combos
+    .map((c) => {
+      const base = c.totals.down > 0 ? `${c.totals.up}/-${c.totals.down}` : `${c.totals.up}`;
+      const conf = c.totals.conflicts > 0 ? ` <span class="cf">!${c.totals.conflicts}</span>` : '';
+      return `<td class="num c">${base}${conf}</td>`;
+    })
+    .join('');
+
+  const legend = combos
+    .map(
+      (c) =>
+        `<li>${c.members
+          .map((m) => `<code>${esc(m.code)}</code> = <code>${esc(m.selector || 'default')}</code>`)
+          .join('; ')}</li>`
+    )
+    .join('');
+
+  const conflictNote = anyConflict
+    ? '<p class="muted cf-note"><b>!</b> = this up option upvotes a song the down shape also downvotes, so the two disagree for that combo — resolve by hand (or pin the downvote). Totals show each axis\u2019s intended budget.</p>'
+    : '';
+
+  return `<section class="ballot">
+  <h2>Ballot (raw order)</h2>
+  <p class="muted">Each column is one complete ballot (upvotes +, downvotes \u2212) in Music League submission order — pick a column and transcribe straight down, no need to choose first.</p>
+  <div class="ballot-scroll">
+  <table>
+    <thead><tr><th class="num">#</th><th>Title</th><th>Artist</th>${headCols}</tr></thead>
+    <tbody>
+${body}
+    </tbody>
+    <tfoot><tr><td></td><td>Total ▲ / ▼</td><td></td>${foot}</tr></tfoot>
+  </table>
+  </div>
+  <ul class="legend">${legend}</ul>
+  ${conflictNote}
 </section>`;
 }
 
@@ -242,14 +430,25 @@ th { color: var(--muted); font-weight: 600; }
 @media (prefers-color-scheme: dark) { .flag { color: hsl(42 90% 70%); } .flag.dq { color: hsl(0 80% 72%); } }
 .meta { display: flex; flex-wrap: wrap; gap: .75rem; color: var(--muted); font-size: .82rem; }
 
-.transfer td.votes { font-weight: 700; }
-.transfer tr.has-votes td.votes { color: hsl(145 60% 38%); }
-.transfer td.votes.down { color: hsl(0 65% 45%); }
+.ballot-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.ballot table { font-size: .85rem; }
+.ballot th.c, .ballot td.c { white-space: nowrap; }
+.ballot td.c { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.ballot td.c.up { color: hsl(145 60% 38%); }
+.ballot td.c.down { color: hsl(0 65% 45%); }
+.ballot td.c.conflict { color: hsl(35 90% 42%); font-weight: 800; }
+.ballot td.c.zero { color: var(--muted); font-weight: 400; }
+.ballot tr.own td { color: var(--muted); font-style: italic; }
+.ballot tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: none; white-space: nowrap; }
+.ballot tfoot .cf { color: hsl(35 90% 42%); }
+.ballot .legend { margin: .6rem 0 0; padding-left: 1.1rem; font-size: .82rem; color: var(--muted); }
+.ballot .legend code { font-size: .82rem; }
+.ballot .cf-note { font-size: .82rem; margin: .5rem 0 0; }
 @media (prefers-color-scheme: dark) {
-  .transfer tr.has-votes td.votes { color: hsl(145 60% 62%); }
-  .transfer td.votes.down { color: hsl(0 70% 68%); }
+  .ballot td.c.up { color: hsl(145 60% 62%); }
+  .ballot td.c.down { color: hsl(0 70% 68%); }
+  .ballot td.c.conflict, .ballot tfoot .cf { color: hsl(40 90% 65%); }
 }
-.transfer tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: none; }
 
 .tradeoffs .tradeoff { margin: 0 0 1.25rem; }
 .tradeoffs .q { font-weight: 600; margin: 0 0 .5rem; }
@@ -273,7 +472,6 @@ th { color: var(--muted); font-weight: 600; }
 .tradeoffs table.compare tr.own td { color: var(--muted); font-style: italic; }
 .tradeoffs .legend { margin: .6rem 0 0; padding-left: 1.1rem; font-size: .85rem; color: var(--muted); }
 .tradeoffs .legend code { font-size: .82rem; }
-.transfer tr.own td { color: var(--muted); font-style: italic; }
 
 @media (max-width: 560px) {
   .card { grid-template-columns: 1fr; gap: .5rem; }

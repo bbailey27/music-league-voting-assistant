@@ -449,6 +449,16 @@ export function allocate(songs, budget, cap = Infinity, profile = {}) {
   const downCap = profile.downvoteCap ?? Infinity;
   const upSet = upvotePool(songs, profile, budget, downBudget, downCap);
 
+  // Downvote pins force a song onto the down axis: it must earn zero upvotes, so drop
+  // it from the upvote pool (and from any leftover-spill targets) up front.
+  const downOverrides = profile.downOverrides || {};
+  const downPinnedIdx = new Set(
+    Object.entries(downOverrides)
+      .filter(([, v]) => Number.isFinite(v) && v > 0)
+      .map(([k]) => Number(k))
+  );
+  if (downPinnedIdx.size) for (const s of songs) if (downPinnedIdx.has(s.rawOrderIndex)) upSet.delete(s);
+
   const scored = songs.filter(
     (s) =>
       upSet.has(s) &&
@@ -640,36 +650,56 @@ function normalizeDownShape(v) {
 
 function allocateDownvotes(songs, budget, cap, profile, tradeoffs, downSet) {
   const totalBudget = budget;
-  const pool = songs.filter((s) => downSet.has(s) && downEligible(s));
-  if (!pool.length || budget <= 0) {
-    spillDownRemainder(songs, totalBudget, cap, profile, tradeoffs, new Set(), downSet);
+
+  // Downvote pins fix a song's downvotes: committed up front, excluded from the
+  // shaped pool AND from spill (so they're never topped up past the pin), with the
+  // rest of the bank shaped around them. `downSet`/`budget` below are the residual.
+  const downOverrides = profile.downOverrides || {};
+  const isPinned = (s) => Number.isFinite(downOverrides[s.rawOrderIndex]) && downOverrides[s.rawOrderIndex] > 0;
+  const pinAmount = (s) => Math.max(0, Math.min(downOverrides[s.rawOrderIndex], cap));
+  const pinnedDown = songs.filter((s) => downSet.has(s) && isPinned(s));
+  const applyPins = () => {
+    for (const s of pinnedDown) s.finalDownvotes = pinAmount(s);
+  };
+  const downPool = pinnedDown.length ? new Set([...downSet].filter((s) => !isPinned(s))) : downSet;
+  const shapedBudget = Math.max(0, totalBudget - pinnedDown.reduce((a, s) => a + pinAmount(s), 0));
+
+  const pool = songs.filter((s) => downPool.has(s) && downEligible(s));
+  if (!pool.length || shapedBudget <= 0) {
+    for (const s of songs) s.finalDownvotes = 0;
+    applyPins();
+    spillDownRemainder(songs, totalBudget, cap, profile, tradeoffs, new Set(pinnedDown), downPool);
     return;
   }
 
   const shape = profile.shape || 'auto';
   const pin = normalizeDownShape(profile.downShape);
   if (shape === 'relative' && !pin) {
-    allocateRelativeDown(pool, budget, cap, profile);
-    spillDownRemainder(songs, totalBudget, cap, profile, tradeoffs, new Set(pool), downSet);
+    for (const s of songs) s.finalDownvotes = 0;
+    applyPins();
+    allocateRelativeDown(pool, shapedBudget, cap, profile);
+    spillDownRemainder(songs, totalBudget, cap, profile, tradeoffs, new Set(pool), downPool);
     return;
   }
 
   const resetDown = () => {
     for (const s of songs) s.finalDownvotes = 0;
+    applyPins();
   };
   const applyShape = (which, trSink) => {
-    if (which === 'concentrated') allocateConcentratedDown(pool, budget, cap, profile);
-    else if (which === 'flat') allocateFlatDown(pool, budget, cap, profile);
-    else allocateBellDown(pool, budget, cap, shape, profile, trSink, songs);
+    if (which === 'concentrated') allocateConcentratedDown(pool, shapedBudget, cap, profile);
+    else if (which === 'flat') allocateFlatDown(pool, shapedBudget, cap, profile);
+    else allocateBellDown(pool, shapedBudget, cap, shape, profile, trSink, songs);
   };
   // Full distribution (allocation + spill) for a shape, captured best-first over the
-  // pool; resets the down state so each candidate is computed cleanly.
+  // pool (pinned songs included, at their fixed magnitude); resets the down state so
+  // each candidate is computed cleanly.
   const distFor = (which) => {
     resetDown();
     const tr = [];
     applyShape(which, tr);
-    spillDownRemainder(songs, totalBudget, cap, profile, tr, new Set(pool), downSet);
-    const ordered = [...pool].sort(rankSort(profile));
+    spillDownRemainder(songs, totalBudget, cap, profile, tr, new Set(pool), downPool);
+    const ordered = [...pool, ...pinnedDown].sort(rankSort(profile));
     const perSong = ordered.map((s) => ({
       rawOrderIndex: s.rawOrderIndex,
       title: s.title,
@@ -708,10 +738,10 @@ function allocateDownvotes(songs, budget, cap, profile, tradeoffs, downSet) {
   }
 
   // Commit the chosen shape for real (its bell tier-split-down tradeoffs, if any,
-  // land on the live list).
+  // land on the live list). resetDown re-applies the pins.
   resetDown();
   applyShape(chosen, tradeoffs);
-  spillDownRemainder(songs, totalBudget, cap, profile, tradeoffs, new Set(pool), downSet);
+  spillDownRemainder(songs, totalBudget, cap, profile, tradeoffs, new Set(pool), downPool);
 }
 
 // Pile downvotes worst-first up to the per-song cap; uncapped => the whole bank on
@@ -1844,7 +1874,14 @@ export function mergeFit(songs, fitSongs, { weights = DEFAULT_COMBINED_WEIGHTS, 
 // Pure — IO (scores.json / picks.jsonl) lives in the CLI. `options` are the
 // tier-structure tradeoff options (each with `perSong`); `songs` is the allocated
 // field after the pick is applied.
-export function buildPickRecord({ options, chosenIndex, songs, reason = null, pickedAt = new Date().toISOString() }) {
+export function buildPickRecord({
+  options,
+  chosenIndex,
+  songs,
+  reason = null,
+  downOverrides = null,
+  pickedAt = new Date().toISOString(),
+}) {
   const letter = (i) => String.fromCharCode(65 + i);
   const chosen = options[chosenIndex];
   if (!chosen) return null;
@@ -1856,6 +1893,18 @@ export function buildPickRecord({ options, chosenIndex, songs, reason = null, pi
       tweaks.push({ rawOrderIndex: ps.rawOrderIndex, title: ps.title, from: ps.votes, to: fin });
     }
   }
+  // Downvote pins are deliberate manual deviations on the down axis; log them too
+  // (as signed magnitudes) so the training data captures the full ballot.
+  const downTweaks = [];
+  if (downOverrides) {
+    const titleByIdx = new Map(songs.map((s) => [s.rawOrderIndex, s.title]));
+    const downByIdx = new Map(songs.map((s) => [s.rawOrderIndex, s.finalDownvotes ?? 0]));
+    for (const [k, v] of Object.entries(downOverrides)) {
+      if (!(v > 0)) continue;
+      const i = Number(k);
+      downTweaks.push({ rawOrderIndex: i, title: titleByIdx.get(i) ?? null, to: -(downByIdx.get(i) || v) });
+    }
+  }
   return {
     chosen: letter(chosenIndex),
     chosenIndex,
@@ -1864,6 +1913,7 @@ export function buildPickRecord({ options, chosenIndex, songs, reason = null, pi
     reason: reason || null,
     pickedAt,
     tweaks,
+    ...(downTweaks.length ? { downTweaks } : {}),
     options: options.map((o, i) => ({
       letter: letter(i),
       tierCount: o.tierCount,

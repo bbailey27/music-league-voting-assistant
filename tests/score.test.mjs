@@ -22,6 +22,7 @@ import {
   parseDownShape,
   resolveOptionPick,
 } from '../scripts/parse-round.mjs';
+import { buildComboBallot } from '../scripts/render-html-shared.mjs';
 
 // ---------------------------------------------------------------------------
 // scoreComment: digit scaling, modifiers, disqualification, fit tokens
@@ -1230,6 +1231,53 @@ test('down-structure tradeoff is surfaced (auto) and suppressed when --down-shap
   assert.ok(!t2.find((t) => t.kind === 'down-structure'), 'a pinned shape suppresses the proposal');
 });
 
+test('downvote pin fixes a song\'s downvotes and forces it off the upvote axis', () => {
+  const songs = mk([90, 85, 80, 75, 70, 65, 60, 55]);
+  // Pin the top song (index 0) to 2 downvotes — normally it would be top-upvoted.
+  allocate(
+    songs,
+    10,
+    3,
+    downProfile({ downvoteBudget: 5, downvoteCap: 2, downShape: 'concentrated', downOverrides: { 0: 2 } })
+  );
+  const pinned = songs.find((s) => s.rawOrderIndex === 0);
+  assert.equal(pinned.finalDownvotes, 2, 'pinned downvotes honored exactly');
+  assert.equal(pinned.finalVotes || 0, 0, 'pinned-down song earns zero upvotes');
+  assert.equal(sum(songs), 10, 'upvote bank still fully spent over the rest');
+  assert.equal(sumDown(songs), 5, 'down bank still fully spent');
+  for (const s of songs) assert.ok(!(s.finalVotes && s.finalDownvotes), `${s.title} not both up and down`);
+});
+
+test('downvote pin is never topped up past its magnitude by spill', () => {
+  const songs = mk([90, 85, 80, 75, 70, 65, 60, 55]);
+  // Big bank, generous cap: spill would otherwise pile onto the worst songs.
+  allocate(
+    songs,
+    6,
+    3,
+    downProfile({ downvoteBudget: 8, downvoteCap: 4, downShape: 'concentrated', downOverrides: { 7: 1 } })
+  );
+  const pinned = songs.find((s) => s.rawOrderIndex === 7); // the worst song, pinned low
+  assert.equal(pinned.finalDownvotes, 1, 'spill respects the pin instead of topping it up');
+  assert.equal(sumDown(songs), 8, 'remaining bank shaped/spilled onto the others');
+});
+
+test('downvote pin appears in every surfaced down-structure option', () => {
+  const songs = mk([90, 85, 80, 75, 70, 65, 60, 55]);
+  const { tradeoffs } = allocate(
+    songs,
+    10,
+    3,
+    downProfile({ downvoteBudget: 5, downvoteCap: 2, downOverrides: { 0: 2 } })
+  );
+  const ds = tradeoffs.find((t) => t.kind === 'down-structure');
+  assert.ok(ds, 'down-structure still surfaced alongside a pin');
+  for (const opt of ds.options) {
+    const row = opt.perSong.find((p) => p.rawOrderIndex === 0);
+    assert.ok(row && row.votes === 2, 'pinned song shows its fixed downvotes in every option');
+  }
+});
+
 // ---------------------------------------------------------------------------
 // parseWeights: CLI --weights <fit>:<music>, normalized to sum 1
 // ---------------------------------------------------------------------------
@@ -1262,8 +1310,17 @@ test('parseWeights rejects malformed or degenerate input', () => {
 // parsePins: CLI --pin <rawOrderIndex>:<votes> -> overrides map
 // ---------------------------------------------------------------------------
 test('parsePins parses comma-separated and repeated specs', () => {
-  assert.deepEqual(parsePins('2:2,8:2'), { 2: 2, 8: 2 });
-  assert.deepEqual(parsePins(['2:2', '8:1']), { 2: 2, 8: 1 });
+  assert.deepEqual(parsePins('2:2,8:2'), { overrides: { 2: 2, 8: 2 }, downOverrides: undefined });
+  assert.deepEqual(parsePins(['2:2', '8:1']), { overrides: { 2: 2, 8: 1 }, downOverrides: undefined });
+});
+
+test('parsePins splits negative values into downvote pins', () => {
+  assert.deepEqual(parsePins('1:2,6:-2,8:-1'), {
+    overrides: { 1: 2 },
+    downOverrides: { 6: 2, 8: 1 },
+  });
+  // Down-only pins leave overrides undefined.
+  assert.deepEqual(parsePins('6:-2'), { overrides: undefined, downOverrides: { 6: 2 } });
 });
 
 test('parsePins returns undefined when nothing is pinned', () => {
@@ -1275,7 +1332,7 @@ test('parsePins feeds allocate overrides to flatten a tied top', () => {
   // Two tied leaders would otherwise concentrate; pinning the top four to 2 each
   // yields a flat 2/2/2/2 with the rest spread.
   const songs = mk([93, 93, 92, 85, 76, 74, 73, 72]);
-  const overrides = parsePins('0:2,1:2,2:2,3:2');
+  const { overrides } = parsePins('0:2,1:2,2:2,3:2');
   allocate(songs, 15, 4, { shape: 'auto', overrides });
   assert.equal(sum(songs), 15);
   for (const i of [0, 1, 2, 3]) assert.equal(songs[i].finalVotes, 2);
@@ -1283,7 +1340,7 @@ test('parsePins feeds allocate overrides to flatten a tied top', () => {
 
 test('parsePins rejects malformed specs', () => {
   assert.throws(() => parsePins('2'));
-  assert.throws(() => parsePins('2:-1'));
+  assert.throws(() => parsePins('2:1.5'));
   assert.throws(() => parsePins('x:2'));
 });
 
@@ -1382,4 +1439,144 @@ test('buildPickRecord reports no tweaks when final matches the chosen distributi
 
 test('buildPickRecord returns null for an out-of-range chosenIndex', () => {
   assert.equal(buildPickRecord({ options: PICK_OPTIONS, chosenIndex: 5, songs: [] }), null);
+});
+
+// ---------------------------------------------------------------------------
+// buildComboBallot: one column per up-option × down-shape combo
+// ---------------------------------------------------------------------------
+const BALLOT_TRADEOFFS = [
+  {
+    kind: 'tier-structure',
+    options: [
+      // Option A: upvote song 1 (+2) and song 4 (+1); songs 2,3 left at zero.
+      {
+        tierCount: 2,
+        perSong: [
+          { rawOrderIndex: 1, title: 'Alpha', score: 90, votes: 2 },
+          { rawOrderIndex: 4, title: 'Delta', score: 80, votes: 1 },
+          { rawOrderIndex: 2, title: 'Bravo', score: 70, votes: 0 },
+          { rawOrderIndex: 3, title: 'Charlie', score: 60, votes: 0 },
+        ],
+      },
+      // Option B: also upvote song 2 (+1) — which the down shapes target → conflict.
+      {
+        tierCount: 3,
+        perSong: [
+          { rawOrderIndex: 1, title: 'Alpha', score: 90, votes: 2 },
+          { rawOrderIndex: 4, title: 'Delta', score: 80, votes: 1 },
+          { rawOrderIndex: 2, title: 'Bravo', score: 70, votes: 1 },
+          { rawOrderIndex: 3, title: 'Charlie', score: 60, votes: 0 },
+        ],
+      },
+    ],
+  },
+  {
+    kind: 'down-structure',
+    options: [
+      // curved: -1 on songs 2 and 3.
+      {
+        downShape: 'curved',
+        shape: 'Curved (bell)',
+        perSong: [
+          { rawOrderIndex: 2, title: 'Bravo', score: 70, votes: 1 },
+          { rawOrderIndex: 3, title: 'Charlie', score: 60, votes: 1 },
+        ],
+      },
+      // concentrated: -2 on song 3 only.
+      {
+        downShape: 'concentrated',
+        shape: 'Concentrated',
+        perSong: [
+          { rawOrderIndex: 3, title: 'Charlie', score: 60, votes: 2 },
+        ],
+      },
+    ],
+  },
+];
+
+const BALLOT_SONGS = [
+  { rawOrderIndex: 1, title: 'Alpha', artist: 'a' },
+  { rawOrderIndex: 2, title: 'Bravo', artist: 'b' },
+  { rawOrderIndex: 3, title: 'Charlie', artist: 'c' },
+  { rawOrderIndex: 4, title: 'Delta', artist: 'd' },
+];
+const BALLOT_OWN = [{ rawOrderIndex: 0, title: 'Mine', artist: 'me' }];
+
+test('buildComboBallot enumerates up×down combos and signs cells', () => {
+  const { combos, rows } = buildComboBallot(BALLOT_TRADEOFFS, BALLOT_SONGS, BALLOT_OWN);
+  // 2 up × 2 down = 4 distinct combos (none collapse here).
+  assert.equal(combos.length, 4);
+  assert.deepEqual(
+    combos.map((c) => c.members[0].code),
+    ['A·cv', 'A·cc', 'B·cv', 'B·cc']
+  );
+  // Own song interleaved at its raw index, marked own.
+  assert.deepEqual(
+    rows.map((r) => r.rawOrderIndex),
+    [0, 1, 2, 3, 4]
+  );
+  const aCv = combos[0];
+  assert.equal(aCv.perIndex.get(0), 'own');
+  assert.equal(aCv.perIndex.get(1), 2); // +2 upvote
+  assert.equal(aCv.perIndex.get(2), -1); // downvoted (curved)
+  assert.equal(aCv.perIndex.get(3), -1);
+  assert.equal(aCv.perIndex.get(4), 1);
+  assert.deepEqual(aCv.totals, { up: 3, down: 2, conflicts: 0 });
+});
+
+test('buildComboBallot flags a cell where the up option and down shape disagree', () => {
+  const { combos } = buildComboBallot(BALLOT_TRADEOFFS, BALLOT_SONGS, BALLOT_OWN);
+  // B·cv: option B upvotes song 2 (+1) while curved downvotes it → conflict.
+  const bCv = combos.find((c) => c.members[0].code === 'B·cv');
+  assert.equal(bCv.perIndex.get(2), 'conflict');
+  assert.equal(bCv.totals.conflicts, 1);
+  // The intended budgets are still reported (no silent shrink): up counts song 2's
+  // +1, down counts its -1.
+  assert.equal(bCv.totals.up, 4);
+  assert.equal(bCv.totals.down, 2);
+  // B·cc: concentrated targets only song 3, so option B has no conflict.
+  const bCc = combos.find((c) => c.members[0].code === 'B·cc');
+  assert.equal(bCc.totals.conflicts, 0);
+  assert.equal(bCc.perIndex.get(2), 1);
+  assert.equal(bCc.perIndex.get(3), -2);
+});
+
+test('buildComboBallot dedups identical full-ballot columns and merges selectors', () => {
+  // Single up option + two down shapes that produce the SAME ballot → one column
+  // listing both selectors.
+  const tradeoffs = [
+    {
+      kind: 'down-structure',
+      options: [
+        { downShape: 'curved', perSong: [{ rawOrderIndex: 2, votes: 1 }] },
+        { downShape: 'flat', perSong: [{ rawOrderIndex: 2, votes: 1 }] },
+      ],
+    },
+  ];
+  const songs = [
+    { rawOrderIndex: 1, title: 'Alpha', artist: 'a', draftVotes: 3 },
+    { rawOrderIndex: 2, title: 'Bravo', artist: 'b', draftVotes: 0 },
+  ];
+  const { combos } = buildComboBallot(tradeoffs, songs, []);
+  assert.equal(combos.length, 1);
+  assert.equal(combos[0].members.length, 2);
+  assert.deepEqual(
+    combos[0].members.map((m) => m.selector),
+    ['--down-shape curved', '--down-shape flat']
+  );
+  // Up comes from the live draftVotes fallback (no tier-structure tradeoff).
+  assert.equal(combos[0].perIndex.get(1), 3);
+  assert.equal(combos[0].perIndex.get(2), -1);
+});
+
+test('buildComboBallot falls back to a single live-allocation column with no tradeoffs', () => {
+  const songs = [
+    { rawOrderIndex: 1, title: 'Alpha', artist: 'a', finalVotes: 2, finalDownvotes: 0 },
+    { rawOrderIndex: 2, title: 'Bravo', artist: 'b', finalVotes: 0, finalDownvotes: 1 },
+  ];
+  const { combos } = buildComboBallot([], songs, []);
+  assert.equal(combos.length, 1);
+  assert.equal(combos[0].perIndex.get(1), 2);
+  assert.equal(combos[0].perIndex.get(2), -1);
+  assert.deepEqual(combos[0].totals, { up: 2, down: 1, conflicts: 0 });
 });

@@ -30,7 +30,7 @@ import {
 } from './score-core.mjs';
 import { parseDownShape } from './parse-round.mjs';
 import { matchFlag, takePositional } from './cli-args.mjs';
-import { esc, tierHue, chip, tradeoffsHtml, pickHtml, NEUTRAL_HUE, RENDER_FINAL_STYLE } from './render-html-shared.mjs';
+import { esc, tierHue, chip, tradeoffsHtml, pickHtml, comboBallotHtml, NEUTRAL_HUE, RENDER_FINAL_STYLE } from './render-html-shared.mjs';
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -275,7 +275,7 @@ function renderTradeoffs(model) {
 
   // Distribution forks render as song×option comparison tables (shared helper);
   // append the qualitative "how to combine" note as a trailing block.
-  const main = tradeoffsHtml(tradeoffs, model.ownSongs);
+  const main = tradeoffsHtml(tradeoffs);
   let combineBlock = '';
   if (hasCombine) {
     const opts = (combine.options || []).map((o) => `<li>${esc(o)}</li>`).join('');
@@ -307,50 +307,6 @@ ${lis}
 </section>`;
 }
 
-function renderTransfer(model) {
-  const songs = model.songs.slice();
-  const up = songs.reduce((a, s) => a + (s.finalVotes || 0), 0);
-  const down = songs.reduce((a, s) => a + (s.finalDownvotes || 0), 0);
-  const hasDown = down > 0 || model.budget.downvotesEnabled;
-  // Interleave the owner's own (unvotable) submissions so every raw slot is present.
-  const own = Array.isArray(model.ownSongs) ? model.ownSongs : [];
-  const all = [...songs, ...own].sort((a, b) => (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0));
-  const rows = all
-    .map((s) => {
-      if (s.isOwn) {
-        return `<tr class="own">
-      <td class="num">${esc(s.rawOrderIndex)}</td>
-      <td>${esc(s.title)}</td>
-      <td class="muted">${esc(s.artist)}</td>
-      <td class="num votes muted">— your song</td>
-    </tr>`;
-      }
-      const u = s.finalVotes || 0;
-      const d = s.finalDownvotes || 0;
-      const cell = d > 0 ? `-${d}` : String(u);
-      const cls = d > 0 ? ' class="has-down"' : u > 0 ? ' class="has-votes"' : '';
-      return `<tr${cls}>
-      <td class="num">${esc(s.rawOrderIndex)}</td>
-      <td>${esc(s.title)}</td>
-      <td class="muted">${esc(s.artist)}</td>
-      <td class="num votes${d > 0 ? ' down' : ''}">${cell}</td>
-    </tr>`;
-    })
-    .join('\n');
-  const totalCell = hasDown && down > 0 ? `${up} ▲ / -${down} ▼` : String(up);
-  return `<section class="transfer">
-  <h2>Vote transfer (raw order)</h2>
-  <p class="muted">Songs in submission order with the draft votes (upvotes positive, downvotes negative) — for entering back into the app in one pass.</p>
-  <table>
-    <thead><tr><th class="num">#</th><th>Title</th><th>Artist</th><th class="num">Votes</th></tr></thead>
-    <tbody>
-${rows}
-    </tbody>
-    <tfoot><tr><td></td><td></td><td class="num">Total</td><td class="num">${totalCell}</td></tr></tfoot>
-  </table>
-</section>`;
-}
-
 // ---------------------------------------------------------------------------
 // Document
 // ---------------------------------------------------------------------------
@@ -373,11 +329,11 @@ function renderDocument(model, order) {
 ${renderHead(model)}
 ${renderCandidates(model, order)}
 ${renderTradeoffs(model)}
-${pickHtml(model.pick, model.ownSongs)}
+${pickHtml(model.pick)}
 ${renderList('Needs my score (blank boxes)', songs.filter((s) => s.needsUserInput))}
 ${renderList('Needs review', songs.filter((s) => s.needsReview), 'review')}
 ${renderList('Disqualified (no points)', songs.filter((s) => s.isDisqualified))}
-${renderTransfer(model)}
+${comboBallotHtml(model.tradeoffs, model.songs, model.ownSongs)}
 </main>
 </body>
 </html>
