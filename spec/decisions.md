@@ -11,6 +11,28 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-06-19 — topic-summary `verify` column + English-source link rule
+
+**Change.** Added a `verify` column to `data/ref/song-topic-summaries.csv`
+(`track,artist,summary,lyrics_url,verify`) and audited all 98 rows. `verify` ∈ `en` (saved link
+carries English lyrics/translation or solid English meaning analysis — clickable to check), `rom`
+(only a romanization/Hangul link exists; summary rests on search synthesis + own Korean reading),
+`none` (no link; lowest confidence). Re-pointed rom-only links to English sources where they exist
+(current split: 54 `en`, 6 `rom`, 38 `none`). Updated `submission-song-search` to require an
+English-bearing `lyrics_url` when one exists and to ban presenting `Eng: N/A` pages (e.g. most
+colorcodedlyrics / letras.mus.br / versuri) as if they documented meaning.
+
+**Why.** User noticed many saved links (e.g. a colorcodedlyrics page with `Eng: N/A`) had no
+English column, so they couldn't verify how the meaning was derived. The meaning had come from the
+web-search synthesis (or Korean reading), not the saved link — a provenance gap that hides
+low-confidence summaries. The `verify` tag plus the English-source rule make each row's grounding
+explicit and checkable.
+
+**Refs.** working tree (`data/ref/song-topic-summaries.csv`,
+`.cursor/skills/submission-song-search/SKILL.md`).
+
+---
+
 ## 2026-06-19 — `submission-song-search` skill + reusable topic-summary cache
 
 **Change.** Added `.cursor/skills/submission-song-search/SKILL.md` (registered in
@@ -18,7 +40,7 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 `data/ref/fav-songs.csv` / mood CSVs / discographies for theme fits. It codifies the
 search-frugal method: reuse prior research, scan big lists without truncation (print + check a
 count; read from a file when long), hand the user a prune-able `analysis/<round>/shortlist.md`
-before deep-searching, run a cheap "<song> meaning" batch pass before full-lyric dives, and chunk
+before deep-searching, run a cheap `"<song> meaning"` batch pass before full-lyric dives, and chunk
 findings. Introduced `data/ref/song-topic-summaries.csv` (`track,artist,summary,lyrics_url`) as a
 reusable, round-neutral topic cache so the same songs aren't re-searched across rounds.
 
