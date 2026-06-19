@@ -6,7 +6,7 @@ The parsing and scoring are **deterministic** (a Node script — no LLM, no gues
 The agent/you only step in to rebalance points or research tricky "fit" calls.
 
 - **Input:** a saved Music League round HTML file.
-- **Output:** per-round folder under `analysis/<roundname>/` — see [spec/analysis-artifacts.md](spec/analysis-artifacts.md).
+- **Output:** per-round folder under `data/analysis/<roundname>/` — see [spec/analysis-artifacts.md](spec/analysis-artifacts.md).
 
 ## Setup (one-time)
 
@@ -17,17 +17,36 @@ npm install                  # installs linkedom (parser) + eslint
 You'll also want [`just`](https://github.com/casey/just) on your PATH (`brew install just`).
 Everything works without it too — see [Without `just`](#without-just) below.
 
+### Private data
+
+Round inputs, analysis outputs, and reference data are **not** stored in this repo.
+They live in a separate **private** git repository (`music-league-data`) mounted as a
+git submodule at **`data/`** (`data/rounds/`, `data/analysis/`, `data/ref/`). This keeps
+the code public as a portfolio while exact round comments and personal lists stay private.
+
+Clone with the data (if you have access to the private repo):
+
+```bash
+git clone --recurse-submodules <this-repo-url>
+# or, in an existing clone:
+git submodule update --init
+```
+
+Without access to the private repo, `data/` stays empty and the scripts have nothing to
+operate on — the code still builds, lints, and passes tests (which use the synthetic
+`tests/fixtures/sample-round/`).
+
 ## Workflow
 
 The whole flow is driven by `just run <name>`, where `<name>` is a **fuzzy match**
 on the round (e.g. `tarot` or `2026-06-09`). It always runs the next step for you.
 
-1. **Drop the round HTML into `rounds/`.** In Music League, let the page autosave,
+1. **Drop the round HTML into `data/rounds/`.** In Music League, let the page autosave,
    **reload it**, confirm your comment/score boxes are pre-filled, then save the
    page (or copy the page source) into a file at:
 
    ```text
-   rounds/<roundname>.html        e.g. rounds/2026-06-09-tarot-hanged-man.html
+   data/rounds/<roundname>.html        e.g. data/rounds/2026-06-09-tarot-hanged-man.html
    ```
 
    `<roundname>` is your choice (dated slugs work well); every later file is derived
@@ -43,8 +62,8 @@ on the round (e.g. `tarot` or `2026-06-09`). It always runs the next step for yo
    This writes the music-only report + JSON:
 
    ```text
-   analysis/<roundname>/music.md        ranked table + raw-order vote table (+ round description)
-   analysis/<roundname>/music.json      canonical data (source for the fit step)
+   data/analysis/<roundname>/music.md        ranked table + raw-order vote table (+ round description)
+   data/analysis/<roundname>/music.json      canonical data (source for the fit step)
    ```
 
    For a plain (non-thematic) round, **you're done** — open `music.md` and enter votes.
@@ -54,13 +73,13 @@ on the round (e.g. `tarot` or `2026-06-09`). It always runs the next step for yo
    writes:
 
    ```text
-   analysis/<roundname>/fit.json
+   data/analysis/<roundname>/fit.json
    ```
 
 4. **Merge fit + music, then render.** Merge (manual or agent):
 
    ```bash
-   node scripts/parse-round.mjs rounds/<roundname>.html --fit analysis/<roundname>/fit.json
+   node scripts/parse-round.mjs data/rounds/<roundname>.html --fit data/analysis/<roundname>/fit.json
    ```
 
    That writes **`scores.json`** (deliverable — merged `draftVotes`; `fit.json` stays fit-only).
@@ -101,14 +120,14 @@ Use the npm script (note the `--` before args) or call the scripts directly:
 npm run ml -- run tarot          # same dispatcher, no just needed
 npm run ml -- status
 
-node scripts/parse-round.mjs rounds/2026-06-09-tarot-hanged-man.html [--mode ...] [--no-json]
-node scripts/parse-round.mjs rounds/2026-06-09-tarot-hanged-man.html --fit analysis/2026-06-09-tarot-hanged-man/fit.json
-node scripts/render-fit-html.mjs analysis/2026-06-09-tarot-hanged-man/scores.json [--out ...] [--order ...]
+node scripts/parse-round.mjs data/rounds/2026-06-09-tarot-hanged-man.html [--mode ...] [--no-json]
+node scripts/parse-round.mjs data/rounds/2026-06-09-tarot-hanged-man.html --fit data/analysis/2026-06-09-tarot-hanged-man/fit.json
+node scripts/render-fit-html.mjs data/analysis/2026-06-09-tarot-hanged-man/scores.json [--out ...] [--order ...]
 ```
 
 Docs and tests use the synthetic fixture at `tests/fixtures/sample-round/` instead of live round files.
 
-Retired rounds may live in `rounds/archive/` or `analysis/archive/` (ignored by parsing; check there when looking up old rounds).
+Retired rounds may live in `data/rounds/archive/` or `data/analysis/archive/` (ignored by parsing; check there when looking up old rounds).
 
 ### Linting
 
@@ -176,7 +195,7 @@ starting point and rebalance. Full model: [spec/point-allocation.md](spec/point-
 
 ## The report
 
-`analysis/<roundname>/music.md` contains:
+`data/analysis/<roundname>/music.md` contains:
 
 - a header with mode, budget, and counts (scored / disqualified / needs-score / needs-review),
 - a **ranked table** (Rank · Title · Artist · Score · Votes · Flags · Comment),
@@ -185,7 +204,7 @@ starting point and rebalance. Full model: [spec/point-allocation.md](spec/point-
 
 ## The fit report (HTML)
 
-For lyric/theme rounds, fit research lives in **`analysis/<roundname>/fit.json`**
+For lyric/theme rounds, fit research lives in **`data/analysis/<roundname>/fit.json`**
 (workflow step 3). Merge with music scores to produce **`scores.json`** /
 **`scores.html`** — the deliverable.
 
@@ -205,8 +224,10 @@ are documented in [spec/fit-evaluation.md](spec/fit-evaluation.md) → Output.
 - `scripts/render-fit-html.mjs` — renders `fit.json` or `scores.json` to HTML.
 - `scripts/one-off/` — round-specific drivers (not the main pipeline).
 - `justfile` — `run` / `status` / `parse` / `fit` / `scores` recipes forwarding to `scripts/ml.mjs`.
-- `rounds/` — flat round HTML exports (git-ignored); optional `rounds/archive/`.
-- `analysis/` — per-round folders `analysis/<roundname>/` (git-ignored); optional `analysis/archive/`.
+- `data/` — **private** submodule (`music-league-data`); not part of this public repo.
+  - `data/rounds/` — flat round HTML exports; optional `data/rounds/archive/`.
+  - `data/analysis/` — per-round folders `data/analysis/<roundname>/`; optional `data/analysis/archive/`.
+  - `data/ref/` — reference data (e.g. personal favorites list).
 - `spec/analysis-artifacts.md` — naming convention for music / fit / scores files.
 - `tests/fixtures/sample-round/` — synthetic round for docs and tests.
 - `spec/` — the scoring/allocation rules in prose (`score-parsing`, `point-allocation`,

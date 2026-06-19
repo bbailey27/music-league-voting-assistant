@@ -84,7 +84,7 @@ Dedup: identical full-ballot columns are collapsed (one header listing the equiv
 - Revise the just-added decision entry and `spec/point-allocation.md` (lines ~355) to say: the raw-order ballot is one column per up x down combo (each a full signed ballot, deduped); comparison tables stay by-combined-score.
 - Add a unit test for `buildComboBallot` (combo enumeration, conflict cell when a song is upvoted by the option and downvoted by the shape, dedup, signs, own-song dashes, totals + conflict count) in [tests/score.test.mjs](tests/score.test.mjs); rerun full suite.
 
-## Phase 2 - Downvote pins (future)
+## Phase 2 - Downvote pins
 
 Mirror upvote pins on the down axis.
 

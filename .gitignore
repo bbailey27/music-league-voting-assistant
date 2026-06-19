@@ -20,11 +20,3 @@ node_modules/
 .project
 .classpath
 .settings/
-
-# Round exports and analysis output (keep folders, ignore contents)
-rounds/*
-!rounds/.gitkeep
-analysis/*
-# Track the shared artifact legend so the convention is version-controlled;
-# everything else under analysis/ stays local working data.
-!analysis/README.md

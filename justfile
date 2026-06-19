@@ -1,15 +1,15 @@
 default:
     @just --list
 
-# Parse a round HTML → analysis/<round>/music.md + music.json (fuzzy name; extra flags pass through)
+# Parse a round HTML → data/analysis/<round>/music.md + music.json (fuzzy name; extra flags pass through)
 parse name *flags:
     node scripts/ml.mjs parse "{{name}}" {{flags}}
 
-# Render fit-only JSON → analysis/<round>/fit.html (fuzzy name; extra flags pass through)
+# Render fit-only JSON → data/analysis/<round>/fit.html (fuzzy name; extra flags pass through)
 fit name *flags:
     node scripts/ml.mjs fit "{{name}}" {{flags}}
 
-# Render merged scores JSON → analysis/<round>/scores.html (the deliverable)
+# Render merged scores JSON → data/analysis/<round>/scores.html (the deliverable)
 scores name *flags:
     node scripts/ml.mjs scores "{{name}}" {{flags}}
 

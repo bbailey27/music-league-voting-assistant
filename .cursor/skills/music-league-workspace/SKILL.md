@@ -12,30 +12,32 @@ Deterministic Node scripts turn a saved Music League round into ranked tables an
 
 ## What this repo does
 
-| Stage                  | Who                     | Output                                       |
-| ---------------------- | ----------------------- | -------------------------------------------- |
-| Parse + score comments | `parse-round.mjs`       | `analysis/<round>/music.md` + `music.json`   |
-| Fit research           | Agent / LLM             | `analysis/<round>/fit.json`                  |
-| Merge fit + allocate   | `parse-round.mjs --fit` | `analysis/<round>/scores.json` (deliverable) |
-| Fit report             | `render-fit-html.mjs`   | `analysis/<round>/fit.html` (fit-only)       |
-| Scores report          | `render-fit-html.mjs`   | `analysis/<round>/scores.html` (deliverable) |
+| Stage                  | Who                     | Output                                            |
+| ---------------------- | ----------------------- | ------------------------------------------------- |
+| Parse + score comments | `parse-round.mjs`       | `data/analysis/<round>/music.md` + `music.json`   |
+| Fit research           | Agent / LLM             | `data/analysis/<round>/fit.json`                  |
+| Merge fit + allocate   | `parse-round.mjs --fit` | `data/analysis/<round>/scores.json` (deliverable) |
+| Fit report             | `render-fit-html.mjs`   | `data/analysis/<round>/fit.html` (fit-only)       |
+| Scores report          | `render-fit-html.mjs`   | `data/analysis/<round>/scores.html` (deliverable) |
 
-Plain (non-thematic) rounds stop after parse — open `analysis/<round>/music.md` for the draft allocation.
+Plain (non-thematic) rounds stop after parse — open `data/analysis/<round>/music.md` for the draft allocation.
 
 **Music-only command path:** save round HTML → `just parse <name>` (or `just run <name>` once) → done. No fit research, no `fit.json`, no `just fit`.
 
 ## Directory layout
 
 ```
-rounds/          Saved round HTML or pasted text (<round>.html|.txt) — flat; archive/ ignored
-analysis/        Per-round folders analysis/<round>/ — see spec/analysis-artifacts.md
+data/            PRIVATE submodule (music-league-data); not in the public repo:
+  rounds/        Saved round HTML or pasted text (<round>.html|.txt) — flat; archive/ ignored
+  analysis/      Per-round folders data/analysis/<round>/ — see spec/analysis-artifacts.md
+  ref/           Reference data (e.g. fav-songs.csv) — agent fit research only
 scripts/         Pipeline code; one-off round drivers in scripts/one-off/
 spec/            Domain rules (source of truth over .cursor/rules/)
 tests/           node:test suites + tests/fixtures/sample-round/
 .cursor/skills/  Project agent skills (this file + task-specific skills below)
 ```
 
-When looking up a **previous** round, also check `rounds/archive/` and `analysis/archive/` (owner-moved; not scanned by default).
+Round inputs/outputs live in the private `data/` submodule; path constants are centralized in `scripts/paths.mjs` (`DATA_DIR`, `ROUNDS_DIR`, `ANALYSIS_DIR`, `REF_DIR`). When looking up a **previous** round, also check `data/rounds/archive/` and `data/analysis/archive/` (owner-moved; not scanned by default).
 
 ## Key scripts
 

@@ -4,8 +4,13 @@
 import { readdirSync, existsSync, statSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 
-export const ROUNDS_DIR = 'rounds';
-export const ANALYSIS_DIR = 'analysis';
+// Private round inputs, analysis outputs, and reference data live in the
+// `music-league-data` git submodule mounted at data/ (kept out of the public
+// repo). See spec/analysis-artifacts.md and README "Private data" section.
+export const DATA_DIR = 'data';
+export const ROUNDS_DIR = join(DATA_DIR, 'rounds');
+export const ANALYSIS_DIR = join(DATA_DIR, 'analysis');
+export const REF_DIR = join(DATA_DIR, 'ref');
 export const ARCHIVE_DIR = 'archive';
 
 export const ARTIFACT = {

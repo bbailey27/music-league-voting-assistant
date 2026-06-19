@@ -18,7 +18,7 @@ const OLDER = new Date(2020, 0, 1);
 const NEWER = new Date(2020, 0, 2);
 
 async function makeRound(cwd, name, { jsonNewer = false } = {}) {
-  const dir = join(cwd, 'analysis', name);
+  const dir = join(cwd, 'data', 'analysis', name);
   await mkdir(dir, { recursive: true });
   const json = join(dir, 'music.json');
   const html = join(dir, 'music.html');
@@ -40,7 +40,7 @@ test('ml status reports a fresh music.html deliverable', async () => {
     await makeRound(cwd, 'demo-round');
     const out = await status(cwd, 'demo-round');
     assert.match(out, /Music HTML/);
-    assert.match(out, /analysis\/demo-round\/music\.html/);
+    assert.match(out, /data\/analysis\/demo-round\/music\.html/);
     assert.doesNotMatch(out, /Music HTML.*stale/);
   } finally {
     await rm(cwd, { recursive: true, force: true });

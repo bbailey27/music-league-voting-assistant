@@ -11,6 +11,36 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-06-18 — Private round/analysis/ref data split into a `data/` submodule
+
+**Change.** Round inputs, analysis outputs, and reference data moved out of the public
+repo into a separate **private** git repo (`music-league-data`) mounted as a git
+submodule at **`data/`** — so paths are now `data/rounds/`, `data/analysis/`, and
+`data/ref/`. `scripts/paths.mjs` gained a `DATA_DIR` base and a `REF_DIR` export;
+`ROUNDS_DIR`/`ANALYSIS_DIR` are now `join(DATA_DIR, …)`. `tests/ml-status.test.mjs`
+creates fixtures under `data/analysis/` and asserts the `data/analysis/…` path. The
+previously git-tracked `analysis/README.md` and `rounds/.gitkeep` move into the data
+submodule; the obsolete `rounds/*`, `analysis/*`, `ref/*` ignore rules leave
+`.gitignore`. README, `spec/analysis-artifacts.md`, the `justfile`, and the
+`music-league-workspace` skill were updated to the `data/` paths.
+
+**Why.** The code should be a public portfolio piece, but exact round comments and the
+personal favorites list should stay private. A public repo exposes everything in its
+history forever, so plaintext private data can't be tracked there. A submodule keeps
+the data version-controlled and backed up while staying behind the private repo's access
+control, and mounting it at `data/` keeps the scripts' on-disk paths intact (no
+per-round path juggling).
+
+**Overruled.** Considered three top-level submodules at `rounds/`/`analysis/`/`ref/`
+(zero script change, but heavier, and would have moved the tracked `analysis/README.md`
+piecemeal) and `git-crypt` in a single repo (opaque blobs in a portfolio repo, key
+management). Single `data/` submodule chosen for a clean public/private boundary.
+
+**Refs.** working tree; README → Private data, `spec/analysis-artifacts.md`,
+`scripts/paths.mjs`.
+
+---
+
 ## 2026-06-17 — `--option` works on music-only rounds, not just the fit-merge path
 
 **Change.** `--option <A|B|C…>` now applies a surfaced `tier-structure` distribution
@@ -60,7 +90,7 @@ matches the signed ballot's `+`/`-` display.
 when pins exceed the bank — `--pin` upvotes have no such guard, so down pins stay
 symmetric (a pin is a deliberate override).
 
-**Refs.** working tree — `scripts/parse-round.mjs` (`parsePins` signed split,
+**Refs.** `b1e5f33` — `scripts/parse-round.mjs` (`parsePins` signed split,
 `profile.downOverrides`, usage), `scripts/score-core.mjs` (`allocate` up-pool prune,
 `allocateDownvotes` pin handling, `buildPickRecord` `downTweaks`),
 `tests/score.test.mjs` (parse + engine cases), `spec/point-allocation.md`.
@@ -86,20 +116,19 @@ reports and the CLI (`printBallotCli`).
 **Why.** The old bottom transfer table duplicated each option's raw-order column and
 only showed the default pick, while downvotes lived in a separate view and read as
 `0` in the up table — so transcribing meant cross-referencing two tables and walking
-the list twice. A per-combo column makes entry a single-column read. The per-option
-raw tables were intentionally kept (transcribe any option without picking first), so
-deleting them was wrong; folding them into combos preserves that while combining up +
-down. A combo can't always be made internally valid (down shapes are computed for the
+the list twice. A per-combo column makes entry a single-column read while keeping
+per-option transcription (enter any option without picking first) — folding the
+per-option raw tables into combos rather than dropping them. A combo can't always be
+made internally valid (down shapes are computed for the
 default up pool, so a different up option may upvote a down-targeted song); rather
 than recompute per option or silently net to a smaller total, we flag the cell and
 leave the fix to the user (per their call).
 
-**Overruled.** The mid-session "single signed `Votes` column" ballot (never shipped)
-— replaced by per-combo columns after the per-option raw tables turned out to be
-deliberate. Also overrides the "raw-for-entry sub-table per option" half of the
-2026-06-16 _clean `--option` picks_ layout below.
+**Overruled.** Supersedes the prior "single signed `Votes` column" ballot and the
+"raw-for-entry sub-table per option" half of the 2026-06-16 _clean `--option` picks_
+layout below.
 
-**Refs.** working tree — `scripts/render-html-shared.mjs` (`buildComboBallot`,
+**Refs.** `b1e5f33` — `scripts/render-html-shared.mjs` (`buildComboBallot`,
 `comboBallotHtml`, `.ballot` styles; removed dead `.transfer` styles),
 `scripts/render-fit-html.mjs` + `scripts/render-final-html.mjs` (call `comboBallotHtml`,
 dropped `renderTransfer`), `scripts/parse-round.mjs` (`printBallotCli`),

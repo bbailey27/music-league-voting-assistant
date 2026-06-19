@@ -9,5 +9,5 @@
   "globs": ["**/*.md"],
   // node_modules + generated output; .cursor holds tool-generated plans;
   // tests/regressions are terse one-line fixtures, not prose docs.
-  "ignores": ["node_modules", "rounds", "analysis", ".cursor", "tests"],
+  "ignores": ["node_modules", "data", ".cursor", "tests"],
 }
