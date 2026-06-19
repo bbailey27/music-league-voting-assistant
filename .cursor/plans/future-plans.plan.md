@@ -7,7 +7,7 @@ isProject: false
 
 # Potential Future Plans
 
-1. Create a script to identify new round input files without a date in the title. Add today's date following the existing naming pattern. Caveat if run before 5am, add yesterday's date instead. Also run this script at the start of the `run` workflow so names are cleaned up before the associated files are generated.
+1. ~~Create a script to identify new round input files without a date in the title. Add today's date following the existing naming pattern. Caveat if run before 5am, add yesterday's date instead. Also run this script at the start of the `run` workflow so names are cleaned up before the associated files are generated.~~ **Done** (2026-06-19) — `scripts/maintain-rounds.mjs` / `ml tidy`, auto-run by `ml run`; also archives rounds >2 days old. See `spec/decisions.md`.
 2. Fix score parsing when extra numbers appear later in a comment. Core bug: "76 fit bonus" reads `76` as a *fit* score and finds no music score, because fit-keyword/score detection is too eager.
    - Treat the first number as the music score; read later numbers as fit only when the round expects numeric fit (or the comment explicitly says "fit"). Consider a CLI flag for numeric-fit rounds.
    - Only look for fit-tier / pass-fail keywords ("strong", "maybe") when explicitly requested.

@@ -20,6 +20,20 @@ export const ARTIFACT = {
   versions: 'versions',
 };
 
+// Round ids are slugged with a leading ISO date: 2026-06-09-tarot-hanged-man.
+export const DATE_PREFIX_RE = /^(\d{4})-(\d{2})-(\d{2})-/;
+
+/** True when a round id already starts with a YYYY-MM-DD- date slug. */
+export function hasDatePrefix(roundId) {
+  return DATE_PREFIX_RE.test(roundId);
+}
+
+/** The YYYY-MM-DD date slug at the start of a round id, or null if undated. */
+export function datePrefixOf(roundId) {
+  const m = DATE_PREFIX_RE.exec(roundId);
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+}
+
 /** Round id from a saved input or output basename (e.g. 2026-06-09-tarot-hanged-man). */
 function roundIdFromBasename(name) {
   return basename(name, extname(name));

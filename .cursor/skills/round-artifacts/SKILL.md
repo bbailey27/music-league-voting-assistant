@@ -40,3 +40,10 @@ Synthetic sample for docs/tests: `tests/fixtures/sample-round/`.
 5. (Thematic) agent writes `fit.json`, then merge → `scores.json`, render → `scores.html`.
 
 `rounds/` and `analysis/` are gitignored — local working data only. When referencing an older round, check `archive/` subfolders too.
+
+## Tidy (naming + archive)
+
+`just tidy` (also auto-run at the start of `just run`) date-slugs undated rounds
+(`<slug>` → `<YYYY-MM-DD>-<slug>`; before 5am uses yesterday) and archives rounds
+whose slug date is >2 days old. `--dry-run` previews; `--age N`, `--no-name`,
+`--no-archive` tune it. Details: [spec/analysis-artifacts.md](../../spec/analysis-artifacts.md).

@@ -11,6 +11,53 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-06-19 — `submission-song-search` skill + reusable topic-summary cache
+
+**Change.** Added `.cursor/skills/submission-song-search/SKILL.md` (registered in
+`music-league-workspace`) for the PRE-round "what should I submit" task — mining
+`data/ref/fav-songs.csv` / mood CSVs / discographies for theme fits. It codifies the
+search-frugal method: reuse prior research, scan big lists without truncation (print + check a
+count; read from a file when long), hand the user a prune-able `analysis/<round>/shortlist.md`
+before deep-searching, run a cheap "<song> meaning" batch pass before full-lyric dives, and chunk
+findings. Introduced `data/ref/song-topic-summaries.csv` (`track,artist,summary,lyrics_url`) as a
+reusable, round-neutral topic cache so the same songs aren't re-searched across rounds.
+
+**Why.** The Hermit research repeatedly hit output truncation (tail candidates silently dropped)
+and burned searches on songs whose titles lied about their lyrics. A standing skill + summary
+cache makes future themed-submission research cheaper and reproducible.
+
+**Refs.** working tree (`.cursor/skills/submission-song-search/SKILL.md`,
+`data/ref/song-topic-summaries.csv`).
+
+---
+
+## 2026-06-19 — `ml tidy`: auto date-slug naming + stale-round archiving
+
+**Change.** Added `scripts/maintain-rounds.mjs` plus an `ml tidy` command (and
+`just tidy`). It (1) prepends today's `YYYY-MM-DD-` slug to any undated round id —
+input file and/or analysis folder, renamed together — using _yesterday_ before 5am
+local, and (2) moves rounds whose slug date is >2 days old into
+`data/rounds/archive/` and `data/analysis/archive/`. `ml run` now runs naming first
+(so generated artifacts land under the dated name), then archives everything stale
+except the round being run. Flags: `--dry-run`, `--age N`, `--no-name`,
+`--no-archive`. New date/prefix helpers (`DATE_PREFIX_RE`, `hasDatePrefix`,
+`datePrefixOf`) live in `scripts/paths.mjs`; tests in `tests/maintain-rounds.test.mjs`.
+
+**Why.** Item 1 of `future-plans`: round exports were being saved without the date
+slug and archiving was a manual chore. Folding both into the normal `run` workflow
+keeps `data/rounds/` and `data/analysis/` consistent and current without extra steps.
+
+**Overruled.** Considered archiving on a 2-days-old (keep today+yesterday only)
+window and an explicit-only archive command; chose keep-3-days plus auto-on-run
+(excluding the active round) so re-rendering a recent round never self-archives. Date
+slugging covers analysis folders too (not just input files as the plan literally
+said) so an orphan folder like `analysis/tarot-hermit` gets dated as well.
+
+**Refs.** working tree; `spec/analysis-artifacts.md` → Date slugs and tidying,
+`scripts/maintain-rounds.mjs`, `scripts/ml.mjs`, `scripts/paths.mjs`.
+
+---
+
 ## 2026-06-18 — Private round/analysis/ref data split into a `data/` submodule
 
 **Change.** Round inputs, analysis outputs, and reference data moved out of the public

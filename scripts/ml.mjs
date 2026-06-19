@@ -26,6 +26,7 @@ import {
   fitPaths,
   scoresPaths,
 } from './paths.mjs';
+import { applyDateSlugs, archiveStaleRounds, tidyRounds } from './maintain-rounds.mjs';
 
 const SCRIPTS_DIR = 'scripts';
 
@@ -255,7 +256,11 @@ function cmdFinal(name, flags) {
 }
 
 function cmdRun(name) {
+  // Tidy first so artifacts generate under the dated name, then resolve against
+  // the fresh listing. Archive runs after we know which round to keep active.
+  applyDateSlugs({ log: console.log });
   const base = resolveOrExit(name, listAllRoundIds(), 'round');
+  archiveStaleRounds({ keep: new Set([base]), log: console.log });
   const st = pipelineState(base);
   const step = nextStep(st);
 
@@ -281,6 +286,31 @@ function cmdRun(name) {
       console.log(`${base}: ${step.label}`);
       warnMissingScores(st);
       break;
+  }
+}
+
+function cmdTidy(flags) {
+  let dryRun = false;
+  let name = true;
+  let archive = true;
+  let ageDays;
+  for (let i = 0; i < flags.length; i++) {
+    const f = flags[i];
+    if (f === '--dry-run' || f === '-n') dryRun = true;
+    else if (f === '--no-name') name = false;
+    else if (f === '--no-archive') archive = false;
+    else if (f === '--age') ageDays = Number(flags[++i]);
+    else if (f.startsWith('--age=')) ageDays = Number(f.slice('--age='.length));
+    else {
+      console.error(`Unknown tidy option "${f}".`);
+      process.exit(1);
+    }
+  }
+  const opts = { name, archive, dryRun, log: console.log };
+  if (ageDays !== undefined) opts.ageDays = ageDays;
+  const { named, archived } = tidyRounds(opts);
+  if (!named.length && !archived.length) {
+    console.log(dryRun ? 'Nothing to tidy.' : 'Nothing to tidy — rounds are already dated and current.');
   }
 }
 
@@ -352,6 +382,8 @@ function usage() {
   ml final  <name> [--out <path>] [--order votes|score|raw]
   ml run    <name>     (alias: next) — run the next scriptable step
   ml status [name]     — pipeline checklist + next step (no name = all rounds)
+  ml tidy   [--dry-run] [--age N] [--no-name] [--no-archive]
+                       — date-slug undated rounds + archive stale ones
 
 <name> is a fuzzy match against round files (e.g. "tarot" or "2026-06-09").`);
 }
@@ -380,6 +412,8 @@ function main() {
       return cmdRun(name);
     case 'status':
       return name ? cmdStatusOne(resolveOrExit(name, listAllRoundIds(), 'round')) : cmdStatusAll();
+    case 'tidy':
+      return cmdTidy(rest);
     case undefined:
     case '-h':
     case '--help':

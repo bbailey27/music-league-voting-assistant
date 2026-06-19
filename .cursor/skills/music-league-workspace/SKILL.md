@@ -30,27 +30,28 @@ Plain (non-thematic) rounds stop after parse — open `data/analysis/<round>/mus
 data/            PRIVATE submodule (music-league-data); not in the public repo:
   rounds/        Saved round HTML or pasted text (<round>.html|.txt) — flat; archive/ ignored
   analysis/      Per-round folders data/analysis/<round>/ — see spec/analysis-artifacts.md
-  ref/           Reference data (e.g. fav-songs.csv) — agent fit research only
+  ref/           Reference data (fav-songs.csv, song-topic-summaries.csv) — agent research only
 scripts/         Pipeline code; one-off round drivers in scripts/one-off/
 spec/            Domain rules (source of truth over .cursor/rules/)
 tests/           node:test suites + tests/fixtures/sample-round/
 .cursor/skills/  Project agent skills (this file + task-specific skills below)
 ```
 
-Round inputs/outputs live in the private `data/` submodule; path constants are centralized in `scripts/paths.mjs` (`DATA_DIR`, `ROUNDS_DIR`, `ANALYSIS_DIR`, `REF_DIR`). When looking up a **previous** round, also check `data/rounds/archive/` and `data/analysis/archive/` (owner-moved; not scanned by default).
+Round inputs/outputs live in the private `data/` submodule; path constants are centralized in `scripts/paths.mjs` (`DATA_DIR`, `ROUNDS_DIR`, `ANALYSIS_DIR`, `REF_DIR`). When looking up a **previous** round, also check `data/rounds/archive/` and `data/analysis/archive/` (moved there by `just tidy` once >2 days old; not scanned by default).
 
 ## Key scripts
 
-| Script                | Role                                                                     |
-| --------------------- | ------------------------------------------------------------------------ |
-| `ml.mjs`              | Dispatcher: fuzzy round names, `run`/`status`/`parse`/`fit`/`scores`     |
-| `paths.mjs`           | Shared analysis path helpers + artifact naming                           |
-| `parse-round.mjs`     | HTML or text → score + allocate → `music.*`; `--fit` → `scores.json`     |
-| `extract-html.mjs`    | DOM walker (shared with future web app); not a CLI                       |
-| `parse-text.mjs`      | Strict or lenient text parser; not a CLI                                 |
-| `score-core.mjs`      | `scoreComment`, `allocate`, `mergeFitJson` — shared core                 |
-| `render-fit-html.mjs` | Fit or scores JSON → self-contained HTML cards + vote-transfer table     |
-| `one-off/`            | Round-specific drivers (e.g. kpop-solo-versions.mjs) — not main pipeline |
+| Script                | Role                                                                        |
+| --------------------- | --------------------------------------------------------------------------- |
+| `ml.mjs`              | Dispatcher: fuzzy round names, `run`/`status`/`parse`/`fit`/`scores`/`tidy` |
+| `paths.mjs`           | Shared analysis path helpers + artifact naming                              |
+| `maintain-rounds.mjs` | Date-slug undated rounds + archive stale ones (`ml tidy`; auto on `run`)    |
+| `parse-round.mjs`     | HTML or text → score + allocate → `music.*`; `--fit` → `scores.json`        |
+| `extract-html.mjs`    | DOM walker (shared with future web app); not a CLI                          |
+| `parse-text.mjs`      | Strict or lenient text parser; not a CLI                                    |
+| `score-core.mjs`      | `scoreComment`, `allocate`, `mergeFitJson` — shared core                    |
+| `render-fit-html.mjs` | Fit or scores JSON → self-contained HTML cards + vote-transfer table        |
+| `one-off/`            | Round-specific drivers (e.g. kpop-solo-versions.mjs) — not main pipeline    |
 
 ## Common commands
 
@@ -60,6 +61,7 @@ Prefer `just` (forwards to `ml.mjs`); equivalent: `npm run ml -- <cmd>`.
 just run tarot              # next scriptable step (parse, render scores/fit HTML)
 just status                 # checklist for all rounds
 just status tarot           # one round, full checklist + next step
+just tidy --dry-run         # preview date-slug naming + archiving (auto-run by `just run`)
 just parse tarot            # force parse; flags: --mode objective|subjective, --no-json
 just fit tarot              # render fit-only HTML from fit.json
 just scores tarot           # render deliverable scores.html from scores.json
@@ -92,6 +94,7 @@ Load these when the task matches (they are explicit-only):
 | Skill                     | When                                                |
 | ------------------------- | --------------------------------------------------- |
 | **parse-scores-pipeline** | Parsing rounds, text vs HTML, verification          |
+| **submission-song-search**| Finding songs to SUBMIT for a themed round (mine fav-songs.csv / discographies) |
 | **round-fit-research**    | Thematic/lyric rounds, writing `fit.json`           |
 | **point-allocation**      | Rebalancing votes, profiles, one-off scripts        |
 | **round-artifacts**       | Naming rounds, capturing inputs, pipeline checklist |

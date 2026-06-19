@@ -27,6 +27,23 @@ node scripts/parse-round.mjs data/rounds/<round>.html --fit data/analysis/<round
 
 That writes `scores.json` and leaves `fit.json` unchanged.
 
+## Date slugs and tidying
+
+Round ids carry a leading `YYYY-MM-DD-` date slug. `scripts/maintain-rounds.mjs`
+(`ml tidy`, also run automatically at the start of `ml run`) keeps the trees tidy:
+
+- **Name.** Any undated round id — input file in `data/rounds/` and/or folder in
+  `data/analysis/` — gets today's date prepended (a round's `.html`/`.txt` inputs
+  and analysis folder rename together). Before **5am** local it stamps _yesterday_,
+  so a late-night export keeps the date of the round it came from. Already-dated
+  ids and name collisions are left untouched.
+- **Archive.** Rounds whose slug date is **more than 2 days** older than the
+  effective today are moved into the archive folders (today + yesterday +
+  2-days-ago stay active). Tune the window with `--age N`; undated rounds are
+  skipped (unknown age). During `ml run` the round being run is never archived.
+
+Use `ml tidy --dry-run` to preview, `--no-name` / `--no-archive` to run one half.
+
 ## Archive
 
 - `data/rounds/archive/` — retired inputs; **ignored** by round discovery/parsing.

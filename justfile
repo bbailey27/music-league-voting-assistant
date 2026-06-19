@@ -25,6 +25,10 @@ run name:
 status name="":
     node scripts/ml.mjs status "{{name}}"
 
+# Date-slug undated rounds + archive stale ones (also runs at the start of `run`)
+tidy *flags:
+    node scripts/ml.mjs tidy {{flags}}
+
 # Lint JS (eslint) + Markdown (markdownlint) without changing files
 lint:
     npm run --silent lint
