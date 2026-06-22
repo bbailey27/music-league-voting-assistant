@@ -11,18 +11,30 @@ The agent/you only step in to rebalance points or research tricky "fit" calls.
 ## Setup (one-time)
 
 ```bash
+# if you don't have them already (just is optional)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+brew install just
+# for this project
 npm install                  # installs linkedom (parser) + eslint
 ```
 
-You'll also want [`just`](https://github.com/casey/just) on your PATH (`brew install just`).
-Everything works without it too — see [Without `just`](#without-just) below.
+You'll want `[just](https://github.com/casey/just)` on your PATH (`brew install just`).
+Everything works without it too — see [Without `just](#without-just)` below.
 
 ### Private data
 
 Round inputs, analysis outputs, and reference data are **not** stored in this repo.
 They live in a separate **private** git repository (`music-league-data`) mounted as a
-git submodule at **`data/`** (`data/rounds/`, `data/analysis/`, `data/ref/`). This keeps
+git submodule at `**data/`** (`data/rounds/`, `data/analysis/`, `data/ref/`). This keeps
 the code public as a portfolio while exact round comments and personal lists stay private.
+
+Note: The original device needs the github-personal alias referenced in .gitmodules. On other devices, set a local alias for the correct url:
+
+```bash
+git config submodule.data.url https://github.com/bbailey27/music-league-data.git
+# or, with ssh
+git config submodule.data.url git@github.com:bbailey27/music-league-data.git
+```
 
 Clone with the data (if you have access to the private repo):
 
@@ -42,54 +54,30 @@ The whole flow is driven by `just run <name>`, where `<name>` is a **fuzzy match
 on the round (e.g. `tarot` or `2026-06-09`). It always runs the next step for you.
 
 1. **Drop the round HTML into `data/rounds/`.** In Music League, let the page autosave,
-   **reload it**, confirm your comment/score boxes are pre-filled, then save the
+  **reload it**, confirm your comment/score boxes are pre-filled, then save the
    page (or copy the page source) into a file at:
-
-   ```text
-   data/rounds/<roundname>.html        e.g. data/rounds/2026-06-09-tarot-hanged-man.html
-   ```
-
    `<roundname>` is your choice (dated slugs work well); every later file is derived
    from it. Reload after autosave so comments appear as `data-comment` (see
    [Getting a usable HTML export](#getting-a-usable-html-export-important)).
-
 2. **Parse it.** Run the next step:
 
-   ```bash
+  ```bash
    just run tarot
-   ```
+  ```
 
    This writes the music-only report + JSON:
-
-   ```text
-   data/analysis/<roundname>/music.md        ranked table + raw-order vote table (+ round description)
-   data/analysis/<roundname>/music.json      canonical data (source for the fit step)
-   ```
-
    For a plain (non-thematic) round, **you're done** — open `music.md` and enter votes.
-
 3. **(Thematic/lyric rounds only) Fit research.** This is the one manual/agent step
-   `run` won't do for you. The agent researches how each song fits the prompt and
+  `run` won't do for you. The agent researches how each song fits the prompt and
    writes:
-
-   ```text
-   data/analysis/<roundname>/fit.json
-   ```
-
 4. **Merge fit + music, then render.** Merge (manual or agent):
 
-   ```bash
+  ```bash
    node scripts/parse-round.mjs data/rounds/<roundname>.html --fit data/analysis/<roundname>/fit.json
-   ```
+  ```
 
-   That writes **`scores.json`** (deliverable — merged `draftVotes`; `fit.json` stays fit-only).
+   That writes `**scores.json**` (deliverable — merged `draftVotes`; `fit.json` stays fit-only).
    Then:
-
-   ```bash
-   just run tarot                 # → scores.html when scores.json exists
-   just scores tarot              # force re-render deliverable HTML
-   just fit tarot                 # fit-only HTML from fit.json
-   ```
 
 Check where any round stands at any time:
 
@@ -103,14 +91,13 @@ just status tarot                # full checklist + next step for one round
 `just` recipes forward to the dispatcher (`scripts/ml.mjs`); extra flags pass straight
 through to the underlying scripts.
 
-- **`just run <name>`** — run the next scriptable step (parse, render scores/fit HTML).
-- **`just status [name]`** — pipeline checklist + next step (no name = every round).
-- **`just parse <name> [flags]`** — force parse; flags: `--mode objective|subjective`, `--no-json`.
-- **`just fit <name> [flags]`** — render fit-only HTML from `fit.json`.
-- **`just scores <name> [flags]`** — render deliverable HTML from `scores.json`.
-- **`just final <name> [flags]`** — render scores or music HTML (whichever applies).
-
-- **`--mode`**, **fuzzy names**, and **blank score boxes** — same rules as [Workflow](#workflow) step 1 and [How comments are scored](#how-comments-are-scored-your-comment-only) below.
+- `**just run <name>**` — run the next scriptable step (parse, render scores/fit HTML).
+- `**just status [name]**` — pipeline checklist + next step (no name = every round).
+- `**just parse <name> [flags]**` — force parse; flags: `--mode objective|subjective`, `--no-json`.
+- `**just fit <name> [flags]**` — render fit-only HTML from `fit.json`.
+- `**just scores <name> [flags]**` — render deliverable HTML from `scores.json`.
+- `**just final <name> [flags]**` — render scores or music HTML (whichever applies).
+- `**--mode**`, **fuzzy names**, and **blank score boxes** — same rules as [Workflow](#workflow) step 1 and [How comments are scored](#how-comments-are-scored-your-comment-only) below.
 
 ### Without `just`
 
@@ -165,7 +152,7 @@ From each `div.song`, skipping your own submissions (`mine: true`):
 | `74?`                     | 74, `?` uncertainty flag (not negative)                                                    |
 | `74 play`                 | 74, playlist-add (positive tiebreak)                                                       |
 | `no` / `nope` / `invalid` | disqualified (no vote)                                                                     |
-| `-` (bare)                | disqualified — true DQ _or_ an unspecified low score unlikely to place; either way no vote |
+| `-` (bare)                | disqualified — true DQ *or* an unspecified low score unlikely to place; either way no vote |
 | words only, no number     | disqualified (objective) / needs review (subjective)                                       |
 | empty box                 | needs a score (you'll be prompted, never invented)                                         |
 
@@ -178,17 +165,17 @@ songs), anchored on the **mode** (most common score), not the floor — disquali
 entries are excluded entirely.
 
 1. **1-D clustering** (Ckmeans.1d.dp) finds natural score gaps; equal scores stay in
-   the same tier (`tierKey`).
-2. A **mode-centered bell** sets tier point targets; **`auto`** widens the curve as the
-   points-to-songs ratio grows.
+  the same tier (`tierKey`).
+2. A **mode-centered bell** sets tier point targets; `**auto`** widens the curve as the
+  points-to-songs ratio grows.
 3. **Smoothness rule:** songs ≤1 score apart never end >1 point apart; big jumps only
-   on real gaps (>1 score).
+  on real gaps (>1 score).
 4. Budget is spent exactly via monotonic waterfill; per-song caps enforced.
 
 - **Tiebreaks** (equal scores): higher score, then `play ≥ + > plain > -`.
 - **Uncertainty:** `?` at a tier boundary surfaces under "Needs review."
 - **Ambiguous splits:** may emit `tier-structure` tradeoffs; pin with `--tier-count` or
-  `--bucket-count`.
+`--bucket-count`.
 
 Dense or oversubscribed rounds naturally push more songs to 0 — treat the output as a
 starting point and rebalance. Full model: [spec/point-allocation.md](spec/point-allocation.md).
@@ -204,9 +191,9 @@ starting point and rebalance. Full model: [spec/point-allocation.md](spec/point-
 
 ## The fit report (HTML)
 
-For lyric/theme rounds, fit research lives in **`data/analysis/<roundname>/fit.json`**
-(workflow step 3). Merge with music scores to produce **`scores.json`** /
-**`scores.html`** — the deliverable.
+For lyric/theme rounds, fit research lives in `**data/analysis/<roundname>/fit.json`**
+(workflow step 3). Merge with music scores to produce `**scores.json**` /
+`**scores.html**` — the deliverable.
 
 ```bash
 just fit tarot [--out <path>] [--order fit|combined|raw]
@@ -231,7 +218,7 @@ are documented in [spec/fit-evaluation.md](spec/fit-evaluation.md) → Output.
 - `spec/analysis-artifacts.md` — naming convention for music / fit / scores files.
 - `tests/fixtures/sample-round/` — synthetic round for docs and tests.
 - `spec/` — the scoring/allocation rules in prose (`score-parsing`, `point-allocation`,
-  `comments`, `uncertainty`, `fit-evaluation`, `fit-guidance`). `decisions.md` is the
-  running log of how/why those rules changed.
+`comments`, `uncertainty`, `fit-evaluation`, `fit-guidance`). `decisions.md` is the
+running log of how/why those rules changed.
 - `tests/regressions/` — captured failure cases to guard against.
 - `.cursor/rules/` — agent guidance mirroring the specs.
