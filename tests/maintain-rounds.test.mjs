@@ -11,6 +11,7 @@ import {
   effectiveDate,
   formatDateSlug,
   slugAgeDays,
+  ensureDateSlugForInput,
 } from '../scripts/maintain-rounds.mjs';
 
 const execFileP = promisify(execFile);
@@ -76,6 +77,26 @@ test('naming prepends the date to undated input + analysis together', async () =
     assert.ok(await exists(join(cwd, 'data', 'analysis', `${stamp}-tarot-hermit`)));
     assert.ok(!(await exists(join(cwd, 'data', 'rounds', 'tarot-hermit.html'))));
   } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('ensureDateSlugForInput renames an undated parse path without archiving', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'tidy-ensure-'));
+  const origCwd = process.cwd();
+  try {
+    await makeInput(cwd, 'story-5');
+    process.chdir(cwd);
+    const logs = [];
+    const resolved = ensureDateSlugForInput('data/rounds/story-5.html', { log: (m) => logs.push(m) });
+    const stamp = formatDateSlug(effectiveDate());
+    assert.equal(resolved, `data/rounds/${stamp}-story-5.html`);
+    assert.ok(logs.some((m) => /named story-5/.test(m)));
+    assert.ok(await exists(join(cwd, 'data', 'rounds', `${stamp}-story-5.html`)));
+    assert.ok(!(await exists(join(cwd, 'data', 'rounds', 'story-5.html'))));
+    assert.ok(!(await exists(join(cwd, 'data', 'rounds', 'archive'))));
+  } finally {
+    process.chdir(origCwd);
     await rm(cwd, { recursive: true, force: true });
   }
 });

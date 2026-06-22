@@ -6,15 +6,16 @@
 //   2. Archive stale rounds      — move rounds whose slug date is older than the
 //      keep window into rounds/archive/ and analysis/archive/.
 //
-// Both steps run automatically at the start of `ml run` (naming first so freshly
-// generated artifacts land under the dated name). Use them directly with:
+// Naming also runs at the start of `parse-round.mjs` (and thus `ml parse`) so a
+// bare parse still date-slugs the round without archiving stale ones. Full tidy
+// (naming + archive) runs at the start of `ml run`. Use them directly with:
 //   node scripts/maintain-rounds.mjs [--dry-run] [--age N] [--no-name] [--no-archive]
 //
 // Date helpers are exported for tests; the file ops are intentionally simple
 // renameSync moves within the data submodule (reversible via git).
 
 import { existsSync, mkdirSync, renameSync, statSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, extname, join } from 'node:path';
 import {
   ROUNDS_DIR,
   ANALYSIS_DIR,
@@ -24,6 +25,7 @@ import {
   hasDatePrefix,
   listRoundInputIds,
   listAnalysisRoundIds,
+  roundIdFromInput,
 } from './paths.mjs';
 
 // Round inputs are saved as .html (preferred) or pasted .txt; a round id may own
@@ -110,6 +112,19 @@ export function applyDateSlugs({ now = new Date(), dryRun = false, log = () => {
     done.push({ from: id, to: newId, moves });
   }
   return done;
+}
+
+/**
+ * Date-slug the round for a parse input path when undated; return the path to
+ * read (updated after any rename). Does not archive stale rounds.
+ */
+export function ensureDateSlugForInput(inputPath, { now = new Date(), log = console.log } = {}) {
+  const roundId = roundIdFromInput(inputPath);
+  if (hasDatePrefix(roundId)) return inputPath;
+  const renamed = applyDateSlugs({ now, log });
+  const hit = renamed.find((r) => r.from === roundId);
+  if (!hit) return inputPath;
+  return join(ROUNDS_DIR, `${hit.to}${extname(inputPath)}`);
 }
 
 function moveIntoArchive(srcPath, archiveDir, log, dryRun) {

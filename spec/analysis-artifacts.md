@@ -30,7 +30,8 @@ That writes `scores.json` and leaves `fit.json` unchanged.
 ## Date slugs and tidying
 
 Round ids carry a leading `YYYY-MM-DD-` date slug. `scripts/maintain-rounds.mjs`
-(`ml tidy`, also run automatically at the start of `ml run`) keeps the trees tidy:
+(`ml tidy`, also run automatically when parsing via `parse-round.mjs` / `ml parse`,
+and at the start of `ml run` before archiving) keeps the trees tidy:
 
 - **Name.** Any undated round id — input file in `data/rounds/` and/or folder in
   `data/analysis/` — gets today's date prepended (a round's `.html`/`.txt` inputs
