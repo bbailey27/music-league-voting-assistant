@@ -10,13 +10,13 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { basename, dirname, join, extname } from 'node:path';
 import { formatScore } from './score-core.mjs';
 import { matchFlag, takePositional } from './cli-args.mjs';
-import { esc, tierHue, chip, tradeoffsHtml, pickHtml, comboBallotHtml, RENDER_FIT_STYLE } from './render-html-shared.mjs';
+import { esc, tierHue, chip, tradeoffsHtml, pickHtml, comboBallotHtml, RENDER_FIT_STYLE, scoreRangeFromSongs, scoreHeatAttrs, buildVoteTierMap, voteTierAttrs } from './render-html-shared.mjs';
 
 // ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
 function parseArgs(argv) {
-  const args = { file: null, out: null, order: 'fit' };
+  const args = { file: null, out: null, order: 'fit', orderExplicit: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     let next = matchFlag(argv, i, 'out', (v) => {
@@ -28,6 +28,7 @@ function parseArgs(argv) {
     }
     next = matchFlag(argv, i, 'order', (v) => {
       args.order = v;
+      args.orderExplicit = true;
     });
     if (next != null) {
       i = next;
@@ -57,17 +58,36 @@ function renderHead(data) {
 </header>`;
 }
 
+function resolveDefaultOrder(data, filePath, orderExplicit) {
+  if (orderExplicit) return null;
+  const base = basename(filePath, extname(filePath));
+  if (base === 'scores') return 'combined';
+  const songs = Array.isArray(data.songs) ? data.songs : [];
+  if (songs.some((s) => s.combinedScore != null)) return 'combined';
+  return null;
+}
+
+function computeScoreRanges(songs) {
+  return {
+    fit: scoreRangeFromSongs(songs, 'fitScore'),
+    music: scoreRangeFromSongs(songs, 'musicScore'),
+    combined: scoreRangeFromSongs(songs, 'combinedScore'),
+  };
+}
+
 function renderScale(data) {
   const scale = data.fitScale;
   if (!scale || typeof scale !== 'object') return '';
   const rows = Object.entries(scale)
     .map(([tier, info]) => {
+      const score = info && info.fitScore != null ? info.fitScore : null;
       const hue = tierHue(tier);
-      const score = info && info.fitScore != null ? formatScore(info.fitScore) : '';
+      const tierAttrs = ` class="tier" style="--tier-hue:${hue}"`;
+      const scoreText = score != null ? formatScore(score) : '';
       const desc = info && info.desc ? esc(info.desc) : '';
       return `<tr>
-      <td><span class="tier" style="--tier-hue:${hue}">${esc(tier)}</span></td>
-      <td class="num">${score}</td>
+      <td><span${tierAttrs}>${esc(tier)}</span></td>
+      <td class="num">${scoreText}</td>
       <td>${desc}</td>
     </tr>`;
     })
@@ -83,8 +103,9 @@ ${rows}
 </section>`;
 }
 
-function renderCard(s, combineLabel, weights) {
+function renderCard(s, combineLabel, weights, ranges, voteTierMap) {
   const hue = tierHue(s.fitTier);
+  const cardHue = hue;
   const themes = Array.isArray(s.themesHit) ? s.themesHit : [];
   const themeChips = themes.length
     ? themes.map((t) => chip(t)).join('')
@@ -105,12 +126,16 @@ function renderCard(s, combineLabel, weights) {
   if (s.basis) meta.push(`<span class="meta-item">basis: ${esc(s.basis)}</span>`);
   if (s.submitterAssist) meta.push('<span class="meta-item">submitter-assist</span>');
 
-  const scores = [`<span class="score" title="fit score">fit ${formatScore(s.fitScore)}</span>`];
+  const scores = [
+    `<span${scoreHeatAttrs(s.fitScore, ranges?.fit, 'score')} title="fit score">fit ${formatScore(s.fitScore)}</span>`,
+  ];
   if (s.musicScore != null)
-    scores.push(`<span class="score music" title="your music score">music ${formatScore(s.musicScore)}</span>`);
+    scores.push(
+      `<span${scoreHeatAttrs(s.musicScore, ranges?.music, 'score music')} title="your music score">music ${formatScore(s.musicScore)}</span>`
+    );
   if (s.combinedScore != null)
     scores.push(
-      `<span class="score combined" title="${esc(combineLabel || 'music+fit blend')}">combined ${formatScore(s.combinedScore)}</span>`
+      `<span${scoreHeatAttrs(s.combinedScore, ranges?.combined, 'score combined')} title="${esc(combineLabel || 'music+fit blend')}">combined ${formatScore(s.combinedScore)}</span>`
     );
   if (s.draftDownvotes > 0)
     scores.push(
@@ -118,7 +143,7 @@ function renderCard(s, combineLabel, weights) {
     );
   else if (s.draftVotes != null)
     scores.push(
-      `<span class="score votes${s.draftVotes > 0 ? ' has-votes' : ''}" title="draft upvotes">${formatScore(s.draftVotes)} ▲</span>`
+      `<span${voteTierAttrs(s.draftVotes, voteTierMap)} title="draft upvotes">${formatScore(s.draftVotes)} ▲</span>`
     );
 
   // Show how the combined score is actually built: each axis normalized onto the
@@ -137,7 +162,9 @@ function renderCard(s, combineLabel, weights) {
         `</div>`
       : '';
 
-  return `<article class="card" style="--tier-hue:${hue}">
+  const tierAttrs = ` class="tier" style="--tier-hue:${hue}"`;
+
+  return `<article class="card" style="--tier-hue:${cardHue}">
   <div class="identity">
     <span class="rank">#${esc(s.rawOrderIndex)}</span>
     <span class="title">${esc(s.title)}</span>
@@ -145,7 +172,7 @@ function renderCard(s, combineLabel, weights) {
   </div>
   <div class="body">
     <div class="card-head">
-      <span class="tier">${esc(s.fitTier)}</span>
+      <span${tierAttrs}>${esc(s.fitTier)}</span>
       ${scores.join('')}
       <div class="themes">${themeChips}</div>
     </div>
@@ -200,10 +227,12 @@ function renderCandidates(data, order) {
     w && w.fit != null && w.music != null
       ? `${Math.round(w.fit * 100)}% fit / ${Math.round(w.music * 100)}% music`
       : 'music+fit blend';
+  const ranges = computeScoreRanges(songs);
+  const voteTierMap = buildVoteTierMap(songs);
   return `<section class="candidates">
   <h2>${heading}</h2>
-  ${songs.map((s) => renderCard(s, combineLabel, w)).join('\n')}
-</section>`;
+  ${songs.map((s) => renderCard(s, combineLabel, w, ranges, voteTierMap)).join('\n')}
+  </section>`;
 }
 
 function renderHighlights(data) {
@@ -290,6 +319,9 @@ async function main() {
     console.error(`No songs found in ${args.file}. Expected a fit JSON with a "songs" array.`);
     process.exit(1);
   }
+
+  const autoOrder = resolveDefaultOrder(data, args.file, args.orderExplicit);
+  if (autoOrder) args.order = autoOrder;
 
   const html = renderDocument(data, args.order);
 

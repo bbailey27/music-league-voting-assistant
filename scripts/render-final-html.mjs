@@ -30,7 +30,7 @@ import {
 } from './score-core.mjs';
 import { parseDownShape } from './parse-round.mjs';
 import { matchFlag, takePositional } from './cli-args.mjs';
-import { esc, tierHue, chip, tradeoffsHtml, pickHtml, comboBallotHtml, NEUTRAL_HUE, RENDER_FINAL_STYLE } from './render-html-shared.mjs';
+import { esc, tierHue, chip, tradeoffsHtml, pickHtml, comboBallotHtml, NEUTRAL_HUE, RENDER_FINAL_STYLE, buildVoteTierMap, voteTierAttrs } from './render-html-shared.mjs';
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -85,13 +85,13 @@ function modifierText(s) {
 }
 
 // Upvotes and downvotes are disjoint; render the side that has votes.
-function voteBadge(s) {
+function voteBadge(s, voteTierMap) {
   const up = s.finalVotes || 0;
   const down = s.finalDownvotes || 0;
   if (formatVoteAllocation(s).includes('⚠'))
     return `<span class="score votes has-votes" title="draft votes">${up} ▲ / -${down} ▼ ⚠</span>`;
   if (down) return `<span class="score votes has-down" title="draft downvotes">-${down} ▼</span>`;
-  return `<span class="score votes${up > 0 ? ' has-votes' : ''}" title="draft upvotes">${up} ▲</span>`;
+  return `<span${voteTierAttrs(up, voteTierMap)} title="draft upvotes">${up} ▲</span>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +212,7 @@ function statusFlags(s) {
   return flags;
 }
 
-function renderCard(s) {
+function renderCard(s, voteTierMap) {
   const hue = s.fitTier ? tierHue(s.fitTier) : NEUTRAL_HUE;
   const mods = modifierText(s);
 
@@ -229,7 +229,7 @@ function renderCard(s) {
   }
   if (s.combinedScore != null)
     scores.push(`<span class="score combined" title="combined score">combined ${formatScore(s.combinedScore)}</span>`);
-  scores.push(voteBadge(s));
+  scores.push(voteBadge(s, voteTierMap));
 
   const flags = statusFlags(s);
   const themes = Array.isArray(s.themesHit) ? s.themesHit : [];
@@ -260,7 +260,8 @@ function renderCard(s) {
 function renderCandidates(model, order) {
   const heading =
     order === 'raw' ? 'Songs (raw order)' : order === 'score' ? 'Songs (by score)' : 'Songs (by votes)';
-  const cards = sortSongs(model.songs, order).map(renderCard).join('\n');
+  const voteTierMap = buildVoteTierMap(model.songs);
+  const cards = sortSongs(model.songs, order).map((s) => renderCard(s, voteTierMap)).join('\n');
   return `<section class="candidates">
   <h2>${heading}</h2>
   ${cards}

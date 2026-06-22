@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { buildVoteTierMap, voteTierHue, voteTierAttrs } from '../scripts/render-html-shared.mjs';
 
 const execFileP = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -48,4 +49,23 @@ test('render-fit-html produces stable card output from sample music.json', async
   assert.match(html, /City Glow/);
   assert.match(html, /Midnight Bus/);
   assert.match(html, /fit report/);
+});
+
+test('vote tier map assigns discrete hues by rank among non-zero point values', () => {
+  const songs = [
+    { draftVotes: 3 },
+    { draftVotes: 2 },
+    { draftVotes: 2 },
+    { draftVotes: 1 },
+    { draftVotes: 0 },
+  ];
+  const map = buildVoteTierMap(songs);
+  assert.equal(voteTierHue(3, map), 270);
+  assert.equal(voteTierHue(2, map), 220);
+  assert.equal(voteTierHue(1, map), 145);
+  assert.equal(voteTierHue(0, map), null);
+  assert.equal(voteTierHue(2, map), voteTierHue(2, map), 'same point value → same hue');
+  assert.match(voteTierAttrs(2, map), /--vote-hue:220/);
+  assert.match(voteTierAttrs(0, map), /class="score votes"/);
+  assert.doesNotMatch(voteTierAttrs(0, map), /--vote-hue/);
 });

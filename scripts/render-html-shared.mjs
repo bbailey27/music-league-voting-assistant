@@ -11,20 +11,94 @@ export function esc(s) {
     .replace(/'/g, '&#39;');
 }
 
-// Stable, theme-neutral accent per fit tier (dark/light friendly hues). Songs
-// with no fit signal fall back to a neutral hue.
+// Stable, theme-neutral accent per fit tier (dark/light friendly hues). Ordered
+// to match the vote-tier palette: purple = best, blue = good, green = mid,
+// teal = lower, orange = weak, red = worst. Songs with no fit signal fall back
+// to a neutral hue.
 export const TIER_HUE = {
-  excellent: 145,
-  strong: 200,
-  solid: 260,
-  moderate: 35,
-  weak: 15,
+  excellent: 270,
+  strong: 220,
+  solid: 145,
+  moderate: 180,
+  weak: 35,
   nope: 0,
 };
 export const NEUTRAL_HUE = 220;
 
 export function tierHue(tier) {
   return TIER_HUE[String(tier || '').toLowerCase()] ?? NEUTRAL_HUE;
+}
+
+// Purple (270) → red (0) heat scale for numeric scores within a round's spread.
+// Same direction as the discrete tier/vote palettes: high = purple, low = red.
+export const SCORE_HUE_LO = 0;
+export const SCORE_HUE_HI = 270;
+
+export function scoreRangeMinMax(values) {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const v of values) {
+    if (v != null && Number.isFinite(v)) {
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+  }
+  if (!Number.isFinite(min)) return null;
+  return { min, max };
+}
+
+export function scoreRangeFromSongs(songs, field) {
+  return scoreRangeMinMax((songs || []).map((s) => s[field]));
+}
+
+export function scoreToHue(value, min, max) {
+  if (value == null || !Number.isFinite(value)) return NEUTRAL_HUE;
+  if (min == null || max == null || !Number.isFinite(min) || !Number.isFinite(max)) return NEUTRAL_HUE;
+  if (min === max) return (SCORE_HUE_LO + SCORE_HUE_HI) / 2;
+  const t = Math.max(0, Math.min(1, (value - min) / (max - min)));
+  return SCORE_HUE_LO + t * (SCORE_HUE_HI - SCORE_HUE_LO);
+}
+
+export function scoreHeatAttrs(value, range, extraClasses = '') {
+  if (!range || value == null || !Number.isFinite(value)) {
+    return extraClasses ? ` class="${extraClasses}"` : '';
+  }
+  const hue = scoreToHue(value, range.min, range.max);
+  const cls = ['score-heat', extraClasses].filter(Boolean).join(' ');
+  return ` class="${cls}" style="--score-hue:${hue}"`;
+}
+
+// Discrete upvote-tier palette (rank position among distinct non-zero point values
+// in the round). Same hues as the fit tier scale so color language is consistent:
+// purple (best) → blue → green → teal → orange → red.
+export const VOTE_TIER_HUES = [270, 220, 145, 180, 35, 0];
+
+export function buildVoteTierMap(songs) {
+  const values = new Set();
+  for (const s of songs || []) {
+    const v = Number(s.finalVotes ?? s.draftVotes ?? 0) || 0;
+    if (v > 0) values.add(v);
+  }
+  const sorted = [...values].sort((a, b) => b - a);
+  const map = new Map();
+  sorted.forEach((v, i) => map.set(v, VOTE_TIER_HUES[Math.min(i, VOTE_TIER_HUES.length - 1)]));
+  return map;
+}
+
+export function voteTierHue(votes, voteTierMap) {
+  const v = Number(votes) || 0;
+  if (v <= 0 || !voteTierMap) return null;
+  return voteTierMap.get(v) ?? null;
+}
+
+export function voteTierAttrs(votes, voteTierMap, extraClasses = '') {
+  const hue = voteTierHue(votes, voteTierMap);
+  const v = Number(votes) || 0;
+  const parts = ['score', 'votes', extraClasses];
+  if (v > 0 && hue != null) parts.push('has-votes');
+  const cls = parts.filter(Boolean).join(' ');
+  if (v > 0 && hue != null) return ` class="${cls}" style="--vote-hue:${hue}"`;
+  return ` class="${cls}"`;
 }
 
 export function chip(text, hue) {
@@ -499,10 +573,10 @@ h1 { font-size: 1.5rem; margin: 0 0 .5rem; }
 .score.fit { color: var(--muted); }
 .score.combined { color: var(--fg); background: hsl(var(--tier-hue) 60% 50% / .14); border-color: hsl(var(--tier-hue) 60% 50% / .3); }
 .score.votes { color: var(--muted); }
-.score.votes.has-votes { color: #fff; background: hsl(var(--tier-hue) 65% 42%); border-color: hsl(var(--tier-hue) 65% 42%); }
+.score.votes.has-votes { color: #fff; background: hsl(var(--vote-hue, 270) 70% 60%); border-color: hsl(var(--vote-hue, 270) 70% 60%); }
 .score.votes.has-down { color: #fff; background: hsl(0 65% 48%); border-color: hsl(0 65% 48%); }
 @media (prefers-color-scheme: dark) {
-  .score.votes.has-votes { color: #0d0f12; background: hsl(var(--tier-hue) 65% 65%); border-color: hsl(var(--tier-hue) 65% 65%); }
+  .score.votes.has-votes { color: #0d0f12; background: hsl(var(--vote-hue, 270) 70% 60%); border-color: hsl(var(--vote-hue, 270) 70% 60%); }
   .score.votes.has-down { color: #0d0f12; background: hsl(0 70% 68%); border-color: hsl(0 70% 68%); }
 }
 
@@ -527,10 +601,22 @@ h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
   font-weight: 700; font-variant-numeric: tabular-nums; font-size: .8rem;
   padding: .1rem .45rem; border-radius: 6px; border: 1px solid var(--line); color: var(--muted);
 }
-.card-head .score.combined { color: var(--fg); background: hsl(var(--tier-hue) 60% 50% / .14); border-color: hsl(var(--tier-hue) 60% 50% / .3); }
+.score-heat, .tier.score-heat {
+  --score-hue: 145;
+  color: hsl(var(--score-hue) 60% 32%);
+  background: hsl(var(--score-hue) 65% 50% / .16);
+  border: 1px solid hsl(var(--score-hue) 65% 50% / .4);
+}
+@media (prefers-color-scheme: dark) {
+  .score-heat, .tier.score-heat { color: hsl(var(--score-hue) 80% 72%); background: hsl(var(--score-hue) 65% 50% / .18); }
+}
+.card-head .score.score-heat { color: hsl(var(--score-hue) 60% 32%); background: hsl(var(--score-hue) 65% 50% / .16); border-color: hsl(var(--score-hue) 65% 50% / .4); }
+@media (prefers-color-scheme: dark) {
+  .card-head .score.score-heat { color: hsl(var(--score-hue) 80% 72%); background: hsl(var(--score-hue) 65% 50% / .18); }
+}
 .card-head .score.votes { color: var(--muted); }
-.card-head .score.votes.has-votes { color: #fff; background: hsl(var(--tier-hue) 65% 42%); border-color: hsl(var(--tier-hue) 65% 42%); }
-@media (prefers-color-scheme: dark) { .card-head .score.votes.has-votes { color: #0d0f12; background: hsl(var(--tier-hue) 65% 65%); border-color: hsl(var(--tier-hue) 65% 65%); } }
+.card-head .score.votes.has-votes { color: #fff; background: hsl(var(--vote-hue, 270) 70% 60%); border-color: hsl(var(--vote-hue, 270) 70% 60%); }
+@media (prefers-color-scheme: dark) { .card-head .score.votes.has-votes { color: #0d0f12; background: hsl(var(--vote-hue, 270) 70% 60%); border-color: hsl(var(--vote-hue, 270) 70% 60%); } }
 .music-note { margin: .25rem 0 .5rem; color: var(--muted); font-size: .9rem; }
 .music-note .label { text-transform: uppercase; letter-spacing: .04em; font-size: .7rem; font-weight: 700; margin-right: .35rem; }
 
