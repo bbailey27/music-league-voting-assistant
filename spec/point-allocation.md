@@ -329,9 +329,25 @@ pass)`: a `maybe` never earns more points than the lowest-funded pass. By
   CLI: a **negative** `--pin` value (`--pin 6:-2` = two downvotes on song 6). A
   down-pinned song is forced off the upvote axis (zero upvotes), its pinned magnitude
   is committed first and is excluded from both the shaped pool and spill (never topped
-  up past the pin), and the rest of the down bank is shaped around it. Like up pins,
-  a pin can exceed the bank (deliberate manual override); there is no separate
-  overflow tradeoff, matching `--pin`'s upvote behavior.
+  up past the pin), and the rest of the down bank is shaped around it.
+- **Pins never legitimize an over-budget ballot.** Exceeding a bank is invalid in
+  Music League, so a pin is **not** licensed to overspend. Two guards enforce this:
+  - **`--option` + `--pin` reflows** (`reconcileOptionPins`): a pin layered on a
+    chosen option is reconciled at the margin so the bank stays exact — a net-positive
+    pin (the song gets more than the option gave) **sheds** the surplus from the
+    lowest-ranked unpinned funded songs; a net-negative pin **promotes** the next
+    candidates (best-ranked unfunded unpinned first, then best-ranked below-cap). So
+    `--option A --pin <topSong>:2` lifts that song and drops the bottom funded one,
+    rather than printing a `+1`-over ballot.
+  - **`budget-mismatch` is flagged** whenever any final allocation leaves a bank
+    over- or under-filled (a bare pin that doesn't even out, an under-pinned down
+    bank, etc.). The allocator emits a `budget-mismatch` tradeoff (so every report
+    surfaces it) and the CLI prints a loud `⛔ OVER BUDGET` / `⚠️ Bank not fully
+    spent` line. There is no longer a silent overflow.
+  - **A pin above a real per-song cap is rejected immediately.** `maxUpvotesPerSong`
+    / `maxDownvotesPerSong` (Music League encodes "no limit" as `0` → unlimited); a
+    pin exceeding a finite cap errors at the CLI (`pinCapError`) instead of being
+    silently clamped.
 - **`favoriteBand`** — controls the R2 favorite top-band merge (scores ≥ 80 share
   the top tier). Default merges at `80` **for raw-score rounds only**; it is **off by
   default when `rankBy = combined`** (the `80` floor is a raw-music anchor). `{ min }`
@@ -484,6 +500,10 @@ deciding. Each is `{ kind, question, options: [{ label, value }] }`:
 - `down-structure` — which **downvote shape** (concentrated / flat / curved), with
   per-song previews; selectable via `--down-shape`. Surfaced only when the shapes
   diverge and `downShape` isn't pinned.
+- `budget-mismatch` — a final allocation does **not** spend a bank exactly (a pin
+  over/under-filled it). Carries `over` (true when a bank was exceeded) and an
+  empty `options` list — it's a hard warning, not a choice. The CLI echoes it loudly;
+  reports render it alongside the budget line.
 
 Consumers: CLI prints them (and `--pick`/overrides re-run), the web app renders
 choice cards, markdown lists a "Needs your call" section.

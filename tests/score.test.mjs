@@ -21,6 +21,8 @@ import {
   parseBucketCount,
   parseDownShape,
   resolveOptionPick,
+  reconcileOptionPins,
+  pinCapError,
 } from '../scripts/parse-round.mjs';
 import { buildComboBallot } from '../scripts/render-html-shared.mjs';
 
@@ -396,6 +398,113 @@ test('resolveOptionPick applies a surfaced distribution by letter (music-only pa
     !res.tradeoffs.some((t) => t.kind === 'tier-structure'),
     'a fully-pinned pick is not re-surfaced as a choice'
   );
+});
+
+test('reconcileOptionPins reflows a net-positive pin by shedding the bottom (budget stays exact)', () => {
+  // Option distribution best-first: 2,2,2,1,1 = budget 8 (mirrors story-5 option A).
+  const perSong = [
+    { rawOrderIndex: 3, votes: 2 },
+    { rawOrderIndex: 10, votes: 2 },
+    { rawOrderIndex: 1, votes: 2 },
+    { rawOrderIndex: 9, votes: 1 },
+    { rawOrderIndex: 12, votes: 1 },
+    { rawOrderIndex: 6, votes: 0 },
+    { rawOrderIndex: 0, votes: 0 },
+  ];
+  // Pin the 4th song up to 2 (+1). The surplus is shed from the lowest funded
+  // unpinned song (#12, the bottom 1) → 2,2,2,2,0, still summing to 8.
+  const ov = reconcileOptionPins(perSong, { 9: 2 });
+  assert.equal(Object.values(ov).reduce((a, b) => a + b, 0), 8, 'budget preserved exactly');
+  assert.equal(ov[9], 2, 'pin honored');
+  assert.equal(ov[12], 0, 'bottom funded song shed the surplus point');
+  assert.deepEqual(ov, { 3: 2, 10: 2, 1: 2, 9: 2, 12: 0, 6: 0, 0: 0 });
+});
+
+test('reconcileOptionPins reflows a net-negative pin by promoting the next candidate', () => {
+  const perSong = [
+    { rawOrderIndex: 3, votes: 2 },
+    { rawOrderIndex: 10, votes: 2 },
+    { rawOrderIndex: 1, votes: 2 },
+    { rawOrderIndex: 9, votes: 1 },
+    { rawOrderIndex: 12, votes: 1 },
+    { rawOrderIndex: 6, votes: 0 },
+    { rawOrderIndex: 0, votes: 0 },
+  ];
+  // Pin the top song down to 0 (−2). The freed points promote the best unfunded
+  // unpinned songs first (#6, then #0), keeping the budget at 8.
+  const ov = reconcileOptionPins(perSong, { 3: 0 });
+  assert.equal(Object.values(ov).reduce((a, b) => a + b, 0), 8, 'budget preserved exactly');
+  assert.equal(ov[3], 0, 'pin honored');
+  assert.equal(ov[6], 1, 'best unfunded song promoted first');
+  assert.equal(ov[0], 1, 'second freed point promotes the next unfunded song');
+});
+
+test('reconcileOptionPins respects the per-song cap when promoting', () => {
+  const perSong = [
+    { rawOrderIndex: 0, votes: 2 },
+    { rawOrderIndex: 1, votes: 2 },
+    { rawOrderIndex: 2, votes: 0 },
+  ];
+  // Pin #1 to 0 (−2). With cap 2 and only one other open song (#2), the promotion
+  // can lift #2 to the cap (2) but no further — budget stays exact at 4.
+  const ov = reconcileOptionPins(perSong, { 1: 0 }, 2);
+  assert.equal(Object.values(ov).reduce((a, b) => a + b, 0), 4, 'budget preserved');
+  assert.equal(ov[2], 2, 'promotion stops at the cap');
+});
+
+test('resolveOptionPick + option pin stays budget-exact end to end (no overshoot)', () => {
+  const scores = [78, 77, 76, 75, 74, 73, 72, 71, 70, 69];
+  const { tradeoffs } = allocate(mk(scores), 14, 5, { shape: 'auto' });
+  const ts = tradeoffs.find((t) => t.kind === 'tier-structure');
+  assert.ok(ts && ts.options.length >= 1);
+  // Pin the option's 2nd-ranked song one point above whatever the option gave it.
+  const ref = ts.options[0].perSong;
+  const target = ref[1];
+  const { overrides } = resolveOptionPick(tradeoffs, 'A', { [target.rawOrderIndex]: target.votes + 1 }, 5);
+  const f = mk(scores);
+  allocate(f, 14, 5, { shape: 'auto', overrides });
+  assert.equal(sum(f), 14, 'option + pin still spends the full bank exactly');
+});
+
+test('budget-mismatch is flagged when a bare pin overshoots the bank', () => {
+  // Pin three songs to the cap (3×3 = 9) against a 6-point bank: the allocator
+  // honors the deliberate pins but must loudly flag the over-budget total.
+  const songs = mk([78, 76, 74, 72, 70, 68]);
+  const { tradeoffs } = allocate(songs, 6, 5, { shape: 'auto', overrides: { 0: 3, 1: 3, 2: 3 } });
+  const bm = tradeoffs.find((t) => t.kind === 'budget-mismatch');
+  assert.ok(bm, 'over-budget allocation surfaces a budget-mismatch');
+  assert.equal(bm.over, true, 'flagged as OVER budget');
+  assert.match(bm.question, /upvotes 9\/6/);
+});
+
+test('budget-mismatch is flagged when downvote pins underfill the down bank', () => {
+  const songs = mk([78, 76, 74, 72, 70, 68]);
+  // Down bank is 5 but a single down-pin of 1 is the only downvote committed.
+  const { tradeoffs } = allocate(songs, 6, 5, {
+    shape: 'auto',
+    downvotesEnabled: true,
+    downvoteBudget: 5,
+    downvoteCap: 1,
+    downShape: 'concentrated',
+    downOverrides: { 5: 1 },
+  });
+  // (Concentrated honors the pin; spill fills the rest, so this should still be
+  // exact — assert the happy path does NOT false-positive.)
+  assert.ok(!tradeoffs.some((t) => t.kind === 'budget-mismatch'), 'a fully-spent down bank is not flagged');
+  assert.equal(sumDown(songs), 5);
+});
+
+test('a clean allocation never emits a budget-mismatch', () => {
+  const songs = mk([78, 76, 74, 72, 70, 68]);
+  const { tradeoffs } = allocate(songs, 10, 3, { shape: 'auto' });
+  assert.ok(!tradeoffs.some((t) => t.kind === 'budget-mismatch'));
+});
+
+test('pinCapError rejects a pin above a real per-song cap, ignores unlimited caps', () => {
+  assert.match(pinCapError({ 0: 4 }, undefined, 3, Infinity), /exceeds max upvotes per song \(3\)/);
+  assert.match(pinCapError(undefined, { 2: 3 }, Infinity, 2), /exceeds max downvotes per song \(2\)/);
+  assert.equal(pinCapError({ 0: 3, 1: 2 }, undefined, 3, Infinity), null, 'within cap is fine');
+  assert.equal(pinCapError({ 0: 99 }, undefined, Infinity, Infinity), null, 'no cap never trips');
 });
 
 test('resolveOptionPick reports an unavailable option without throwing', () => {

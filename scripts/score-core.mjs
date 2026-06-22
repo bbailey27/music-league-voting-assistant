@@ -427,6 +427,33 @@ function upvotePool(songs, profile, upBudget, downBudget, downCap) {
   return new Set(eligible.slice(0, upCount));
 }
 
+// Surface a loud `budget-mismatch` tradeoff whenever an allocation does not spend a
+// bank EXACTLY. Both banks must be spent exactly (Music League requires every point
+// be cast, and over-spending a bank is never a valid ballot); the deterministic
+// curve always does. A mismatch therefore means a manual pin over- or under-filled a
+// bank, so it is flagged rather than silently emitted. Pushed onto `tradeoffs` so
+// every consumer (CLI, markdown, web) can surface it uniformly. Returns nothing.
+function flagBudgetMismatch(songs, upBudget, profile, tradeoffs) {
+  const up = songs.reduce((a, s) => a + (s.finalVotes || 0), 0);
+  const downEnabled = !!profile.downvotesEnabled && (profile.downvoteBudget || 0) > 0;
+  const downBudget = downEnabled ? profile.downvoteBudget : 0;
+  const down = songs.reduce((a, s) => a + (s.finalDownvotes || 0), 0);
+  const parts = [];
+  if (upBudget > 0 && up !== upBudget) parts.push(`upvotes ${up}/${upBudget}`);
+  if (downEnabled && down !== downBudget) parts.push(`downvotes ${down}/${downBudget}`);
+  if (!parts.length) return;
+  const over = (upBudget > 0 && up > upBudget) || (downEnabled && down > downBudget);
+  tradeoffs.push({
+    kind: 'budget-mismatch',
+    over,
+    question:
+      `${over ? '⛔ OVER BUDGET' : '⚠️ Bank not fully spent'}: ${parts.join(', ')}. ` +
+      `${over ? 'Exceeding a bank is never a valid ballot — ' : ''}` +
+      `a pin likely over/under-filled a bank; rebalance so each bank totals exactly.`,
+    options: [],
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Allocation: profile-driven. Default shape is the mode-centered bell ('auto').
 // Returns { candidates, tradeoffs }; songs are mutated with finalVotes /
@@ -468,6 +495,7 @@ export function allocate(songs, budget, cap = Infinity, profile = {}) {
   );
   if (!scored.length || budget <= 0) {
     finishDownvotes(songs, profile, tradeoffs);
+    flagBudgetMismatch(songs, totalBudget, profile, tradeoffs);
     return { candidates: [], tradeoffs };
   }
 
@@ -483,6 +511,7 @@ export function allocate(songs, budget, cap = Infinity, profile = {}) {
     spillRemainder(songs, totalBudget, cap, profile, tradeoffs, new Set(scored), upSet);
     flagUncertainBoundaries(scored, profile);
     finishDownvotes(songs, profile, tradeoffs);
+    flagBudgetMismatch(songs, totalBudget, profile, tradeoffs);
     return { candidates: scored, tradeoffs };
   }
 
@@ -607,6 +636,7 @@ export function allocate(songs, budget, cap = Infinity, profile = {}) {
   spillRemainder(songs, totalBudget, cap, profile, tradeoffs, new Set(candidates), upSet);
   flagUncertainBoundaries(candidates, profile);
   finishDownvotes(songs, profile, tradeoffs);
+  flagBudgetMismatch(songs, totalBudget, profile, tradeoffs);
   return { candidates, tradeoffs };
 }
 

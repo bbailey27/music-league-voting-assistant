@@ -29,6 +29,7 @@ import {
   musicPaths,
   scoresPaths,
 } from './paths.mjs';
+import { ensureDateSlugForInput } from './maintain-rounds.mjs';
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -156,6 +157,37 @@ export function parsePins(specs) {
   return { overrides: hasUp ? overrides : undefined, downOverrides: hasDown ? downOverrides : undefined };
 }
 
+// A pin above a real per-song cap is an invalid ballot (Music League would reject
+// it), so it must fail fast rather than be silently clamped down to the cap. Returns
+// a human error string for the first offending pin, or null when every pin is within
+// caps. A cap of Infinity (Music League "no limit", encoded as 0 → null) never trips.
+// Pure (no process.exit) so it is unit-testable; the CLI exits on a non-null result.
+export function pinCapError(overrides, downOverrides, upCap, downCap) {
+  const check = (map, cap, label, sign) => {
+    if (!map || !Number.isFinite(cap)) return null;
+    for (const [i, v] of Object.entries(map)) {
+      if (v > cap) {
+        return (
+          `Invalid --pin ${i}:${sign}${v} — exceeds max ${label} per song (${cap}). ` +
+          `Lower the pin or check the round's per-song limit.`
+        );
+      }
+    }
+    return null;
+  };
+  return check(overrides, upCap, 'upvotes', '') || check(downOverrides, downCap, 'downvotes', '-');
+}
+
+// Loud, unmissable stderr warning when allocation left a bank over/under-filled. The
+// allocator emits a `budget-mismatch` tradeoff (so reports surface it too); this
+// echoes it to the terminal because the music-only path doesn't otherwise print
+// tradeoffs to stdout. A pin is the only thing that can cause this.
+function warnBudgetMismatch(tradeoffs) {
+  for (const t of (tradeoffs || []).filter((t) => t.kind === 'budget-mismatch')) {
+    console.error(`\n${t.question}`);
+  }
+}
+
 // Validate a positive-integer count flag (shared by --tier-count / --bucket-count).
 // Returns the integer, or undefined for falsy input; throws on malformed input.
 function parseCountFlag(spec, flag) {
@@ -263,13 +295,78 @@ function resolveOptionIndex(spec, count) {
   return idx != null && idx >= 0 && idx < count ? idx : null;
 }
 
+// Apply manual up-pins on top of a chosen option's distribution, then REFLOW at the
+// margin so the upvote bank is still spent EXACTLY. A bare pin used to win even when
+// it pushed the total over the bank (an invalid ballot); instead we reconcile:
+//   - net-positive pin (the song got MORE than the option gave) → shed the surplus
+//     from the lowest-ranked unpinned funded songs (the bottom of the curve);
+//   - net-negative pin (the song got LESS) → promote the next candidates — the
+//     best-ranked unfunded unpinned songs first, then best-ranked below-cap songs.
+// `perSong` is the option's distribution in best-first (combined/rank) order, so the
+// array order IS the rank order. Returns a full {rawOrderIndex: votes} map summing to
+// the option's budget (unless pins alone exceed it, which the budget check then
+// flags). Exceeding the bank is never produced here.
+export function reconcileOptionPins(perSong, pins, cap = Infinity) {
+  const order = perSong.map((p) => p.rawOrderIndex);
+  const votes = new Map(perSong.map((p) => [p.rawOrderIndex, p.votes || 0]));
+  const budget = perSong.reduce((a, p) => a + (p.votes || 0), 0);
+  const pinned = new Set();
+  for (const [k, v] of Object.entries(pins || {})) {
+    if (!Number.isFinite(v)) continue;
+    const i = Number(k);
+    votes.set(i, v);
+    pinned.add(i);
+    if (!order.includes(i)) order.push(i); // a pin on a song outside the funded display
+  }
+  const total = () => order.reduce((a, i) => a + (votes.get(i) || 0), 0);
+
+  // Over budget: shed from the bottom (worst-ranked) unpinned funded songs.
+  let delta = total() - budget;
+  while (delta > 0) {
+    let moved = false;
+    for (let k = order.length - 1; k >= 0 && delta > 0; k--) {
+      const i = order[k];
+      if (pinned.has(i) || (votes.get(i) || 0) <= 0) continue;
+      votes.set(i, votes.get(i) - 1);
+      delta--;
+      moved = true;
+    }
+    if (!moved) break; // nothing left to shed (pins alone exceed budget) — check flags it
+  }
+
+  // Under budget: promote the next candidates. Two passes per round so a freed point
+  // lands on a new song (best-ranked unfunded) before stacking onto already-funded
+  // songs (best-ranked below cap).
+  delta = total() - budget;
+  while (delta < 0) {
+    let moved = false;
+    for (const unfundedOnly of [true, false]) {
+      for (let k = 0; k < order.length && delta < 0; k++) {
+        const i = order[k];
+        if (pinned.has(i)) continue;
+        const cur = votes.get(i) || 0;
+        if (unfundedOnly && cur !== 0) continue;
+        if (cur >= cap) continue;
+        votes.set(i, cur + 1);
+        delta++;
+        moved = true;
+      }
+      if (delta >= 0) break;
+    }
+    if (!moved) break;
+  }
+
+  return Object.fromEntries(order.map((i) => [i, votes.get(i) || 0]));
+}
+
 // Resolve an `--option <A|B|C…>` pick against a set of tradeoffs WITHOUT side
 // effects. Returns the chosen 0-based index, the presented tier-structure options,
-// and the per-song override map (the chosen option's votes, with any base `--pin`
-// overrides layered on top) to feed back into allocation. On an unavailable spec
-// returns `{ error }` with `presented` so the caller can report the choices.
-// Shared by the music-only and fit-merge paths so `--option` behaves identically.
-export function resolveOptionPick(tradeoffs, optionSpec, baseOverrides = {}) {
+// and the per-song override map — the chosen option's votes with any base `--pin`
+// overrides reconciled on top (see reconcileOptionPins) so the bank stays exact. On
+// an unavailable spec returns `{ error }` with `presented` so the caller can report
+// the choices. Shared by the music-only and fit-merge paths so `--option` behaves
+// identically.
+export function resolveOptionPick(tradeoffs, optionSpec, baseOverrides = {}, cap = Infinity) {
   const ts = (tradeoffs || []).find((t) => t.kind === 'tier-structure');
   const presented = (ts?.options || []).filter((o) => Array.isArray(o.perSong) && o.perSong.length);
   const idx = resolveOptionIndex(optionSpec, presented.length);
@@ -284,10 +381,7 @@ export function resolveOptionPick(tradeoffs, optionSpec, baseOverrides = {}) {
     };
   }
   const chosen = presented[idx];
-  const overrides = {
-    ...Object.fromEntries(chosen.perSong.map((s) => [s.rawOrderIndex, s.votes])),
-    ...(baseOverrides || {}),
-  };
+  const overrides = reconcileOptionPins(chosen.perSong, baseOverrides || {}, cap);
   return { idx, presented, overrides, error: null };
 }
 
@@ -300,10 +394,10 @@ export function resolveOptionPick(tradeoffs, optionSpec, baseOverrides = {}) {
 // manual tweak ON TOP of the chosen option rather than getting baked into the menu
 // (a pinned song is otherwise pulled out of the tier pool and would vanish from every
 // option). Exits the process on an unavailable option spec.
-function applyOptionPick({ optionSpec, reason, reallocate, initialTradeoffs, baseOverrides, downOverrides, songs }) {
+function applyOptionPick({ optionSpec, reason, reallocate, initialTradeoffs, baseOverrides, downOverrides, songs, cap = Infinity }) {
   const hasPins = baseOverrides && Object.keys(baseOverrides).length > 0;
   const menuTradeoffs = hasPins ? reallocate(undefined) : initialTradeoffs;
-  const { idx, presented, overrides, error } = resolveOptionPick(menuTradeoffs, optionSpec, baseOverrides);
+  const { idx, presented, overrides, error } = resolveOptionPick(menuTradeoffs, optionSpec, baseOverrides, cap);
   if (error) {
     console.error(error);
     process.exit(1);
@@ -480,6 +574,8 @@ async function main() {
     process.exit(1);
   }
 
+  args.file = ensureDateSlugForInput(args.file, { log: console.log });
+
   const raw = await readFile(args.file, 'utf8');
   const ext = extname(args.file).toLowerCase();
   const parsed =
@@ -499,6 +595,16 @@ async function main() {
   const pins = parsePins(args.pin);
   const overrides = pins?.overrides;
   const downOverrides = pins?.downOverrides;
+  // Per-song caps (Music League encodes "no limit" as 0 → null; treat null as
+  // unlimited). A pin above a real cap is an INVALID ballot, so error out
+  // immediately rather than silently clamping it down to the cap.
+  const upCap = parsed.budget?.maxUpvotesPerSong ?? Infinity;
+  const downCap = parsed.budget?.maxDownvotesPerSong ?? Infinity;
+  const capErr = pinCapError(overrides, downOverrides, upCap, downCap);
+  if (capErr) {
+    console.error(capErr);
+    process.exit(1);
+  }
   const tierCount = parseTierCount(args.tierCount);
   const bucketCount = parseBucketCount(args.bucketCount);
   const favoriteBand = parseFavoriteBand(args.favoriteBand);
@@ -539,6 +645,7 @@ async function main() {
         baseOverrides: profile.overrides,
         downOverrides: profile.downOverrides,
         songs: parsed.songs,
+        cap: upCap,
       });
       tradeoffs = picked.tradeoffs;
       fitData.pick = picked.pick;
@@ -551,11 +658,13 @@ async function main() {
     await mkdir(scoresPaths(roundId).dir, { recursive: true });
     await writeFile(scoresOut, JSON.stringify(fitData, null, 2), 'utf8');
     console.log(`Wrote ${scoresOut} (merged scores + draftVotes; fit-only source unchanged: ${args.fit})`);
-    if (tradeoffs.length) {
-      console.log(`\n${tradeoffs.length} tradeoff(s) need your call:`);
-      for (const t of tradeoffs) printTradeoffCli(t);
+    const calls = tradeoffs.filter((t) => t.kind !== 'budget-mismatch');
+    if (calls.length) {
+      console.log(`\n${calls.length} tradeoff(s) need your call:`);
+      for (const t of calls) printTradeoffCli(t);
     }
     printBallotCli(tradeoffs, fitData.songs, parsed.ownSongs);
+    warnBudgetMismatch(tradeoffs);
     return;
   }
 
@@ -577,6 +686,7 @@ async function main() {
       baseOverrides: profile.overrides,
       downOverrides: profile.downOverrides,
       songs: parsed.songs,
+      cap,
     });
     tradeoffs = picked.tradeoffs;
     pick = picked.pick;
@@ -598,6 +708,7 @@ async function main() {
     await writeFile(paths.json, JSON.stringify(payload, null, 2), 'utf8');
     console.log(`Wrote ${paths.json}`);
   }
+  warnBudgetMismatch(tradeoffs);
 }
 
 // Only run the CLI when executed directly, so helpers (e.g. parseWeights) can be
