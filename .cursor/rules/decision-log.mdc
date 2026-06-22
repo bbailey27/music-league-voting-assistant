@@ -8,6 +8,10 @@ alwaysApply: true
 When committed/spec behavior changes, add a **newest-first** entry to
 `spec/decisions.md` in the same pass — don't defer.
 
+**Scope:** tool/code/spec behavior only. Do **not** log round-specific analysis work —
+song-research rankings, candidate add/drop adjustments, or per-round `data/analysis/**`
+edits are not spec changes and don't belong here.
+
 Format: `## <YYYY-MM-DD> — <title>` · **Change** · **Why** · **Overruled** (if any) ·
 **Refs** (`working tree` until committed, then short hash + spec section).
 

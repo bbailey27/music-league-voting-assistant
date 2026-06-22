@@ -11,6 +11,95 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-06-22 — Point badges use discrete tier palette, not score heat
+
+**Change.** Upvote boxes (`draftVotes` / `finalVotes`) now use a fixed discrete
+palette keyed by rank among distinct non-zero point values in the round (highest
+→ purple, second → blue, third → green, fourth → teal, …). Same point value =
+same color always. Zero stays neutral gray; downvotes keep red `has-down`
+styling. Fit/music/combined score heat (`scoreToHue` / `scoreHeatAttrs`) is
+unchanged. `render-html-shared.mjs` exports `VOTE_TIER_HUES`, `buildVoteTierMap`,
+`voteTierHue`, and `voteTierAttrs`.
+
+**Why.** Vote badges were inheriting `--tier-hue` from the card's fit-score
+gradient, so two songs with the same 2 points could show different shades. Points
+are tier-based (same value = same tier), not continuous scores.
+
+**Refs.** `working tree`; `scripts/render-html-shared.mjs`, `scripts/render-fit-html.mjs`, `scripts/render-final-html.mjs`.
+
+## 2026-06-22 — scores.html defaults to combined order; score boxes use round-relative heat
+
+**Change.** `render-fit-html.mjs` now auto-selects `--order combined` when the
+input basename is `scores` or any song carries `combinedScore` (unless `--order`
+is passed explicitly). Fit-only `fit.json` keeps the fit default. Score boxes
+(fit / music / combined) and fit-tier labels get a red→green `--score-hue`
+gradient from each axis's min/max in the round (same HSL chip pattern as vote
+badges). `render-html-shared.mjs` exports `scoreRangeFromSongs`, `scoreToHue`,
+and `scoreHeatAttrs`.
+
+**Why.** Direct `node scripts/render-fit-html.mjs …/scores.json` (without
+`ml scores`'s implicit `--order combined`) still sorted cards by fit. Per-round
+relative coloring makes tight spreads (e.g. music 68–77) readable without a
+fixed 0–100 scale.
+
+**Refs.** `working tree`; `scripts/render-fit-html.mjs`, `scripts/render-html-shared.mjs`.
+
+## 2026-06-22 — Pins can no longer exceed a bank: reflow, flag, and reject
+
+**Change.** Three guards so a manual pin can never produce an over-budget (or
+silently under-budget) ballot:
+
+1. **`--option` + `--pin` reflow** (`reconcileOptionPins` in `parse-round.mjs`).
+   `--option` pins a whole funded distribution; layering an extra `--pin` on top used
+   to _add_ to it (e.g. `--option A --pin <song>:2` summed to 9 against an 8-point
+   bank). Now the pin is reconciled at the margin: a net-positive pin sheds the
+   surplus from the lowest-ranked unpinned funded songs; a net-negative pin promotes
+   the next candidates (best-ranked unfunded first, then below-cap). `--option A
+   --pin 9:2` now yields `2-2-2-2` by dropping the bottom funded song, summing to 8.
+2. **`budget-mismatch` tradeoff** (`flagBudgetMismatch` in `score-core.mjs`, all
+   `allocate` return paths). Any final allocation whose up/down totals ≠ the banks is
+   flagged (`over` set when a bank is exceeded). CLI prints a loud `⛔ OVER BUDGET` /
+   `⚠️ Bank not fully spent` line (`warnBudgetMismatch`); reports already render the
+   budget line, so they surface it too.
+3. **Invalid pin rejected** (`pinCapError`). A `--pin` above a finite per-song cap
+   (`maxUpvotesPerSong`/`maxDownvotesPerSong`; `0` = unlimited) errors at the CLI
+   instead of being silently clamped to the cap.
+
+Removed the spec language that said "a pin can exceed the bank (deliberate manual
+override); there is no separate overflow tradeoff."
+
+**Why.** Recording a story-5 pick, `--option A` combined with up-pins printed a 9/8
+upvote ballot with no warning. Exceeding a bank is never a valid Music League ballot,
+so the intended way to express a manual distribution is either to pin all affected
+songs so they even out, or to pin a delta and let allocation reflow around it — the
+latter wasn't supported for the `--option` path, and nothing caught the overshoot.
+
+**Overruled.** Prior behavior that pins (and `--option`+pin) may overspend a bank
+without a tradeoff.
+
+**Refs.** working tree — `spec/point-allocation.md` (Profile → overrides/pins;
+Interactive tradeoffs → `budget-mismatch`); `scripts/parse-round.mjs`,
+`scripts/score-core.mjs`; tests in `tests/score.test.mjs`.
+
+## 2026-06-19 — `title-chain` skill + `title-prefix-scan` tool
+
+**Change.** Added a new task type for Music League "story / sentence chain" rounds (build one
+running sentence by chaining song **titles**; lyrics/meaning irrelevant). New skill
+`.cursor/skills/title-chain/SKILL.md` and tool `scripts/title-prefix-scan.mjs` (loads all four
+song CSVs, dedups by normalized title, anchors a regex at the **start** of the title, writes the
+full grouped list to a `data/analysis/<round>/prefix-hits.txt` to avoid truncation). Codified the
+submission criteria: grammar/sense first; pronoun + narrow "you" rule (spoken pleas may use "you",
+narration about a fixed third party may not); present tense welcome (title pool skews present);
+**continuability** = voters must be able to picture a viable next title (a slot begging a common
+noun/verb is good, one begging a scarce connector "me/her/and/to" is bad; resolutions are weak);
+oblique beats must still connect to the scene.
+
+**Why.** User ran a title-chain round and the existing `submission-song-search` skill didn't fit
+(it's lyric/theme-based). The leading-word scan + the "where can you leave the end of the sentence"
+rules are reusable across future story rounds even though the sentence changes.
+
+**Refs.** working tree (`scripts/title-prefix-scan.mjs`, `.cursor/skills/title-chain/SKILL.md`).
+
 ## 2026-06-19 — topic-summary `verify` column + English-source link rule
 
 **Change.** Added a `verify` column to `data/ref/song-topic-summaries.csv`
@@ -50,6 +139,21 @@ cache makes future themed-submission research cheaper and reproducible.
 
 **Refs.** working tree (`.cursor/skills/submission-song-search/SKILL.md`,
 `data/ref/song-topic-summaries.csv`).
+
+---
+
+## 2026-06-22 — Date-slug naming on parse (not only `ml run`)
+
+**Change.** `parse-round.mjs` now calls `ensureDateSlugForInput` (naming only, no
+archive) before reading the round file, so `ml parse`, direct script invocation,
+and agent parses all date-slug undated rounds the same way `ml run` does. Added
+`ensureDateSlugForInput` to `scripts/maintain-rounds.mjs`.
+
+**Why.** Parsing via `node scripts/parse-round.mjs data/rounds/story-5.html` left
+the input undated and wrote analysis under the bare slug; only `ml run` ran naming
+first. Parse should stamp the date without pulling in stale-round archiving.
+
+**Refs.** working tree (`spec/analysis-artifacts.md` → Date slugs and tidying).
 
 ---
 
