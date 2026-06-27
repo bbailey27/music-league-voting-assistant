@@ -6,6 +6,10 @@
     "description": "Songs that mention the night sky, moon, or stars. Instrumentals count if the title fits."
   },
   "mode": "subjective",
+  "combineWeights": {
+    "fit": 0.5,
+    "music": 0.5
+  },
   "budget": {
     "upvoteBankSize": 6,
     "maxUpvotesPerSong": 3,
@@ -96,6 +100,10 @@
       "minus": false,
       "uncertain": false,
       "playlistAdd": false,
+      "fitScore": 85,
+      "fitTier": "strong",
+      "fitSource": "manual",
+      "combinedScore": 81.5,
       "isDisqualified": false,
       "needsUserInput": false,
       "needsReview": false,
@@ -138,6 +146,10 @@
       "minus": false,
       "uncertain": false,
       "playlistAdd": false,
+      "fitScore": 65,
+      "fitTier": "solid",
+      "fitSource": "manual",
+      "combinedScore": 65,
       "isDisqualified": false,
       "needsUserInput": false,
       "needsReview": false,
