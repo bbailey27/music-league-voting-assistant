@@ -442,19 +442,116 @@ function cmdStatusAll() {
 }
 
 function usage() {
-  console.log(`Usage:
-  ml parse  <name> [--mode objective|subjective] [--no-json]
-  ml merge  <name> [--rank combined] [--weights <fit>:<music>] [--gate …]
-  ml pick   <name> <A|B|C> [--reason "…"] [--pin …] [--scores]
-  ml fit    <name> [--out <path>] [--order fit|combined|raw]
-  ml scores <name> [--out <path>] [--order fit|combined|raw]
-  ml final  <name> [--out <path>] [--order votes|score|raw]
-  ml run    <name>     (alias: next) — run the next scriptable step
-  ml status [name]     — pipeline checklist + next step (no name = all rounds)
-  ml tidy   [--dry-run] [--age N] [--no-name] [--no-archive]
-                       — date-slug undated rounds + archive stale ones
+  cmdHelp(null);
+}
 
-<name> is a fuzzy match against round files (e.g. "tarot" or "2026-06-09").`);
+const HELP = {
+  overview: `Music League pipeline — parse → (merge) → pick → render
+
+Stages (each reads/writes JSON; only parse touches HTML):
+  1. parse   HTML/text → music.md + music.json
+  2. merge   music.json + fit.json → scores.json   (thematic only)
+  3. pick    record distribution choice (A/B/C) → pick in JSON + picks.jsonl
+  4. final   render music.html or scores.html
+
+Music-only:
+  just parse <name>
+  just pick <name> B --reason "…"
+  just final <name>
+
+Thematic:
+  just parse <name>
+  # agent writes fit.json
+  just merge <name>
+  just pick <name> C --reason "…"
+  just final <name>
+
+Re-parse only when you replace the HTML export. Pick is always a separate step.
+
+Commands:
+  ml parse | merge | pick | fit | scores | final | run | status | tidy | help
+
+<name> is a fuzzy match (e.g. "tarot" or "2026-06-09").
+Run "ml help <cmd>" for flags and an example.`,
+  parse: `ml parse <name> [flags]
+
+Parse a saved round HTML or text file → music.md + music.json.
+Does NOT write pick or scores. Does NOT read fit.json.
+
+Flags (explore allocation before pick):
+  --mode objective|subjective
+  --shape auto|bell|balanced|top-heavy|compressed|relative
+  --tier-count <n>       force distinct point tiers
+  --bucket-count <n>     force funded tier count
+  --pin <i>:<v>          pin a song's up/down votes (raw order index)
+  --favorite-band <min>  merge scores ≥ min into one top tier (default 80)
+  --no-favorite-band     disable favorite-band merge
+  --no-json              skip music.json
+  --lenient              tolerate Live Text / pasted text input
+
+Deprecated (warns, use separate stage):
+  --fit, --option, --reason
+
+Example:
+  just parse kpop-favorite --shape auto`,
+  merge: `ml merge <name> [flags]
+
+Merge music.json + fit.json → scores.json. Never reads HTML.
+
+Flags (thematic profile + allocation knobs):
+  --rank combined|fit|music
+  --weights <fit>:<music>   e.g. 3:2
+  --gate passFail|passFailMaybe
+  --cutoff <axis>:<min>     e.g. fit:70
+  --shape, --down-shape, --pin, --tier-count, --bucket-count
+  --favorite-band, --no-favorite-band
+
+Example:
+  just merge tarot --rank combined --weights 3:2`,
+  pick: `ml pick <name> <A|B|C> [flags]
+
+Record a distribution choice. JSON-only — never re-reads HTML.
+Writes pick to music.json (music-only) or scores.json (thematic with --scores),
+refreshes the markdown report, and appends picks.jsonl.
+
+Flags:
+  --reason "why"           rationale stored in the pick record
+  --pin <i>:<v>            pin after applying the option
+  --down-shape flat|curved|concentrated
+  --shape, --tier-count, --bucket-count  (replay allocation)
+  --scores                 write pick to scores.json (thematic default path)
+  --dry-run                show pick without writing
+
+Example:
+  just pick tarot C --reason "thematic standouts land on 75 anchor"`,
+  final: `ml final <name> [flags]
+
+Render the draft-vote HTML deliverable:
+  - scores.json → scores.html when merge has run (thematic)
+  - music.json → music.html for music-only rounds
+  Auto-runs merge first if fit.json exists but scores.json does not.
+
+Flags:
+  --out <path>
+  --order combined|fit|raw|votes|score   (renderer sort order)
+
+Example:
+  just final tarot`,
+};
+
+function cmdHelp(topic) {
+  const key = topic?.toLowerCase();
+  if (!key) {
+    console.log(HELP.overview);
+    return;
+  }
+  const text = HELP[key];
+  if (!text) {
+    console.error(`Unknown help topic "${topic}". Try: parse, merge, pick, final\n`);
+    console.log(HELP.overview);
+    process.exit(1);
+  }
+  console.log(text);
 }
 
 function main() {
@@ -491,10 +588,11 @@ function main() {
       return name ? cmdStatusOne(resolveOrExit(name, listAllRoundIds(), 'round')) : cmdStatusAll();
     case 'tidy':
       return cmdTidy(rest);
+    case 'help':
+      return cmdHelp(name);
     case undefined:
     case '-h':
     case '--help':
-    case 'help':
       return usage();
     default:
       console.error(`Unknown command "${cmd}".\n`);

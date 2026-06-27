@@ -33,6 +33,10 @@ run name:
 status name="":
     node scripts/ml.mjs status "{{name}}"
 
+# Show workflow overview or per-command help (parse | merge | pick | final)
+help topic="":
+    node scripts/ml.mjs help {{topic}}
+
 # Date-slug undated rounds + archive stale ones (also runs at the start of `run`)
 tidy *flags:
     node scripts/ml.mjs tidy {{flags}}

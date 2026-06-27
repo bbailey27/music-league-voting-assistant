@@ -82,3 +82,11 @@ test('ml status shows pick row and next final step after pick', async () => {
     await rm(cwd, { recursive: true, force: true });
   }
 });
+
+test('ml help documents stage commands', async () => {
+  const { stdout: overview } = await execFileP(process.execPath, [mlScript, 'help'], { cwd: root });
+  assert.match(overview, /parse.*merge.*pick/s);
+  const { stdout: pick } = await execFileP(process.execPath, [mlScript, 'help', 'pick'], { cwd: root });
+  assert.match(pick, /JSON-only/);
+  assert.match(pick, /just pick/);
+});
