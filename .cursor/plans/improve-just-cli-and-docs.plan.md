@@ -1,7 +1,7 @@
 ---
 name: improve-just-cli-and-docs
 overview: Make the three-stage pipeline (parse → merge → pick → render) discoverable from the command line with guided next steps and local help.
-status: pending
+status: partial
 depends_on: split-pipeline-stages
 isProject: false
 related: pick-preserves-options

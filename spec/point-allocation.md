@@ -361,22 +361,18 @@ pass)`: a `maybe` never earns more points than the lowest-funded pass. By
   steps + 1, excluding the `0` band) — the lower-level knob beneath `tierCount`. Set
   via `--bucket-count <n>`; wins over `tierCount` if both are given. Both suppress
   the `tier-structure` tradeoff.
-- **`--option <A|B|C…>`** — picks a `tier-structure` fork by its column letter and
-  applies that exact distribution (deterministic sugar over per-song pins), so a
-  pick is one clean flag even when two options share a tier/bucket-count label. Each
-  option also carries a `shape` signature (e.g. `2×4 / 1×2 / 0×5`) so the legend and
-  labels are always distinguishable. Works on **both** paths — the `--fit` merge and
-  plain music-only parses (`just parse <round> --option B`).
-- **`--reason "why"`** — attaches a free-text rationale to an `--option` pick (no-op
-  without `--option`). Picking writes a durable **pick record** to the round's JSON
-  (`scores.json` `pick` on the merge path, `music.json` `pick` on music-only)
-  (chosen option, every option that was presented, the reason, and any **manual
-  tweaks** — final votes that deviate from the chosen option's canonical
-  distribution, e.g. an extra `--pin`) and appends one line to the global
-  `analysis/picks.jsonl` training log (round, options-shown, chosen, reason, tweaks,
-  field score snapshot). The report keeps the alternatives visible after the pick: a
-  focused **Your pick** table plus a collapsed **Options considered** comparison with
-  the chosen column highlighted.
+- **`--option <A|B|C…>`** — record a `tier-structure` fork by column letter
+  (**prefer `just pick <round> <letter>`** — JSON-only, never re-reads HTML). Still
+  accepted on parse/merge for backward compatibility but deprecated there. Applies
+  that exact distribution (deterministic sugar over per-song pins). Each option
+  carries a `shape` signature (e.g. `2×4 / 1×2 / 0×5`) so labels stay distinguishable.
+- **`--reason "why"`** — free-text rationale stored on the pick record (use with
+  `just pick`, not parse). Picking writes a durable **pick record** to the round's JSON
+  (`music.json` on music-only, `scores.json` on thematic with `--scores`) — chosen
+  option, every option presented, the reason, and any **manual tweaks** — and appends
+  one line to `analysis/picks.jsonl`. The report keeps alternatives visible: a focused
+  **Your pick** table plus collapsed **Options considered** with the chosen column
+  highlighted.
 
 The `tier-structure` and `down-structure` tradeoffs render as a song×option
 comparison in **combined-score order only** (for judgment). The raw submission-order

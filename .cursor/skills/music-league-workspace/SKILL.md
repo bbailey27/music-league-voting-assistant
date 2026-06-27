@@ -3,7 +3,7 @@ name: music-league-workspace
 description: >-
   Maps the Music League Voting Assistant repo — round parsing, draft vote allocation,
   thematic fit research, and analysis outputs. Use when starting any task in this
-  workspace, when unsure where rules or scripts live, or when chaining parse → fit → allocate.
+  workspace, when unsure where rules or scripts live, or when chaining parse → merge → pick → final.
 ---
 
 # Music League workspace
@@ -12,26 +12,33 @@ Deterministic Node scripts turn a saved Music League round into ranked tables an
 
 ## What this repo does
 
-| Stage                  | Who                     | Output                                            |
-| ---------------------- | ----------------------- | ------------------------------------------------- |
-| Parse + score comments | `parse-round.mjs`       | `data/analysis/<round>/music.md` + `music.json`   |
-| Fit research           | Agent / LLM             | `data/analysis/<round>/fit.json`                  |
-| Merge fit + allocate   | `parse-round.mjs --fit` | `data/analysis/<round>/scores.json` (deliverable) |
-| Fit report             | `render-fit-html.mjs`   | `data/analysis/<round>/fit.html` (fit-only)       |
-| Scores report          | `render-fit-html.mjs`   | `data/analysis/<round>/scores.html` (deliverable) |
+| Stage        | Who / script              | Output                                            |
+| ------------ | ------------------------- | ------------------------------------------------- |
+| Parse        | `parse-round.mjs`         | `data/analysis/<round>/music.md` + `music.json`   |
+| Fit research | Agent / LLM               | `data/analysis/<round>/fit.json`                  |
+| Merge        | `merge-scores.mjs`        | `data/analysis/<round>/scores.json`               |
+| Pick         | `pick-round.mjs`          | `pick` on JSON + `data/analysis/picks.jsonl`      |
+| Render       | `render-*-html.mjs`       | `music.html`, `scores.html`, or `fit.html`        |
 
-Plain (non-thematic) rounds stop after parse — open `data/analysis/<round>/music.md` for the draft allocation.
+**Music-only path:**
 
-**Music-only command path:** save round HTML → `just parse <name>` (or `just run <name>` once) → done. No fit research, no `fit.json`, no `just fit`.
+```bash
+just parse <name> → just pick <name> <A|B|C> → just final <name>
+```
+
+**Thematic path:** parse → fit research → `just merge` → pick → final.
+
+Re-parse only when replacing the HTML export. Pick never reads HTML.
 
 ## Directory layout
 
 ```
 data/            PRIVATE submodule (music-league-data); not in the public repo:
   rounds/        Saved round HTML or pasted text (<round>.html|.txt) — flat; archive/ ignored
-  analysis/      Per-round folders data/analysis/<round>/ — see spec/analysis-artifacts.md
+  analysis/      Per-round folders + picks.jsonl — see spec/analysis-artifacts.md
   ref/           Reference data (fav-songs.csv, song-topic-summaries.csv) — agent research only
 scripts/         Pipeline code; one-off round drivers in scripts/one-off/
+  score/         Allocation core (allocate.mjs, merge.mjs, render.mjs, …)
 spec/            Domain rules (source of truth over .cursor/rules/)
 tests/           node:test suites + tests/fixtures/sample-round/
 .cursor/skills/  Project agent skills (this file + task-specific skills below)
@@ -43,14 +50,15 @@ Round inputs/outputs live in the private `data/` submodule; path constants are c
 
 | Script                | Role                                                                        |
 | --------------------- | --------------------------------------------------------------------------- |
-| `ml.mjs`              | Dispatcher: fuzzy round names, `run`/`status`/`parse`/`fit`/`scores`/`tidy` |
+| `ml.mjs`              | Dispatcher: fuzzy names, `run`/`status`/`help`, next-step inference         |
+| `parse-round.mjs`     | HTML or text → `music.*` (parse stage only)                                 |
+| `merge-scores.mjs`    | `music.json` + `fit.json` → `scores.json` (no HTML)                         |
+| `pick-round.mjs`      | JSON-only pick + `picks.jsonl` (no HTML)                                     |
 | `paths.mjs`           | Shared analysis path helpers + artifact naming                              |
 | `maintain-rounds.mjs` | Date-slug undated rounds + archive stale ones (`ml tidy`; auto on `run`)    |
-| `parse-round.mjs`     | HTML or text → score + allocate → `music.*`; `--fit` → `scores.json`        |
-| `extract-html.mjs`    | DOM walker (shared with future web app); not a CLI                          |
-| `parse-text.mjs`      | Strict or lenient text parser; not a CLI                                    |
-| `score-core.mjs`      | `scoreComment`, `allocate`, `mergeFitJson` — shared core                    |
+| `score-core.mjs`      | Re-export barrel for `scripts/score/*`                                      |
 | `render-fit-html.mjs` | Fit or scores JSON → self-contained HTML cards + vote-transfer table        |
+| `render-final-html.mjs` | Music JSON → music.html (pure read)                                       |
 | `one-off/`            | Round-specific drivers (e.g. kpop-solo-versions.mjs) — not main pipeline    |
 
 ## Common commands
@@ -58,13 +66,16 @@ Round inputs/outputs live in the private `data/` submodule; path constants are c
 Prefer `just` (forwards to `ml.mjs`); equivalent: `npm run ml -- <cmd>`.
 
 ```bash
-just run tarot              # next scriptable step (parse, render scores/fit HTML)
+just help                   # workflow overview
+just help pick              # per-stage flags + example
+just run tarot              # next scriptable step
 just status                 # checklist for all rounds
 just status tarot           # one round, full checklist + next step
-just tidy --dry-run         # preview date-slug naming + archiving (auto-run by `just run`)
-just parse tarot            # force parse; flags: --mode objective|subjective, --no-json
-just fit tarot              # render fit-only HTML from fit.json
-just scores tarot           # render deliverable scores.html from scores.json
+just parse tarot            # HTML → music.*
+just merge tarot            # music + fit → scores.json
+just pick tarot B --reason "…"
+just final tarot            # render deliverable HTML
+just tidy --dry-run         # preview date-slug naming + archiving
 npm test                    # score + parse-text regression tests
 just lint                   # eslint + markdownlint
 ```
@@ -77,13 +88,13 @@ Fuzzy `<name>` matches exact → substring → subsequence. Ambiguous queries li
 
 | File                         | Covers                                                          |
 | ---------------------------- | --------------------------------------------------------------- |
-| `spec/analysis-artifacts.md` | Per-round folders, music/fit/scores naming, archive/            |
+| `spec/analysis-artifacts.md` | Per-round folders, stage ownership, music/fit/scores naming     |
 | `spec/score-parsing.md`      | Digit scaling, modifiers, manual fit tokens                     |
 | `spec/comments.md`           | User vs submitter comments; ML slang                            |
 | `spec/uncertainty.md`        | `?` handling at tier boundaries                                 |
 | `spec/fit-evaluation.md`     | Fit research output + merge                                     |
 | `spec/fit-guidance.md`       | Opt-in, league/style-scoped fit lenses (suggested, not default) |
-| `spec/point-allocation.md`   | Allocator profiles, gates, tradeoffs                            |
+| `spec/point-allocation.md`   | Allocator profiles, gates, tradeoffs, pick invariants           |
 
 If `.cursor/rules/` disagrees with `spec/`, follow **spec/**.
 
@@ -108,5 +119,6 @@ Load these when the task matches (they are explicit-only):
   distribution — a blank sits at 0 in every curve. Full rule:
   `spec/point-allocation.md` → _Pre-allocation gate_.
 - Submitter quotes are context only; never scored.
-- LLM does fit research only; allocation is always `score-core.mjs`.
+- LLM does fit research only; allocation is always `scripts/score/allocate.mjs`.
+- **Parse never writes pick; pick never reads HTML; merge never picks.**
 - **Allocation invariants:** spend the full upvote bank and full downvote bank (when enabled), exactly; never assign upvotes and downvotes to the same song (see **point-allocation**).

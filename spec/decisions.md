@@ -11,6 +11,18 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-06-26 — Three-stage CLI docs: ml help, status pick row, README
+
+**Change.** `ml help [parse|merge|pick|final]` and `just help` document the
+parse → merge → pick → final workflow. `ml status` shows a Pick recorded row and
+next-step guidance for music-only rounds after pick. README, `spec/analysis-artifacts.md`,
+and the workspace skill updated for stage ownership and deprecated parse flags.
+
+**Why.** Wave 5 of pipeline-cleanup master plan — make stage boundaries discoverable
+without reading plan files.
+
+**Refs.** `3442983`, `72ddfe4`, `2bc7ec9` — `scripts/ml.mjs`, README, spec/analysis-artifacts.md.
+
 ## 2026-06-26 — Split parse-round into parse/* modules
 
 **Change.** `scripts/parse-round.mjs` is a 259-line entry point importing

@@ -5,14 +5,37 @@ mounted at **`data/`** (see README → Private data). Each round's outputs live 
 **`data/analysis/<date>-<slug>/`** (per-round folder). Inputs stay flat in
 **`data/rounds/<date>-<slug>.html`**.
 
+## Pipeline stages (ownership)
+
+Each stage reads/writes specific artifacts. **Only parse reads HTML.**
+
+| Stage | Script | Reads | Writes |
+| --- | --- | --- | --- |
+| **Parse** | `parse-round.mjs` / `just parse` | round `.html`/`.txt` | `music.md`, `music.json` |
+| **Fit research** | agent / manual | round prompt, songs | `fit.json` (thematic only) |
+| **Merge** | `merge-scores.mjs` / `just merge` | `music.json`, `fit.json` | `scores.json` |
+| **Pick** | `pick-round.mjs` / `just pick` | `music.json` (+ `fit.json` for replay) | `pick` on JSON, `picks.jsonl` |
+| **Render** | `render-*-html.mjs` / `just final` | persisted JSON | `music.html`, `scores.html`, `fit.html` |
+
+**Invariants:**
+
+- Parse never writes `pick` or `scores.json`.
+- Merge never reads HTML and never records a pick.
+- Pick never reads HTML; it preserves the full `options[]` menu for training.
+- Renderers are pure — they read persisted JSON only (no re-merge / re-allocate).
+
+Re-parse (`just parse`) only when replacing the HTML export. Pick is always a separate
+JSON step afterward.
+
 ## Naming
 
-| Artifact     | Files                                           | Meaning                                                |
-| ------------ | ----------------------------------------------- | ------------------------------------------------------ |
-| **Music**    | `music.md`, `music.json`, optional `music.html` | Comment scores + music-only draft allocation           |
-| **Fit**      | `fit.json`, `fit.html`, optional `fit.md`       | Thematic fit research only — **no** `draftVotes`       |
-| **Scores**   | `scores.json`, `scores.html`                    | **Deliverable** — merged music + fit with `draftVotes` |
-| **Versions** | `versions/*`                                    | Exploratory score variants (not official)              |
+| Artifact     | Files                                              | Meaning                                                |
+| ------------ | -------------------------------------------------- | ------------------------------------------------------ |
+| **Music**    | `music.md`, `music.json`, optional `music.html`    | Comment scores + music-only draft allocation           |
+| **Fit**      | `fit.json`, `fit.html`, optional `fit.md`          | Thematic fit research only — **no** `draftVotes`       |
+| **Scores**   | `scores.json`, `scores.html`                       | **Deliverable** — merged music + fit with `draftVotes` |
+| **Pick log** | `data/analysis/picks.jsonl` (one file, all rounds) | Pick training log (chosen, full menu, reason)          |
+| **Versions** | `versions/*`                                       | Exploratory score variants (not official)              |
 
 The shared file legend lives once, git-tracked in the data submodule, at
 **`data/analysis/README.md`** — the tooling does **not** generate a per-round README.
@@ -22,7 +45,8 @@ recording.
 Produce scores with:
 
 ```bash
-node scripts/parse-round.mjs data/rounds/<round>.html --fit data/analysis/<round>/fit.json
+just merge <round>
+# or: node scripts/merge-scores.mjs <round-id>
 ```
 
 That writes `scores.json` and leaves `fit.json` unchanged.
@@ -56,6 +80,7 @@ When consulting a **previous** round, check both the active folders and `archive
 
 ```text
 data/analysis/README.md            ← shared legend (git-tracked in data submodule)
+data/analysis/picks.jsonl          ← pick training log (all rounds)
 data/analysis/2026-06-09-tarot-hanged-man/
   music.md
   music.json
