@@ -27,7 +27,7 @@ import {
   parseDownShape,
   parseWeights,
   buildGate,
-} from './parse-round.mjs';
+} from './parse/cli-flags.mjs';
 import { applyOptionPick, recordPickToTrainingLog } from './round/pick.mjs';
 
 function parseArgs(argv) {

@@ -19,7 +19,7 @@ import {
   parseDownShape,
   parseWeights,
   buildGate,
-} from './parse-round.mjs';
+} from './parse/cli-flags.mjs';
 
 function parseArgs(argv) {
   const args = {

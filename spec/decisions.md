@@ -11,6 +11,18 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-06-26 — Split parse-round into parse/* modules
+
+**Change.** `scripts/parse-round.mjs` is a 259-line entry point importing
+`scripts/parse/{cli-flags,cli-print,pipeline}.mjs`. Pure flag validators, terminal
+print helpers, and HTML parse helpers moved out; public re-exports unchanged.
+`merge-scores.mjs` and `pick-round.mjs` import flags from `parse/cli-flags.mjs`.
+
+**Why.** Wave 3 of pipeline-cleanup master plan — slim parse entry after pick/merge
+extraction.
+
+**Refs.** working tree — `scripts/parse-round.mjs`, `scripts/parse/*`.
+
 ## 2026-06-26 — Pure render + fit field persistence (Wave 2b)
 
 **Change.** `render-final-html.mjs` reads persisted `music.json` only — dropped

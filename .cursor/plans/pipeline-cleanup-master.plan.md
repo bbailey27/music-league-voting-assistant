@@ -287,7 +287,7 @@ Update this table as waves complete (newest change at top):
 | 2 | split-pipeline-stages | done |
 | 2 | pick-preserves-options | done (render + ballot + tests) |
 | 2b | preserve-manual-fit-scores | partial (persist + pure-render; parse-grammar deferred) |
-| 3 | split-parse-round-into-modules | pending |
+| 3 | split-parse-round-into-modules | done |
 | 4 | allocator-fill-and-maybe-funding-fixes | pending |
 | 5 | improve-just-cli-and-docs | pending |
 | 5 | followup-5-specs-and-tests | pending |
