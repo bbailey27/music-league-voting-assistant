@@ -187,7 +187,6 @@ tier/gate vocabulary (those stay behind `--fit-words`). **Not matched past first
 | Phrase | Maps to | fitScore | Example comment | Result |
 | --- | --- | --- | --- | --- |
 | `fit bonus` | `strong` | 85 | `76 fit bonus` | music 76, fitTier strong, fitSource manual |
-| `fit bonus` | `strong` | 85 | `fit bonus` (alone) | score null, fitTier strong |
 
 *(Extensible list in `FIT_SHORTHAND` in `comment.mjs` / `fit-signal.mjs`; add phrases
 only with a contract row + test.)*
@@ -260,7 +259,6 @@ Write one test per row. Columns: `comment`, `fitWords`, `mode`, expected
 | `fit 8` | 80 | — | — | peel 8; leading `fit` ignored |
 | `fit 7. music 8` | 70 | 80 | — | peel 7; remainder has 8 |
 | `76 fit bonus` | 76 | strong / 85 | — | shorthand in remainder |
-| `fit bonus` | null | strong / 85 | — | shorthand only |
 | `maybe great song 75` | 75 | — | — | **no gate** |
 | `off-theme 80` | 80 | — | — | **no gate** |
 | `strong fit` | null | — | — | **no tier** (words off) |
