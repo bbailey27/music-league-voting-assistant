@@ -86,7 +86,7 @@ Key division of labor (corrected per your clarification):
 
 ## Plan A — Follow-up 4: deterministic allocation engine
 
-Rewrite [.cursor/plans/followup-4-allocation-presets.plan.md](.cursor/plans/followup-4-allocation-presets.plan.md). Today [scripts/score-core.mjs](scripts/score-core.mjs) `allocate()` does one thing: a relative largest-remainder draft (`weight = score - lowest`). Generalize it into a profile-driven allocator. Keep the existing behavior as the default profile.
+Rewrite allocation presets plan (shipped — see `spec/decisions.md` and git history). Today [scripts/score-core.mjs](scripts/score-core.mjs) `allocate()` does one thing: a relative largest-remainder draft (`weight = score - lowest`). Generalize it into a profile-driven allocator. Keep the existing behavior as the default profile.
 
 Introduce an **allocation profile** (object passed into `allocate`, selectable in CLI/web):
 

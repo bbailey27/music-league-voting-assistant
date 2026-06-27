@@ -1,41 +1,300 @@
 ---
 name: preserve-manual-fit-scores
 overview: Make manual fit scores written in comments parse robustly (identifier-anchored numbers, no keyword over-matching), persist into music.json, render in music.html, and auto-weight allocation toward combined when present. Tier/gate WORD vocabulary is kept but gated behind a default-off --fit-words flag. Also separate allocate from render so renderers are pure presenters.
-status: pending
+status: partial
 isProject: false
 todos:
-  - id: parse-grammar
-    content: "Rework parseFitTokens/scoreComment: identifier-anchored music/fit numbers, mods on music number, ambiguity -> needsReview; numeric fit always parsed"
+  - id: parsing-contract
+    content: "Lock parsing contract table + fixture comments in plan and spec/score-parsing.md (music vs fit vs tier vs gate vs ignored) — agree before coding"
+    status: pending
+  - id: tests-first
+    content: "TDD red phase — tests/comment-parse.test.mjs (or score.test block) with full matrix; fitWords false default + fitWords true; all must fail until impl"
     status: pending
   - id: word-gating
-    content: Gate FIT_TIER_SYNONYMS + GATE_WORDS behind opts.fitWords (default off); add negation guard for tier words
+    content: Gate FIT_TIER_SYNONYMS + GATE_WORDS behind opts.fitWords (default off); when on, tier/gate match without literal 'fit'; negation guard for tier words
+    status: pending
+  - id: parse-grammar
+    content: "Scoring line vs submission tail; peel first number = music, parse remainder for fit; FIT_SHORTHAND; N fit vs fit bonus"
     status: pending
   - id: flag-plumbing
     content: Add --fit-words to parse-round parseArgs and thread opts through parseRoundHtml/parseRoundDocument/parseRoundText/parseBlock to scoreComment; update usage strings
     status: pending
   - id: alloc-combined
     content: Add MANUAL_FIT_WEIGHTS (0.5/0.5); auto-set rankBy=combined + combinedScore + ctx.combineWeights when hasManualFit and no --rank override
-    status: pending
+    status: completed
   - id: persist-fields
     content: Persist fitScore/fitTier/gate/fitSource/combinedScore per song + top-level combineWeights in buildJsonPayload
-    status: pending
+    status: completed
   - id: pure-render
     content: "Make renderers pure: render-final-html reads persisted music.json (drop scoreComment re-score and inline mergeFitJson; drop --fit); centralize allocate in parse/merge; ml final does merge-then-render"
-    status: pending
+    status: completed
   - id: tests
-    content: "Update/add tests: word-off defaults, --fit-words vocabulary + negation, numeric pairing cases, persistence, auto-combined allocation, render fixture"
-    status: pending
+    content: "TDD green phase — all comment-parse matrix tests pass; persistence + allocation tests unchanged/green"
+    status: in_progress
   - id: docs-decisions
-    content: Update score-parsing.md, point-allocation.md, analysis-artifacts.md, README; add decisions.md entries
-    status: pending
+    content: Sync spec/score-parsing.md to contract; decisions.md entry when shipped
+    status: in_progress
 ---
 
 ## Preserve and correctly parse manual fit scores
 
+**Wave 1 slice (remaining):** `--fit-words`, identifier-anchored grammar, parsing contract +
+tests-first. **Sequence:** Wave 1 of [remaining-work-master.plan.md](remaining-work-master.plan.md).
+
+## Implementation order (TDD)
+
+Do **not** change `comment.mjs` until the contract below is locked and failing tests
+exist.
+
+1. **Parsing contract** — table + fixture comments (this section + `spec/score-parsing.md`).
+   Stop and confirm with owner if any row is wrong.
+2. **Red** — `tests/comment-parse.test.mjs` (or dedicated block in `score.test.mjs`):
+   one test per contract row × `{ fitWords: false }` and `{ fitWords: true }` where
+   applicable. Run `npm test` — new tests must **fail** on current code.
+3. **Green** — implement `opts.fitWords`, identifier-anchored music numbers, word
+   gating, negation guard; thread `--fit-words` from CLI.
+4. **Spec + decisions** — copy contract into `spec/score-parsing.md`; log ship in
+   `decisions.md`.
+
+Persistence, pure render, and auto-combined allocation are **already shipped** — do
+not re-test those except where the parse output feeds them.
+
+---
+
+## Parsing contract (default: `--fit-words` OFF)
+
+Each user comment (`userComment` only — submitter text is never scored) resolves to
+fields on the `scoreComment` result. **Prose is not a score** unless a rule below
+says otherwise.
+
+### Field legend
+
+| Field | Meaning |
+| --- | --- |
+| `score` | Music score (0–100-ish, after digit scaling) |
+| `fitScore` / `fitTier` | Manual fit signal (numeric or tier word) |
+| `gate` | pass / maybe / fail (gate rounds only) |
+| `+` `-` `?` `playlistAdd` | Modifiers on the **music** number |
+| `needsReview` / `needsUserInput` / `isDisqualified` | Non-score outcomes |
+| *(ignored)* | Text that does not populate any field |
+
+Digit scaling unchanged: `7`→70, `73`→73, `755`→75.5.
+
+### Core algorithm: peel music, parse remainder
+
+Owner **always** puts the music score as the **first number** on the scoring line (line 1
+before any `\n`) — that's how they scan when assigning points. There is **no fit-only**
+notation; fit is never scored without music.
+
+**Algorithm (scoring line only):**
+
+1. Find the **first number** (+ mods) → **music** `score`. Strip it from the line.
+2. Parse the **remainder** for fit: 2nd number, explicit `N fit` / `fit N`, shorthand,
+   tier/gate words (`--fit-words` only).
+
+Leading/trailing words (`fit`, `music`, `playlist`, prose) around the first number do
+**not** change step 1 — only position of the first digit token matters.
+
+| Comment | Music (1st #) | Fit (from remainder) |
+| --- | --- | --- |
+| `75` | 75 | — |
+| `fit 8` | 80 | — |
+| `music 80` | 80 | — |
+| `8 fit` | 80 | — |
+| `78 music, 8 fit` | 78 | 80 (`8 fit` in remainder) |
+| `75 80` | 75 | 80 (2nd # in remainder; `--fit-words`) |
+| `80 fit 75` | 80 | 75 (2nd # in remainder; `--fit-words`) |
+| `76 fit bonus` | 76 | shorthand strong/85 |
+| `fit 7. music 8` | 70 | 80 (1st # is 7, not fit-first) |
+
+### Comment layout: scoring line vs submission
+
+1. **Scoring line** (top) — scratch notes you will delete or trim before submit: music
+   score, fit shorthand, tier/gate words, numeric fit.
+2. **Submission tail** (below) — prose you may **keep** on the vote, separated from
+   scoring by one or more newlines so cleanup does not swallow it.
+
+**Rule:** Split on the **first `\n`**. Parse fit signals only from the **scoring line**
+(first line). The submission tail is never scanned for tier/gate/shorthand or extra
+fit numbers — it is inert for parsing (still stored as the full comment text).
+
+```
+75? strong maybe          ← scoring line (parse this)
+                          ← newline(s)
+Great song — fits the vibe perfectly   ← submission tail (ignore for fit/tier/gate)
+```
+
+This applies **always** (with or without `--fit-words`). It prevents gate/tier words
+in submission prose (`fits`, `maybe` in a sentence, `off-theme joke`) from affecting
+allocation.
+
+**Remainder fit parsing:**
+
+| Signal | `--fit-words` | Notes |
+| --- | --- | --- |
+| Explicit `N fit` / `fit N` in remainder | either | e.g. `78` peeled → ` music, 8 fit` → fit 80 |
+| 2nd number in remainder | **on** | e.g. `75` peeled → ` 80` → fit 80 |
+| `FIT_SHORTHAND` in remainder | either | e.g. `76 fit bonus` |
+| Tier / gate words in remainder | **on** | first match; scoring line only |
+
+Tier/gate/shorthand: **first match wins** per channel on the remainder (one tier, one gate).
+
+---
+
+### What becomes **music** (`score`)
+
+**Always** the first number on the scoring line (+ mods). Words before/after that token
+(`fit`, `music`, prose) are ignored for music extraction.
+
+| Pattern | Example | Result |
+| --- | --- | --- |
+| First number | `75`, `75?`, `73+` | music = scaled number; mods attached |
+| Words before first # | `fit 8`, `music 80` | music from first # (80) |
+| Trailing prose after first # | `74 soft punk` | music 74; rest ignored for music |
+| Number only on submission tail | `75?\nGreat song 80` | music 75 from line 1; **80 ignored** |
+
+**Bug today:** fit tokens are stripped *before* finding the music number, so `8 fit`
+alone becomes fit-only and `76 fit bonus` loses music 76. Fix: peel **first number
+first**, then parse remainder.
+
+### What becomes **fit** (`fitScore` / `fitTier`)
+
+Parsed from the **remainder** after the music number is peeled. Three fit channels:
+
+| Channel | `--fit-words` | When |
+| --- | --- | --- |
+| **Numeric fit** | not required | Explicit `N fit` / `fit N` in remainder (`78` + ` music, 8 fit`) |
+| **2nd number** | **required** | Bare 2nd # in remainder (`75` + ` 80`) |
+| **Fit shorthand** | not required | Multi-word phrases in remainder (`76 fit bonus`) |
+| **Tier / gate words** | **required** | `strong`, `pass`, `maybe`, … in remainder |
+
+#### Numeric fit & 2nd number
+
+| Pattern | Example (full comment) | `--fit-words` | Result |
+| --- | --- | --- | --- |
+| Explicit in remainder | `78 music, 8 fit` | either | music 78, fit 80 |
+| 2nd # in remainder | `75 80`, `80 fit 75` | **on** | 1st music, 2nd fit |
+| 2nd # in remainder | `75 80` | off | music 75; 2nd # ignored |
+| Shorthand in remainder | `76 fit bonus` | either | music 76, fitTier strong |
+| Lone `8 fit` / `fit 8` | whole comment | either | music 80 only; no remainder fit |
+
+#### Fit shorthand (always on; scoring line only)
+
+Short phrases the owner uses instead of full tier words when pre-marking songs that
+should rank higher on fit **before** LLM fit research runs. Distinct from generic
+tier/gate vocabulary (those stay behind `--fit-words`). **Not matched past first `\n`.**
+
+| Phrase | Maps to | fitScore | Example comment | Result |
+| --- | --- | --- | --- | --- |
+| `fit bonus` | `strong` | 85 | `76 fit bonus` | music 76, fitTier strong, fitSource manual |
+| `fit bonus` | `strong` | 85 | `fit bonus` (alone) | score null, fitTier strong |
+
+*(Extensible list in `FIT_SHORTHAND` in `comment.mjs` / `fit-signal.mjs`; add phrases
+only with a contract row + test.)*
+
+**Intent:** `fit bonus` = "I'm confident this fits — bump combined ranking" without
+writing `strong fit` or a numeric `8 fit`. Triggers auto-combined allocation when
+any manual fit is present (same as numeric fit).
+
+#### Tier / gate words (`--fit-words` only; scoring line only)
+
+When `--fit-words` is passed, the **flag** enables tier/gate vocabulary on the
+**scoring line** — no literal `fit` after tier words. When the flag is off, none of
+these match (except [fit shorthand](#fit-shorthand-always-on-scoring-line-only)).
+Nothing in the submission tail is scanned.
+
+| Pattern | `--fit-words` | Example (scoring line) | Result |
+| --- | --- | --- | --- |
+| Tier word | **on** | `strong`, `75 strong`, `solid 72` | fitTier + music if number present |
+| Tier word | off | `75 strong` | music 75; **no tier** |
+| Tier + negation | **on** | `strong negative` | *(ignored)* |
+| Gate word | **on** | `pass`, `75 maybe` | gate; music if number present |
+| Gate on tail | either | `75?\n…maybe fits…` | music 75; **gate null** (tail ignored) |
+| Tier on tail | **on** | `75?\n…strong finish…` | music 75; **no tier** from tail |
+| Single-line gate | **on** | `maybe great song 75` | music 75 + gate maybe (all on line 1) |
+| Single-line gate | off | `maybe great song 75` | music 75; **gate null** |
+
+**First match** per channel on the scoring line (one tier, one gate). Precedence:
+fail > maybe > pass for gates. Multi-word shorthand phrases checked before single-word
+tier/gate regexes to avoid `fit bonus` splitting.
+
+### What becomes **gate** (`gate`)
+
+Same as tier words — **`--fit-words` only**. See table above.
+
+### What is **ignored** (no field set)
+
+| Text | Why |
+| --- | --- |
+| Submitter comment field | Scoring-neutral; not passed to `scoreComment` |
+| Submission tail (after first `\n`) | Never scanned for fit/tier/gate/shorthand |
+| Prose on scoring line (not in vocabulary) | `"74 soft punk"` — music 74; rest ignored on that line |
+| `10/10`, alternate scales | Ignored (existing rule) |
+| Lowercase `todo` in prose | Not a placeholder marker (only all-caps `TODO`) |
+
+### Special outcomes (not music/fit/gate)
+
+| Input | Mode | Result |
+| --- | --- | --- |
+| `` (empty) | any | `needsUserInput` |
+| `TODO`, `TODO 80` | any | `needsUserInput`; score not trusted |
+| `-` | any | `isDisqualified` |
+| `no` / `nope` / `invalid` | any | `isDisqualified` |
+| words only, no number | objective | `isDisqualified` |
+| words only, no number | subjective | `needsReview` |
+| `76 music` | thematic | music 76; `needsResearch` (fit unknown) |
+
+### Fixture matrix (tests must cover)
+
+Write one test per row. Columns: `comment`, `fitWords`, `mode`, expected
+`score`, `fitScore`, `fitTier`, `gate`, flags, `needsReview`.
+
+**Default off (`fitWords: false`):**
+
+| comment | score | fit | gate | notes |
+| --- | --- | --- | --- | --- |
+| `75` | 75 | — | — | bare music |
+| `75?` | 75 | — | — | uncertain mod |
+| `78 music, 8 fit` | 78 | 80 | — | peel 78; remainder has `8 fit` |
+| `8 fit` | 80 | — | — | peel 8; no remainder fit |
+| `fit 8` | 80 | — | — | peel 8; leading `fit` ignored |
+| `fit 7. music 8` | 70 | 80 | — | peel 7; remainder has 8 |
+| `76 fit bonus` | 76 | strong / 85 | — | shorthand in remainder |
+| `fit bonus` | null | strong / 85 | — | shorthand only |
+| `maybe great song 75` | 75 | — | — | **no gate** |
+| `off-theme 80` | 80 | — | — | **no gate** |
+| `strong fit` | null | — | — | **no tier** (words off) |
+| `solid track 72` | 72 | — | — | prose not tier |
+| `74 soft punk` | 74 | — | — | trailing prose on scoring line OK |
+| `75?\nGreat song, maybe fits` | 75 | — | — | tail ignored (off or on) |
+
+**With `--fit-words` (`fitWords: true`):**
+
+| comment | score | fit | gate | notes |
+| --- | --- | --- | --- | --- |
+| `75 80` | 75 | 80 | — | peel 75; 2nd # in remainder |
+| `80 fit 75` | 80 | 75 | — | peel 80; 2nd # in remainder |
+| `75 playlist 80` | 75 | 80 | — | filler in remainder OK |
+| `music 75 fit 80` | 75 | 80 | — | peel 75; remainder has `fit 80` |
+| `75 strong` | 75 | tier strong | — | tier on scoring line |
+| `75 strong\nGreat song` | 75 | tier strong | — | tail ignored |
+| `75?\n…off-theme joke…` | 75 | — | — | no gate from tail |
+| `strong` | null | tier strong | — | tier only, one line |
+| `pass` | null | — | pass | gate-only |
+| `maybe a 70?` | 70 | — | maybe | all on scoring line |
+| `maybe great song 75` | 75 | — | maybe | single-line OK |
+| `76 fit bonus\npublic comment` | 76 | strong / 85 | — | shorthand line 1 only |
+
+---
+
 ### Decisions locked (from Q&A)
 
-- Numeric fit self-identifies: a number tagged `fit` (`80 fit` / `fit 80`) is always parsed; music is the number tagged `music` (or the lone bare number).
-- Tier/gate WORDS (`pass`, `maybe`, `strong`, `off-theme`, ...) are OFF by default, parsed only with an explicit `--fit-words` flag. The vocabulary code is kept, not deleted.
+- **Peel-first:** first number on scoring line = music; parse **remainder** for fit. No
+  fit-only comments. Owner always writes music first for scanning.
+- **Scoring line** = text before first `\n`; submission tail never scanned.
+- With `--fit-words`: 2nd number in remainder → fitScore; tier/gate in remainder.
+- Explicit `N fit` / `fit N` in remainder works with or without `--fit-words`.
+- **Fit shorthand** (`fit bonus`): always on, remainder only.
 - Numeric coercion (`scaleScoreToken`: `7->70`, `75->75`, `755->75.5`) is intentional and unchanged.
 - When any song has manual fit, allocation auto-switches to `rankBy: combined` using a new balanced default weight (0.5 fit / 0.5 music), overridable with `--weights` / `--rank`.
 - Manual fit is persisted in `music.json` and rendered in `music.html`.
@@ -43,8 +302,8 @@ todos:
 
 ### Current behavior (for reference)
 
-- `parseFitTokens` ([scripts/score-core.mjs](scripts/score-core.mjs:185)) parses numeric fit, then tier words (armed by literal `fit`), then **gate words unconditionally** (`GATE_WORDS` loop at line 210) — this is the `maybe` / `off-theme` over-match on music-only rounds.
-- Tier regex `strong` matches inside `strong negative fit` with no negation handling ([score-core.mjs:169](scripts/score-core.mjs:169)).
+- `parseFitTokens` today arms tier words on literal `\bfit\b` and matches gate words
+  unconditionally — both wrong for default parse ([comment.mjs](scripts/score/comment.mjs)).
 - `buildJsonPayload` ([score-core.mjs:1595](scripts/score-core.mjs:1595)) drops `fitScore`/`fitTier`/`gate`/`fitSource`/`combinedScore`.
 - `render-final-html` re-derives fit by re-running `scoreComment` on the stored comment ([render-final-html.mjs:100](scripts/render-final-html.mjs:100)) AND re-runs `mergeFitJson` (allocation) when given `--fit` ([render-final-html.mjs:110](scripts/render-final-html.mjs:110)) — so allocation happens inside render, sometimes.
 - Plain allocate path is music-only ([parse-round.mjs:260](scripts/parse-round.mjs:260)); `rankValue('combined')` already blends `fitScore`+`score` live ([score-core.mjs:227](scripts/score-core.mjs:227)).
@@ -52,14 +311,13 @@ todos:
 ### 1. Parsing: identifier-anchored numbers + word gating (`scripts/score-core.mjs`)
 
 - `scoreComment(rawComment, mode, opts = {})` — add `opts` carrying `{ fitWords = false }`.
-- `parseFitTokens(comment, { fitWords })`:
-  - Numeric fit (`fit N` / `N fit`) always parsed (unchanged).
-  - `FIT_TIER_SYNONYMS` and `GATE_WORDS` only scanned when `fitWords` is true. Default off => no tier/gate word matching at all (kills the `maybe`/`off-theme`/`fits` and `strong negative fit` over-matches). Keep the `fit`-armed requirement for tier words and add a simple negation guard (skip a tier word preceded by `no|not|non|negative|never`).
-- Music-number extraction (replace the strip-then-first-number block at [score-core.mjs:70-99](scripts/score-core.mjs:70)):
-  1. Prefer identifier-anchored: `/(\d{1,3})(\.\d)?([+\-?=]*)\s*music\b/i` -> music score + mods (handles `75? music`).
-  2. Else strip the fit-number token(s) and take the first remaining number as music (covers bare `75`, `75?`, and `80 music`).
-  3. If a `fit` token is present but no music number resolves: music = null (fit-only note); if multiple ambiguous untagged numbers remain, set `needsReview` with a reason.
-  - Modifiers (`+ - ? =`) continue to attach to the music number.
+- Split `rawComment` → `scoringLine` (before first `\n`) + `submissionTail` (unused).
+- **Peel music:** first `\d` token (+ mods) on `scoringLine` → `score`; `remainder` = rest.
+- **`parseFitFromRemainder(remainder, { fitWords })`:**
+  - `FIT_SHORTHAND` multi-word phrases first.
+  - Explicit `N fit` / `fit N` in remainder (not start of shorthand phrase).
+  - When `fitWords`: 2nd number in remainder → fitScore.
+  - `FIT_TIER_SYNONYMS` / `GATE_WORDS` only when `fitWords`; first match; negation guard.
 
 ### 2. Flag plumbing for `--fit-words`
 
@@ -91,20 +349,29 @@ todos:
 
 Net: the "allocate inside render sometimes" smell is removed, renderers become side-effect-free and reusable, and the persistence work in this plan is the prerequisite that makes that possible. (Back-compat: old `music.json` files without fit fields render music-only; re-running `ml parse` regenerates them.)
 
-### 6. Tests
+### 6. Tests (TDD)
 
-- `tests/score.test.mjs`: rewrite the "manual fit notation" block ([tests/score.test.mjs:54](tests/score.test.mjs:54)) for words-off defaults (`strong fit` -> no tier; `maybe`/`off-theme`/`pass` -> no gate); add `{ fitWords: true }` cases for the vocabulary incl. negation (`strong negative fit`). Add numeric pairing cases: `80 music 75 fit`, `75? music. 80 fit`, `72 music, fit 8`, and `maybe a 70?` (words off -> music 70 uncertain, no gate).
-- `tests/score.test.mjs`: assert `buildJsonPayload` persists `fitScore`/`fitTier`/`gate`/`fitSource`/`combinedScore` + top-level `combineWeights`.
-- Allocation test: a round with manual fit yields `rankBy: combined` results (votes differ from music-only) at the documented 0.5/0.5 weight.
-- `tests/render-html.test.mjs`: a `music.json` fixture carrying manual fit renders the tier/score and "combined 50% / 50%" without a `--fit` sidecar; assert `render-final-html` produces identical output with and without the (now-removed) re-score path for a fields-complete `music.json`.
+**New file (preferred):** `tests/comment-parse.test.mjs` — import `scoreComment` from
+`score-core.mjs`; helper `parse(comment, { fitWords, mode })`.
+
+**Do first (red):** full fixture matrix in [Parsing contract](#parsing-contract-default---fit-words-off)
+above. Existing `scoreComment manual fit notation` block in `score.test.mjs` must be
+**split or rewritten** — several assertions encode the old over-match behavior
+(`borderline, maybe` → gate, `strong fit` → tier without flag) and will flip.
+
+**Already green (don't break):** digit scaling, modifiers, DQ/needs-input, persistence,
+auto-combined allocation, pure render.
+
+**CLI integration (after unit matrix green):** one parse-round test that `--fit-words`
+threads through to extracted songs (optional; can follow in Wave 2).
 
 ### 7. Spec / docs / decision log
 
-- `spec/score-parsing.md` "Manual Fit Notation" ([spec/score-parsing.md:46](spec/score-parsing.md:46)): numeric identifiers always parsed and robustly paired; tier/gate WORDS require `--fit-words` (default off) with the controlled vocabulary + negation rule; gate words no longer fire unconditionally; auto-combined allocation (balanced default) when manual fit present; persisted in `music.json`.
-- `spec/point-allocation.md`: note manual-fit auto-combined behavior + `MANUAL_FIT_WEIGHTS` default.
-- `spec/analysis-artifacts.md`: `music.json` now carries fit fields + `combineWeights`; renderers are pure presenters (allocation only in parse/merge).
-- `README.md` "How comments are scored" / allocation sections: document the `music`/`fit` pattern, `--fit-words`, and auto-combined.
-- `spec/decisions.md` (newest-first, `Refs: working tree`): entries for (a) stop over-matching fit/gate words; gate behind `--fit-words`, (b) persist manual fit in `music.json` + render from it + auto-combined balanced allocation, (c) separate allocate from render (remove `render-final-html --fit` inline merge; `ml final` does merge-then-render).
+- **`spec/score-parsing.md`** — replace/extend "Manual Fit Notation" with the parsing
+  contract tables (music / fit / gate / ignored / special outcomes). This is the
+  owner-facing agreement doc; keep in sync with tests.
+- `spec/point-allocation.md`: manual-fit auto-combined already documented — touch only if contract changes allocation inputs.
+- `spec/decisions.md`: one entry when Wave 1 ships (word gating + identifier grammar + TDD contract).
 
 ### Edge cases / risks
 

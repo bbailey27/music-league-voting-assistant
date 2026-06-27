@@ -1,12 +1,14 @@
 ---
 name: "Follow-up 5: Specs, rules, and tests"
-overview: Bring the spec/rules in line with implemented behavior and add a regression/test harness over the committed sample round.
-status: pending
+overview: Bring the spec/rules in line with implemented behavior and add regression tests — unit tests, prose fixtures, and output snapshot diffs over real round artifacts.
+status: partial
 depends_on: MVP
 isProject: false
 ---
 
 # Follow-up 5: Specs, rules, and tests
+
+**Partial sync:** `spec/analysis-artifacts.md`, `spec/point-allocation.md`, `spec/decisions.md` updated for three-stage pipeline and pick invariants. **Sequence:** Waves 2–3 of [remaining-work-master.plan.md](remaining-work-master.plan.md).
 
 ## Spec / rule updates
 - `spec/round-input-parsing.md` (new): schema-first; confirmed HTML selectors; text rules; the hard user-vs-submitter scoring contract (`userComment` is the sole scoring source; `submitterComment` is scoring-neutral context).
@@ -17,6 +19,29 @@ isProject: false
 - `.cursor/rules/parsing.mdc`, `output.mdc`, `allocation.mdc`: parse via extractor first; own-song skip; `data-weight` = the user's own vote; placeholder -> ask; two output tables (ranked w/ artist column; slim raw-order).
 
 ## Tests
-- `tests/extract.test.mjs`: HTML (and later text) -> equivalent counts, own-skip, budget values, a few specific songs; optional golden JSON.
-- `tests/score.test.mjs`: token parsing (`755`->75.5, `7`->70.0, `73-`, `74 soft punk`, `10/10` ignored); disqualified vs empty vs `play`; allocation sums to budget, respects cap, excludes own/disqualified.
-- `tests/regressions/006.md`: prose expectations over the committed sample.
+
+### Unit / fixture tests
+
+- `tests/extract.test.mjs`: HTML (and later text) → equivalent counts, own-skip, budget values, a few specific songs; optional committed JSON fixtures for regression checks.
+- `tests/score.test.mjs`: token parsing (`755`→75.5, `7`→70.0, `73-`, `74 soft punk`, `10/10` ignored); disqualified vs empty vs `play`; allocation sums to budget, respects cap, excludes own/disqualified.
+- `tests/regressions/006.md`: prose expectations over the committed sample round.
+
+### Output snapshot regression test (not built yet)
+
+**What this is:** a **regression test based on diffs**, not a separate product feature.
+Before a risky refactor, run the full pipeline (parse → merge where applicable → render)
+on real rounds and **save the outputs** (`music.json`, `music.md`, HTML, etc.) as a
+baseline. After the change, regenerate the same artifacts and **`diff` the new output
+against the baseline**. Any unexpected diff means behavior drift that unit tests
+didn't catch.
+
+Today this is a manual checklist (snapshot to `/tmp/ml-before`, then
+`diff -r /tmp/ml-before data/analysis`). **Goal:** turn it into something repeatable —
+e.g. `just test-regression`, a script under `scripts/`, or committed fixtures under
+`tests/regressions/` — so refactors can't silently change vote tables or JSON shape.
+
+Also useful: snapshot the public export list of `score-core.mjs` before/after module
+splits (`/tmp/ml-exports-before.txt`).
+
+See [split-score-core-into-modules.plan.md](split-score-core-into-modules.plan.md) Phase 0
+for the manual steps used during the score-core split.

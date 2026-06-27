@@ -1,35 +1,28 @@
 ---
 name: improve-just-cli-and-docs
-overview: Make the three-stage pipeline (parse → merge → pick → render) discoverable from the command line with guided next steps and local help.
+overview: Three-stage pipeline CLI/docs — Phases 0–2 shipped (parse/merge/pick, ml help, README, status). Remaining Phase 3 tests.
 status: partial
-depends_on: split-pipeline-stages
 isProject: false
-related: pick-preserves-options
+todos:
+  - id: ml-dispatcher-tests
+    content: tests/ml.test.mjs — dispatch + stage errors ("parse first")
+    status: pending
+  - id: e2e-fixture
+    content: End-to-end fixture parse → pick → final (beyond pipeline-stages.test.mjs invariants)
+    status: pending
 ---
-
-> **Architecture:** [split-pipeline-stages.plan.md](split-pipeline-stages.plan.md) splits
-> HTML parse, JSON merge, and pick recording into separate scripts **first**. This plan
-> adds `just` recipes, `ml help`, README, and status guidance on top of that split.
-> Pick invariants: [pick-preserves-options.plan.md](pick-preserves-options.plan.md).
 
 # Improve just commands and user instructions
 
-## Problem
+**Phases 0–2 shipped** (2026-06-26): stage split, `ml help` + `just help`, README
+three-stage workflow, justfile doc comments, status pick row + next steps, workspace
+skill. See `spec/decisions.md`.
 
-The pipeline works but **stage boundaries are invisible**:
+**Remaining:** Phase 3 tests below. **Sequence:** Wave 2 of [remaining-work-master.plan.md](remaining-work-master.plan.md).
 
-| Stage | Today | Should be |
-| --- | --- | --- |
-| HTML → music | `just parse` (+ hidden `--option`, `--fit`) | `just parse` only |
-| music + fit → scores | raw `node parse-round.mjs … --fit` | `just merge` |
-| Record choice | `just parse --option B` (re-reads HTML) | `just pick B` (JSON only) |
-| Render | `just final` | unchanged |
+## Target workflow (shipped — reference for tests)
 
-Docs describe a monolithic parse; users can't tell parse from pick from merge.
-
-## Target workflow
-
-**Music-only** (parse once after voting is complete):
+**Music-only:**
 
 ```bash
 just parse kpop-favorite
@@ -47,10 +40,9 @@ just pick tarot C --reason "..."
 just final tarot
 ```
 
-Re-parse (`just parse` again) only when you **replace the HTML export**. It writes
-fresh `music.json` without a pick — run `just pick` again afterward.
+Re-parse only when replacing the HTML export; pick is always a separate JSON step.
 
-## Command surface
+## Command surface (reference)
 
 | Command | Script | Reads HTML? |
 | --- | --- | --- |
@@ -76,9 +68,7 @@ fresh `music.json` without a pick — run `just pick` again afterward.
 
 Deprecated on parse (warn → remove): `--fit`, `--option`, `--reason`.
 
-## `just run` / `just status`
-
-### Next steps
+## Status / next steps (shipped)
 
 ```text
 no input              → export HTML to rounds/
@@ -90,70 +80,29 @@ html stale/missing    → just final
 done
 ```
 
-### Checklist rows
+Checklist includes **Pick recorded** row with `pick.chosen` + option count.
 
-```text
-[ ] Round input
-[ ] Parse (music.json)
-[ ] Fit research     (thematic only)
-[ ] Merge (scores.json)
-[ ] Pick recorded    pick.chosen=B (N options kept)
-[ ] Final HTML
-```
+---
 
-`just run` prints pick/final commands; never auto-picks.
+## Phase 3 — Tests (remaining)
 
-## Documentation
+### `tests/ml.test.mjs`
 
-### README.md
+Dispatcher coverage for `ml parse|merge|pick|final|status|run|help`:
 
-1. **Three-stage pipeline** diagram (parse / merge / pick / render)
-2. **Quick reference** table of `just` commands
-3. **Recording your pick** — `just pick` example; what lands in `pick` + `picks.jsonl`
-4. **When to re-parse** — one paragraph: new HTML export only; pick is separate
-5. Fix empty fit-research bullet; replace raw merge one-liner with `just merge`
+- Correct script invoked per subcommand
+- Stage errors when prerequisites missing (e.g. pick without `music.json` → "parse first")
+- Deprecated flags on parse surface helpful redirect messages
 
-### justfile
+Mirror style of existing `tests/ml-status.test.mjs`.
 
-Doc comment on each recipe (visible in `just --list`).
+### End-to-end fixture
 
-### `ml help`
+Beyond `tests/pipeline-stages.test.mjs` (unit/invariant tests):
 
-- `ml help` — workflow overview
-- `ml help parse` | `merge` | `pick` | `final` — flags + copy-paste example
-
-### `music-league-workspace` skill
-
-Update command table and music-only path.
-
-## Implementation plan
-
-### Phase 0 — Stage split (prerequisite)
-
-From [split-pipeline-stages.plan.md](split-pipeline-stages.plan.md):
-
-- [ ] `merge-scores.mjs`, `pick-round.mjs`
-- [ ] Slim `parse-round.mjs` (no `--fit` / `--option`)
-- [ ] `ml merge`, `ml pick`; deprecation warnings on old parse flags
-- [ ] Pick preservation fixes from [pick-preserves-options](pick-preserves-options.plan.md)
-
-### Phase 1 — Docs + help (can start in parallel with Phase 0 drafts)
-
-- [ ] README three-stage section
-- [ ] justfile doc comments
-- [ ] `ml help`
-- [ ] Skill update
-
-### Phase 2 — Status / run guidance
-
-- [ ] `hasPick`, pick row in status
-- [ ] `nextStep` for pick + final
-- [ ] `just` recipes wired
-
-### Phase 3 — Tests
-
-- [ ] `tests/ml.test.mjs` — dispatch + stage errors ("parse first")
-- [ ] End-to-end fixture: parse → pick → final
+- Fixture round: `just parse` → `just pick` → `just final` (or node equivalents)
+- Assert artifacts exist and pick block present
+- Optional: thematic path with merge
 
 ## Non-goals
 
@@ -162,17 +111,7 @@ From [split-pipeline-stages.plan.md](split-pipeline-stages.plan.md):
 - Web UI picking
 - Changing `picks.jsonl` schema
 
-## Answer card (README)
-
-> **I parsed a music-only round. How do I record my final choice?**
->
-> 1. Open `data/analysis/<round>/music.md` — note option letters (A/B/C).
-> 2. `just pick <round> <letter> --reason "optional note"` — updates JSON only; does not re-read HTML.
-> 3. `just final <round>` — refresh `music.html`.
->
-> Stored in `<round>/music.json` (`pick`) and `data/analysis/picks.jsonl`.
-
-## Verification
+## Verification (when Phase 3 done)
 
 ```bash
 npm test && just lint

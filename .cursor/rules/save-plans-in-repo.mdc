@@ -14,3 +14,6 @@ into this repo at `.cursor/plans/` so it is version-controlled alongside the cod
 - Keep YAML frontmatter consistent with the other plans (`name`, `overview`,
   `status`, `isProject`).
 - If a plan tool wrote the file elsewhere, copy it into `.cursor/plans/` here as well.
+
+When the work ships, follow [plan-lifecycle.mdc](plan-lifecycle.mdc): delete finished
+plans (extract any open items to `future-plans.plan.md` first).

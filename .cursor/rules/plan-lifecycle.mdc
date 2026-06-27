@@ -1,0 +1,64 @@
+---
+description: When to commit, keep, and delete .cursor/plans/*.plan.md files
+alwaysApply: true
+---
+
+# Plan file lifecycle
+
+Plans are scratch paper during implementation. Durable context lives in `spec/`,
+`spec/decisions.md`, and git history — not a growing plans folder.
+
+## Commit timing
+
+- **Multi-step effort (several commits):** include any related
+  `.cursor/plans/*.plan.md` files that are not yet committed in the **first**
+  commit of the effort (even if still `status: pending`). Delete finished plan
+  files in the **last** commit of that effort.
+- **Single commit, plan already in git:** delete the finished plan in that same
+  commit if nothing remains open.
+
+### Single commit, plan not yet committed
+
+When the whole effort will land in **one commit** and the plan file has **never**
+been committed, **ask the user** which path to take — do not assume:
+
+1. **Commit the plan** (include it in the commit), then delete it in a **later**
+   pass once implementation is verified done. Use when you want the design in git
+   history alongside the code.
+2. **Do not commit the plan** — treat it as ephemeral scratch paper; delete it as
+   soon as implementation is done (same session / before or with the code commit,
+   but the plan file itself never enters git).
+
+If the user has already expressed a preference in the thread, follow that instead
+of asking again.
+
+## What to keep
+
+Keep only plans that are **partial or not started**:
+
+- `future-plans.plan.md` — living backlog (always)
+- Named plans with open todos or deferred scope
+
+When a plan is mostly done, **extract any open items into `future-plans.plan.md`**
+(or another partial plan) **only as pointers** — then either:
+
+- **Keep the plan file** trimmed to open phases (full steps, verification, file
+  paths — enough to resume without git), or
+- **Move the full open-phase detail** into a surviving partial plan.
+
+Do **not** replace a deleted plan with a one-line summary in `future-plans`. The
+backlog table links to partial plans; the plan file holds the how-to.
+
+Do **not** keep `status: done` plans for reference — `git show <commit>:.cursor/plans/foo.plan.md`
+recovers them. No plan slug needed in `decisions.md`.
+
+## Orchestrator / master plans
+
+When a master plan's waves are shipped, delete the master plan and all done child
+plans together. Move any open items to `future-plans` or a surviving partial plan
+first.
+
+## Folder target
+
+Between efforts: ~3–8 files in `.cursor/plans/` (backlog + active partials +
+deferred tracks), not an archive of completed work.
