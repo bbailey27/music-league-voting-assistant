@@ -13,6 +13,10 @@ export const FIT_TIER_SCORES = {
 
 export const DEFAULT_COMBINED_WEIGHTS = { fit: 0.7, music: 0.3 };
 
+// Balanced blend when the owner typed manual fit scores in comments (distinct from
+// the LLM thematic default above).
+export const MANUAL_FIT_WEIGHTS = { fit: 0.5, music: 0.5 };
+
 // Graded tiers from best to worst, used to label a fit score back into a word.
 export const FIT_TIER_ORDER = ['excellent', 'strong', 'solid', 'moderate', 'weak', 'nope'];
 

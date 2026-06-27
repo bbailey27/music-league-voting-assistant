@@ -5,30 +5,15 @@
 // each song becomes a card instead.
 //
 // Usage:
-//   node scripts/render-final-html.mjs <analysis.json> [--fit <fit.json>]
-//                                      [--out <path>] [--order votes|score|raw]
+//   node scripts/render-final-html.mjs <analysis.json> [--out <path>] [--order votes|score|raw]
 //
 // Inputs:
 //   <analysis.json>  the deterministic parse output (buildJsonPayload) — the
-//                    authoritative source for round/mode/budget/your scores +
-//                    modifiers + comments + tradeoffs.
-//   --fit <fit.json> optional LLM fit sidecar (analysis/<roundname>/fit.json). When
-//                    present we re-run the deterministic merge+allocate from
-//                    score-core (mergeFitJson) so the votes, combined scores and
-//                    "needs your call" tradeoffs shown here are internally
-//                    consistent with the fit reasoning — no stale numbers.
+//                    authoritative source for round/mode/budget/scores/fit/votes.
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { basename, dirname, join, extname } from 'node:path';
-import {
-  scoreComment,
-  mergeFitJson,
-  formatScore,
-  fitTierForScore,
-  flagsOf,
-  formatVoteAllocation,
-} from './score-core.mjs';
-import { parseDownShape } from './parse-round.mjs';
+import { formatScore, flagsOf, formatVoteAllocation } from './score-core.mjs';
 import { matchFlag, takePositional } from './cli-args.mjs';
 import { esc, tierHue, tradeoffsHtml, pickHtml, comboBallotHtml, NEUTRAL_HUE, RENDER_FINAL_STYLE, buildVoteTierMap, voteTierAttrs, cardIdentityHtml, cardMetaHtml, themeChipsHtml, rationaleHtml, buildHtmlDocument } from './render-html-shared.mjs';
 
@@ -36,18 +21,11 @@ import { esc, tierHue, tradeoffsHtml, pickHtml, comboBallotHtml, NEUTRAL_HUE, RE
 // CLI
 // ---------------------------------------------------------------------------
 function parseArgs(argv) {
-  const args = { file: null, fit: null, out: null, order: 'votes', downShape: null };
+  const args = { file: null, fit: null, out: null, order: 'votes' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     let next = matchFlag(argv, i, 'fit', (v) => {
       args.fit = v;
-    });
-    if (next != null) {
-      i = next;
-      continue;
-    }
-    next = matchFlag(argv, i, 'down-shape', (v) => {
-      args.downShape = v;
     });
     if (next != null) {
       i = next;
@@ -94,48 +72,18 @@ function voteBadge(s, voteTierMap) {
   return `<span${voteTierAttrs(up, voteTierMap)} title="draft upvotes">${up} ▲</span>`;
 }
 
-// ---------------------------------------------------------------------------
-// Build the model: music JSON is authoritative; the fit sidecar (when present)
-// is merged deterministically so votes/combined/tradeoffs stay consistent.
-// ---------------------------------------------------------------------------
-function buildModel(music, fitData, downShape = null) {
-  const mode = music.mode || 'objective';
-  // Rehydrate each song's scoring signals from its comment so a manual fit
-  // token (e.g. "8 fit") keeps precedence over the LLM during the merge — this
-  // reproduces what parse-round did from the original round.
-  const songs = (music.songs || []).map((s) => ({
-    ...s,
-    ...scoreComment(s.userComment ?? '', mode),
-  }));
-
-  let tradeoffs = Array.isArray(music.tradeoffs) ? music.tradeoffs : [];
-  let combine = null;
-  let combineWeights = null;
-
-  if (fitData) {
-    const parsed = { songs, budget: music.budget || {} };
-    const weights = fitData.combineWeights || undefined;
-    const result = mergeFitJson(parsed, fitData, { rankBy: 'combined', weights, downShape });
-    tradeoffs = result.tradeoffs || [];
-    combine = fitData.combine || null;
-    combineWeights = fitData.combineWeights || null;
-    // mergeFit only fills fit-silent songs; backfill a tier word for display
-    // when a numeric fit landed without one.
-    for (const s of songs) {
-      if (s.fitScore != null && !s.fitTier) s.fitTier = fitTierForScore(s.fitScore);
-    }
-  }
-
+// Build the model from persisted music.json — no re-score or re-allocate.
+function buildModel(music) {
   return {
     round: music.round || {},
-    mode,
+    mode: music.mode || 'objective',
     budget: music.budget || {},
-    songs,
+    songs: music.songs || [],
     ownSongs: Array.isArray(music.ownSongs) ? music.ownSongs : [],
-    tradeoffs,
-    pick: (fitData && fitData.pick) || music.pick || null,
-    combine,
-    combineWeights,
+    tradeoffs: Array.isArray(music.tradeoffs) ? music.tradeoffs : [],
+    pick: music.pick || null,
+    combine: music.combine || null,
+    combineWeights: music.combineWeights || null,
   };
 }
 
@@ -326,8 +274,12 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.file) {
     console.error(
-      'Usage: node scripts/render-final-html.mjs <analysis.json> [--fit <fit.json>] [--out <path>] [--order votes|score|raw]'
+      'Usage: node scripts/render-final-html.mjs <analysis.json> [--out <path>] [--order votes|score|raw]'
     );
+    process.exit(1);
+  }
+  if (args.fit) {
+    console.error('Deprecated: --fit on render-final-html. Run just merge then just final.');
     process.exit(1);
   }
   if (!['votes', 'score', 'raw'].includes(args.order)) {
@@ -347,17 +299,7 @@ async function main() {
     process.exit(1);
   }
 
-  let fitData = null;
-  if (args.fit) {
-    try {
-      fitData = JSON.parse(await readFile(args.fit, 'utf8'));
-    } catch (err) {
-      console.error(`Could not parse fit JSON from ${args.fit}: ${err.message}`);
-      process.exit(1);
-    }
-  }
-
-  const model = buildModel(music, fitData, parseDownShape(args.downShape));
+  const model = buildModel(music);
   const html = renderDocument(model, args.order);
 
   const outPath =

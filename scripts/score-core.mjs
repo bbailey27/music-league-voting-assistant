@@ -2,7 +2,7 @@
 // Re-export barrel — importers keep `from './score-core.mjs'`.
 
 export { cell, formatScore } from './score/format.mjs';
-export { FIT_TIER_SCORES, FIT_TIER_ORDER, fitTierForScore } from './score/fit-signal.mjs';
+export { FIT_TIER_SCORES, FIT_TIER_ORDER, fitTierForScore, MANUAL_FIT_WEIGHTS } from './score/fit-signal.mjs';
 export { scoreComment, tiebreakRank } from './score/comment.mjs';
 export {
   rankValue,

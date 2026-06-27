@@ -17,6 +17,8 @@ import {
   buildJsonPayload,
   enrichProfileWithBudget,
   formatScore,
+  combinedScore,
+  MANUAL_FIT_WEIGHTS,
 } from './score-core.mjs';
 import { parseRoundDocument, recoverEscapedSource } from './extract-html.mjs';
 import { parseRoundText } from './parse-text.mjs';
@@ -440,6 +442,17 @@ async function main() {
   );
   if (args.rank) profile.rankBy = args.rank;
 
+  const hasManualFit = parsed.songs.some(
+    (s) => s.fitSource === 'manual' && (s.fitScore != null || s.gate != null)
+  );
+  let combineWeights = null;
+  if (hasManualFit && !args.rank) {
+    combineWeights = parseWeights(args.weights) || MANUAL_FIT_WEIGHTS;
+    profile.rankBy = 'combined';
+    profile.weights = combineWeights;
+    for (const s of parsed.songs) s.combinedScore = combinedScore(s, combineWeights);
+  }
+
   const roundId = roundIdFromInput(args.file);
 
   if (args.fit) {
@@ -469,7 +482,7 @@ async function main() {
   console.log(`Wrote ${paths.md}`);
 
   if (args.json) {
-    const payload = buildJsonPayload({ ...ctx, profile: slimProfile(profile) });
+    const payload = buildJsonPayload({ ...ctx, profile: slimProfile(profile), combineWeights });
     await writeFile(paths.json, JSON.stringify(payload, null, 2), 'utf8');
     console.log(`Wrote ${paths.json}`);
   }

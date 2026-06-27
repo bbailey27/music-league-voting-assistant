@@ -355,12 +355,25 @@ export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mo
   return L.join('\n');
 }
 
-export function buildJsonPayload({ round, budget, songs, totalSongs, ownSkipped, mode, tradeoffs, ownSongs = [], pick = null, profile = null }) {
+export function buildJsonPayload({
+  round,
+  budget,
+  songs,
+  totalSongs,
+  ownSkipped,
+  mode,
+  tradeoffs,
+  ownSongs = [],
+  pick = null,
+  profile = null,
+  combineWeights = null,
+}) {
   return {
     round,
     mode,
     budget,
     ...(profile ? { profile } : {}),
+    ...(combineWeights ? { combineWeights } : {}),
     ...(pick ? { pick } : {}),
     totals: {
       totalSongs,
@@ -394,6 +407,11 @@ export function buildJsonPayload({ round, budget, songs, totalSongs, ownSkipped,
       needsReview: s.needsReview,
       needsResearch: s.needsResearch ?? false,
       reviewReason: s.reviewReason,
+      fitScore: s.fitScore ?? null,
+      fitTier: s.fitTier ?? null,
+      gate: s.gate ?? null,
+      fitSource: s.fitSource ?? null,
+      combinedScore: s.combinedScore ?? null,
       finalVotes: s.finalVotes,
       finalDownvotes: s.finalDownvotes ?? 0,
     })),

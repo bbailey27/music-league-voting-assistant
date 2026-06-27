@@ -11,6 +11,21 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-06-26 — Pure render + fit field persistence (Wave 2b)
+
+**Change.** `render-final-html.mjs` reads persisted `music.json` only — dropped
+inline `scoreComment` re-score and `mergeFitJson` (`--fit` deprecated with hint).
+`buildJsonPayload` persists `fitScore`/`fitTier`/`gate`/`fitSource`/`combinedScore`
+and top-level `combineWeights`. Parse auto-switches to `rankBy: combined` with
+`MANUAL_FIT_WEIGHTS` (0.5/0.5) when any song has manual fit. `ml final` runs
+`merge-scores` first when `fit.json` exists but `scores.json` does not.
+
+**Why.** Wave 2b of pipeline-cleanup master plan — allocation belongs in
+parse/merge only; renderers are pure presenters.
+
+**Refs.** working tree — `scripts/render-final-html.mjs`, `scripts/score/render.mjs`,
+`scripts/parse-round.mjs`, `scripts/ml.mjs`, `scripts/score/fit-signal.mjs`.
+
 ## 2026-06-26 — Three-stage pipeline: parse / merge / pick
 
 **Change.** Split monolithic parse flags into stage scripts: `merge-scores.mjs`

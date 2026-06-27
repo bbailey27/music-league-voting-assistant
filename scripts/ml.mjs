@@ -276,19 +276,25 @@ function cmdFinal(name, flags) {
       ])
     );
   }
+  if (st.hasFitJson && !st.hasScoresJson) {
+    const mergeCode = runScript('merge-scores.mjs', [base]);
+    if (mergeCode !== 0) process.exit(mergeCode);
+    process.exit(
+      runScript('render-fit-html.mjs', [
+        st.scores.json,
+        '--out',
+        st.scores.html,
+        ...flags.filter((f) => !f.startsWith('--order=') && f !== '--order'),
+        ...(flags.includes('--order') ? [] : ['--order', 'combined']),
+      ])
+    );
+  }
   if (!existsSync(st.music.json)) {
     console.error(`No music JSON at ${st.music.json}. Run "ml parse ${base}" first.`);
     process.exit(1);
   }
-  const fitArg = st.hasFitJson ? ['--fit', st.fit.json] : [];
   process.exit(
-    runScript('render-final-html.mjs', [
-      st.music.json,
-      ...fitArg,
-      '--out',
-      st.hasFitJson ? st.scores.html : st.music.html,
-      ...flags,
-    ])
+    runScript('render-final-html.mjs', [st.music.json, '--out', st.music.html, ...flags])
   );
 }
 

@@ -285,8 +285,8 @@ Update this table as waves complete (newest change at top):
 | — | pipeline-cleanup-master | in_progress |
 | 0–1 | split-score-core-into-modules | done |
 | 2 | split-pipeline-stages | done |
-| 2 | pick-preserves-options | partial (render + ballot; tests pending) |
-| 2b | preserve-manual-fit-scores | pending |
+| 2 | pick-preserves-options | done (render + ballot + tests) |
+| 2b | preserve-manual-fit-scores | partial (persist + pure-render; parse-grammar deferred) |
 | 3 | split-parse-round-into-modules | pending |
 | 4 | allocator-fill-and-maybe-funding-fixes | pending |
 | 5 | improve-just-cli-and-docs | pending |
