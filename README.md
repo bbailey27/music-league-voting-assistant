@@ -50,66 +50,113 @@ operate on — the code still builds, lints, and passes tests (which use the syn
 
 ## Workflow
 
-The whole flow is driven by `just run <name>`, where `<name>` is a **fuzzy match**
-on the round (e.g. `tarot` or `2026-06-09`). It always runs the next step for you.
+The pipeline has **four stages**. Only **parse** reads HTML; everything else is JSON.
 
-1. **Drop the round HTML into `data/rounds/`.** In Music League, let the page autosave,
-  **reload it**, confirm your comment/score boxes are pre-filled, then save the
-   page (or copy the page source) into a file at:
-   `<roundname>` is your choice (dated slugs work well); every later file is derived
-   from it. Reload after autosave so comments appear as `data-comment` (see
-   [Getting a usable HTML export](#getting-a-usable-html-export-important)).
-2. **Parse it.** Run the next step:
+```text
+parse → (merge) → pick → final
+  │        │        │       └─ music.html or scores.html
+  │        │        └─ pick record + picks.jsonl
+  │        └─ scores.json (thematic only)
+  └─ music.md + music.json
+```
 
-  ```bash
-   just run tarot
-  ```
+`<name>` is a **fuzzy match** on the round (e.g. `tarot` or `2026-06-09`). Prefer
+`just run <name>` to run the next scriptable step, or `just status <name>` for a
+checklist.
 
-   This writes the music-only report + JSON:
-   For a plain (non-thematic) round, **you're done** — open `music.md` and enter votes.
-3. **(Thematic/lyric rounds only) Fit research.** This is the one manual/agent step
-  `run` won't do for you. The agent researches how each song fits the prompt and
-   writes:
-4. **Merge fit + music, then render.** Merge (manual or agent):
+### Music-only
 
-  ```bash
-   node scripts/parse-round.mjs data/rounds/<roundname>.html --fit data/analysis/<roundname>/fit.json
-  ```
+After voting is complete and comments are saved in the HTML export:
 
-   That writes `**scores.json**` (deliverable — merged `draftVotes`; `fit.json` stays fit-only).
-   Then:
+```bash
+just parse my-round          # HTML → music.md + music.json
+just pick my-round B --reason "flatter split feels right"
+just final my-round          # → music.html
+```
 
-Check where any round stands at any time:
+Open `data/analysis/<round>/music.md` for the ranked table and option letters before
+picking. Re-parse (`just parse`) **only** when you replace the HTML export — pick is
+always a separate JSON step.
+
+### Thematic / lyric rounds
+
+```bash
+just parse tarot
+# agent researches fit → writes data/analysis/tarot/fit.json
+just merge tarot             # music.json + fit.json → scores.json
+just pick tarot C --reason "thematic standouts on the 75 anchor"
+just final tarot             # → scores.html
+```
+
+Fit research is the one step `just run` cannot do for you.
+
+### Getting a usable HTML export
+
+In Music League, let the page autosave, **reload it**, confirm your comment/score boxes
+are pre-filled, then save the page (or copy the page source) into
+`data/rounds/<roundname>.html`. Unsaved in-memory comments (`x-model`) are not
+captured; only server-saved comments appear as `data-comment`. See
+[Getting a usable HTML export](#getting-a-usable-html-export-important) below.
+
+### Status
 
 ```bash
 just status                      # one line per round: what's done + what's next
 just status tarot                # full checklist + next step for one round
+just help                        # workflow overview
+just help pick                   # flags + example for one stage
 ```
+
+## Recording your pick
+
+> **I parsed a music-only round. How do I record my final choice?**
+>
+> 1. Open `data/analysis/<round>/music.md` — note the option letters (A/B/C) in the
+>    tier-structure tradeoff.
+> 2. `just pick <round> <letter> --reason "optional note"` — updates JSON only; does
+>    **not** re-read HTML. Full A/B/C menu is preserved in `pick.options`.
+> 3. `just final <round>` — refresh `music.html`.
+>
+> Stored in `<round>/music.json` (`pick`) and `data/analysis/picks.jsonl` (training log).
 
 ## Command reference
 
 `just` recipes forward to the dispatcher (`scripts/ml.mjs`); extra flags pass straight
-through to the underlying scripts.
+through to the underlying scripts. Run `just --list` or `just help` for the full set.
 
-- `**just run <name>**` — run the next scriptable step (parse, render scores/fit HTML).
-- `**just status [name]**` — pipeline checklist + next step (no name = every round).
-- `**just parse <name> [flags]**` — force parse; flags: `--mode objective|subjective`, `--no-json`.
-- `**just fit <name> [flags]**` — render fit-only HTML from `fit.json`.
-- `**just scores <name> [flags]**` — render deliverable HTML from `scores.json`.
-- `**just final <name> [flags]**` — render scores or music HTML (whichever applies).
-- `**--mode**`, **fuzzy names**, and **blank score boxes** — same rules as [Workflow](#workflow) step 1 and [How comments are scored](#how-comments-are-scored-your-comment-only) below.
+| Command | Stage | Reads HTML? |
+| --- | --- | --- |
+| `just parse <name>` | HTML → `music.json` | Yes |
+| `just merge <name>` | `music.json` + `fit.json` → `scores.json` | No |
+| `just pick <name> <A\|B\|C>` | record distribution choice | No |
+| `just fit <name>` | render `fit.html` from `fit.json` | No |
+| `just scores <name>` | render `scores.html` from `scores.json` | No |
+| `just final <name>` | render deliverable HTML | No |
+| `just run <name>` | next scriptable step | varies |
+| `just status [name]` | pipeline checklist | — |
+| `just help [cmd]` | workflow / per-command flags | — |
+| `just tidy` | date-slug + archive stale rounds | — |
+
+**Flag ownership:** explore allocation with `--shape`, `--tier-count`, `--pin` on
+**parse**; thematic profile with `--rank`, `--weights`, `--gate` on **merge**; record
+the choice with `--option`/`--reason`/`--pin` on **pick** (via `just pick`).
+
+Deprecated on parse (warns): `--fit`, `--option`, `--reason` — use `just merge` and
+`just pick` instead.
 
 ### Without `just`
 
 Use the npm script (note the `--` before args) or call the scripts directly:
 
 ```bash
-npm run ml -- run tarot          # same dispatcher, no just needed
-npm run ml -- status
+npm run ml -- run tarot
+npm run ml -- help pick
 
-node scripts/parse-round.mjs data/rounds/2026-06-09-tarot-hanged-man.html [--mode ...] [--no-json]
-node scripts/parse-round.mjs data/rounds/2026-06-09-tarot-hanged-man.html --fit data/analysis/2026-06-09-tarot-hanged-man/fit.json
-node scripts/render-fit-html.mjs data/analysis/2026-06-09-tarot-hanged-man/scores.json [--out ...] [--order ...]
+node scripts/parse-round.mjs data/rounds/<round>.html
+node scripts/merge-scores.mjs <round-id>
+node scripts/pick-round.mjs <round-id> B --reason "…"
+node scripts/render-final-html.mjs data/analysis/<round>/music.json
+node scripts/render-fit-html.mjs data/analysis/<round>/scores.json
 ```
 
 Docs and tests use the synthetic fixture at `tests/fixtures/sample-round/` instead of live round files.
@@ -159,23 +206,20 @@ From each `div.song`, skipping your own submissions (`mine: true`):
 ## How the draft allocation works
 
 Tiers come from the **spread of scores in that round** — no fixed thresholds. Among
-eligible songs (scored, not disqualified, not awaiting a score), the allocator matches
-your **opinion curve** (score distribution) to a **point curve** (budget ÷ eligible
-songs), anchored on the **mode** (most common score), not the floor — disqualified
-entries are excluded entirely.
+eligible songs (scored, not disqualified, not awaiting a score), the allocator builds
+a **center-out staircase**: a baseline 1/0 cutoff plus `+1` promotion steps on natural
+score gaps (and 75/80 anchors), so adjacent point tiers differ by exactly 1 by
+construction.
 
 1. **1-D clustering** (Ckmeans.1d.dp) finds natural score gaps; equal scores stay in
-  the same tier (`tierKey`).
-2. A **mode-centered bell** sets tier point targets; `**auto`** widens the curve as the
-  points-to-songs ratio grows.
-3. **Smoothness rule:** songs ≤1 score apart never end >1 point apart; big jumps only
-  on real gaps (>1 score).
-4. Budget is spent exactly via monotonic waterfill; per-song caps enforced.
-
-- **Tiebreaks** (equal scores): higher score, then `play ≥ + > plain > -`.
-- **Uncertainty:** `?` at a tier boundary surfaces under "Needs review."
-- **Ambiguous splits:** may emit `tier-structure` tradeoffs; pin with `--tier-count` or
-`--bucket-count`.
+  the same tier (`tierKey`). Scores ≥ 80 merge into one shared favorite top tier by
+  default (R2).
+2. **`auto` shape** enumerates budget-exact staircases and prefers the shortest top
+  that lands on real gaps — no cap-reaching waterfill.
+3. **Gate rounds** (`passFailMaybe`): passes are shaped first; maybes fund only at or
+  below the lowest pass tier.
+4. Budget is spent exactly; per-song caps enforced. Ambiguous splits surface as
+  `tier-structure` tradeoffs — record your choice with `just pick`.
 
 Dense or oversubscribed rounds naturally push more songs to 0 — treat the output as a
 starting point and rebalance. Full model: [spec/point-allocation.md](spec/point-allocation.md).
@@ -191,12 +235,11 @@ starting point and rebalance. Full model: [spec/point-allocation.md](spec/point-
 
 ## The fit report (HTML)
 
-For lyric/theme rounds, fit research lives in `**data/analysis/<roundname>/fit.json`**
-(workflow step 3). Merge with music scores to produce `**scores.json**` /
-`**scores.html**` — the deliverable.
+For lyric/theme rounds, fit research lives in `data/analysis/<roundname>/fit.json`
+(workflow step above). Merge with:
 
 ```bash
-just fit tarot [--out <path>] [--order fit|combined|raw]
+just merge tarot
 just scores tarot   # deliverable HTML from scores.json
 ```
 
@@ -205,12 +248,16 @@ are documented in [spec/fit-evaluation.md](spec/fit-evaluation.md) → Output.
 
 ## Repo layout
 
-- `scripts/ml.mjs` — friendly dispatcher (fuzzy names, `run`/`status`, next-step inference).
+- `scripts/ml.mjs` — dispatcher (fuzzy names, `run`/`status`/`help`, next-step inference).
 - `scripts/paths.mjs` — shared analysis folder + artifact naming.
-- `scripts/parse-round.mjs` — deterministic parser + allocator (HTML → `music.*`; `--fit` → `scores.json`).
+- `scripts/parse-round.mjs` — HTML/text → `music.*` (parse stage only).
+- `scripts/merge-scores.mjs` — `music.json` + `fit.json` → `scores.json`.
+- `scripts/pick-round.mjs` — JSON-only distribution pick + `picks.jsonl`.
 - `scripts/render-fit-html.mjs` — renders `fit.json` or `scores.json` to HTML.
+- `scripts/render-final-html.mjs` — renders `music.json` to `music.html`.
+- `scripts/score/` — allocation core (`allocate.mjs`, `merge.mjs`, `render.mjs`, …).
 - `scripts/one-off/` — round-specific drivers (not the main pipeline).
-- `justfile` — `run` / `status` / `parse` / `fit` / `scores` recipes forwarding to `scripts/ml.mjs`.
+- `justfile` — `parse` / `merge` / `pick` / `final` / `status` / `help` recipes.
 - `data/` — **private** submodule (`music-league-data`); not part of this public repo.
   - `data/rounds/` — flat round HTML exports; optional `data/rounds/archive/`.
   - `data/analysis/` — per-round folders `data/analysis/<roundname>/`; optional `data/analysis/archive/`.
