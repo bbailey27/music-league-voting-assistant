@@ -57,3 +57,28 @@ test('ml status flags a stale music.html', async () => {
     await rm(cwd, { recursive: true, force: true });
   }
 });
+
+test('ml status shows pick row and next final step after pick', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'ml-status-test-'));
+  try {
+    const name = 'picked-round';
+    const dir = join(cwd, 'data', 'analysis', name);
+    await mkdir(join(cwd, 'data', 'rounds'), { recursive: true });
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(cwd, 'data', 'rounds', `${name}.html`), '<!doctype html>', 'utf8');
+    await writeFile(join(dir, 'music.md'), '# music', 'utf8');
+    await writeFile(
+      join(dir, 'music.json'),
+      JSON.stringify({
+        songs: [],
+        pick: { chosen: 'B', options: [{ letter: 'A' }, { letter: 'B' }, { letter: 'C' }] },
+      }),
+      'utf8'
+    );
+    const out = await status(cwd, name);
+    assert.match(out, /Pick recorded.*B \(3 options kept\)/);
+    assert.match(out, /Next:.*render music report.*music\.html/);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});

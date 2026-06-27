@@ -104,25 +104,26 @@ function pipelineState(name) {
 
   let missingScores = 0;
   let hasPick = false;
-  if (hasParse) {
+  let pickSummary = null;
+  const readPick = (jsonPath) => {
     try {
-      const data = JSON.parse(readFileSync(music.json, 'utf8'));
+      const data = JSON.parse(readFileSync(jsonPath, 'utf8'));
       if (Array.isArray(data.songs)) {
         missingScores = data.songs.filter((s) => s.needsUserInput).length;
       }
-      hasPick = !!data.pick;
+      if (data.pick) {
+        hasPick = true;
+        const n = data.pick.options?.length;
+        pickSummary = data.pick.chosen
+          ? `${data.pick.chosen}${n ? ` (${n} options kept)` : ''}`
+          : 'recorded';
+      }
     } catch {
       // unreadable JSON
     }
-  }
-  if (!hasPick && hasScoresJson) {
-    try {
-      const data = JSON.parse(readFileSync(scores.json, 'utf8'));
-      hasPick = !!data.pick;
-    } catch {
-      // unreadable JSON
-    }
-  }
+  };
+  if (hasParse) readPick(music.json);
+  if (!hasPick && hasScoresJson) readPick(scores.json);
 
   return {
     name,
@@ -146,6 +147,7 @@ function pipelineState(name) {
     scoresHtmlFresh,
     missingScores,
     hasPick,
+    pickSummary,
   };
 }
 
@@ -167,6 +169,16 @@ function nextStep(st) {
       return {
         kind: 'pick',
         label: `pick a distribution → just pick ${st.name} <A|B|C> --reason "…" (see ${st.music.md})`,
+      };
+    }
+    if (st.hasPick) {
+      if (!st.hasMusicHtml || !st.musicHtmlFresh) {
+        const why = !st.hasMusicHtml ? 'missing' : 'stale';
+        return { kind: 'final', label: `render music report (${why}) → ${st.music.html}` };
+      }
+      return {
+        kind: 'done',
+        label: `done — open ${st.music.md} or ${st.music.html}`,
       };
     }
     return {
@@ -318,6 +330,10 @@ function cmdRun(name) {
       console.log(`${base}: ${step.label}`);
       warnMissingScores(st);
       break;
+    case 'final':
+      return process.exit(
+        runScript('render-final-html.mjs', [st.music.json, '--out', st.music.html])
+      );
     case 'scores':
       return process.exit(
         runScript('render-fit-html.mjs', [st.scores.json, '--out', st.scores.html, '--order', 'combined'])
@@ -382,6 +398,9 @@ function cmdStatusOne(name) {
   );
   console.log(`  ${checkbox(st.hasScoresJson)} Merge (scores) ${st.scores.json}`);
   console.log(
+    `  ${checkbox(st.hasPick)} Pick recorded  ${st.hasPick ? st.pickSummary : '(just pick <name> <A|B|C>)'}`
+  );
+  console.log(
     `  ${checkbox(st.hasScoresHtml, st.hasScoresHtml && !st.scoresHtmlFresh)} Scores HTML    ${st.scores.html}` +
       (st.hasScoresHtml && !st.scoresHtmlFresh ? '   (stale — re-render)' : '')
   );
@@ -415,6 +434,7 @@ function cmdStatusAll() {
       checkbox(st.hasParse) +
       checkbox(st.hasFitJson) +
       checkbox(st.hasScoresJson) +
+      checkbox(st.hasPick) +
       checkbox(st.hasScoresHtml, st.hasScoresHtml && !st.scoresHtmlFresh);
     const warn = st.missingScores > 0 ? `  ⚠ ${st.missingScores} missing score(s)` : '';
     console.log(`${marks}  ${name}  → ${step.label}${warn}`);

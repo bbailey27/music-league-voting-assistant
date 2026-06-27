@@ -288,8 +288,8 @@ Update this table as waves complete (newest change at top):
 | 2 | pick-preserves-options | done (render + ballot + tests) |
 | 2b | preserve-manual-fit-scores | partial (persist + pure-render; parse-grammar deferred) |
 | 3 | split-parse-round-into-modules | done |
-| 4 | allocator-fill-and-maybe-funding-fixes | pending |
-| 5 | improve-just-cli-and-docs | pending |
+| 4 | allocator-fill-and-maybe-funding-fixes | done |
+| 5 | improve-just-cli-and-docs | in_progress |
 | 5 | followup-5-specs-and-tests | pending |
 | 6+ | split-score-core Phases 2–4 | optional |
 | defer | web-app-and-allocation-engine | blocked on W1+W2+W5 |
