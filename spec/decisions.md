@@ -11,6 +11,18 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-06-26 — Split score-core into focused modules
+
+**Change.** `scripts/score-core.mjs` is now a thin re-export barrel over
+`scripts/score/{format,fit-signal,comment,allocate,merge,render}.mjs`. Public
+export surface unchanged (23 symbols); `mergeFitJson` lives in `render.mjs` to
+keep the allocate↔merge import graph acyclic.
+
+**Why.** The 2300-line monolith mixed six concerns; module split is Wave 1 of the
+pipeline-cleanup master plan and unblocks allocator work in `allocate.mjs` only.
+
+**Refs.** working tree — `scripts/score-core.mjs`, `scripts/score/*`.
+
 ## 2026-06-22 — Point badges use discrete tier palette, not score heat
 
 **Change.** Upvote boxes (`draftVotes` / `finalVotes`) now use a fixed discrete
