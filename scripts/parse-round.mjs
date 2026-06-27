@@ -8,17 +8,15 @@
 // scoring signals.
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { extname, dirname, join } from 'node:path';
+import { extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseHTML } from 'linkedom';
 import {
   allocate,
   buildMarkdown,
   buildJsonPayload,
-  mergeFitJson,
   enrichProfileWithBudget,
   formatScore,
-  buildPickRecord,
 } from './score-core.mjs';
 import { parseRoundDocument, recoverEscapedSource } from './extract-html.mjs';
 import { parseRoundText } from './parse-text.mjs';
@@ -27,7 +25,6 @@ import { matchFlag, matchRestFlag, takePositional } from './cli-args.mjs';
 import {
   roundIdFromInput,
   musicPaths,
-  scoresPaths,
 } from './paths.mjs';
 import { ensureDateSlugForInput } from './maintain-rounds.mjs';
 
@@ -263,7 +260,7 @@ export function parseWeights(spec) {
 
 // Build the allocation gate from CLI flags. --cutoff takes "axis:min"
 // (e.g. fit:68); --gate takes passFail | passFailMaybe.
-function buildGate(args) {
+export function buildGate(args) {
   if (args.cutoff) {
     const [axis, min] = args.cutoff.split(':');
     return { type: 'cutoff', axis: axis || 'fit', min: Number(min) };
@@ -287,134 +284,9 @@ function parseRoundHtml(html, mode) {
   return parsed;
 }
 
-const TRADEOFF_OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+import { reconcileOptionPins, resolveOptionPick, TRADEOFF_OPTION_LETTERS } from './round/pick.mjs';
 
-// Resolve an --option spec ("A".."F" or "1".."n") to a 0-based index, or null.
-function resolveOptionIndex(spec, count) {
-  if (!count) return null;
-  const s = String(spec).trim();
-  let idx = null;
-  if (/^[A-Za-z]$/.test(s)) idx = s.toUpperCase().charCodeAt(0) - 65;
-  else if (/^\d+$/.test(s)) idx = Number(s) - 1;
-  return idx != null && idx >= 0 && idx < count ? idx : null;
-}
-
-// Apply manual up-pins on top of a chosen option's distribution, then REFLOW at the
-// margin so the upvote bank is still spent EXACTLY. A bare pin used to win even when
-// it pushed the total over the bank (an invalid ballot); instead we reconcile:
-//   - net-positive pin (the song got MORE than the option gave) → shed the surplus
-//     from the lowest-ranked unpinned funded songs (the bottom of the curve);
-//   - net-negative pin (the song got LESS) → promote the next candidates — the
-//     best-ranked unfunded unpinned songs first, then best-ranked below-cap songs.
-// `perSong` is the option's distribution in best-first (combined/rank) order, so the
-// array order IS the rank order. Returns a full {rawOrderIndex: votes} map summing to
-// the option's budget (unless pins alone exceed it, which the budget check then
-// flags). Exceeding the bank is never produced here.
-export function reconcileOptionPins(perSong, pins, cap = Infinity) {
-  const order = perSong.map((p) => p.rawOrderIndex);
-  const votes = new Map(perSong.map((p) => [p.rawOrderIndex, p.votes || 0]));
-  const budget = perSong.reduce((a, p) => a + (p.votes || 0), 0);
-  const pinned = new Set();
-  for (const [k, v] of Object.entries(pins || {})) {
-    if (!Number.isFinite(v)) continue;
-    const i = Number(k);
-    votes.set(i, v);
-    pinned.add(i);
-    if (!order.includes(i)) order.push(i); // a pin on a song outside the funded display
-  }
-  const total = () => order.reduce((a, i) => a + (votes.get(i) || 0), 0);
-
-  // Over budget: shed from the bottom (worst-ranked) unpinned funded songs.
-  let delta = total() - budget;
-  while (delta > 0) {
-    let moved = false;
-    for (let k = order.length - 1; k >= 0 && delta > 0; k--) {
-      const i = order[k];
-      if (pinned.has(i) || (votes.get(i) || 0) <= 0) continue;
-      votes.set(i, votes.get(i) - 1);
-      delta--;
-      moved = true;
-    }
-    if (!moved) break; // nothing left to shed (pins alone exceed budget) — check flags it
-  }
-
-  // Under budget: promote the next candidates. Two passes per round so a freed point
-  // lands on a new song (best-ranked unfunded) before stacking onto already-funded
-  // songs (best-ranked below cap).
-  delta = total() - budget;
-  while (delta < 0) {
-    let moved = false;
-    for (const unfundedOnly of [true, false]) {
-      for (let k = 0; k < order.length && delta < 0; k++) {
-        const i = order[k];
-        if (pinned.has(i)) continue;
-        const cur = votes.get(i) || 0;
-        if (unfundedOnly && cur !== 0) continue;
-        if (cur >= cap) continue;
-        votes.set(i, cur + 1);
-        delta++;
-        moved = true;
-      }
-      if (delta >= 0) break;
-    }
-    if (!moved) break;
-  }
-
-  return Object.fromEntries(order.map((i) => [i, votes.get(i) || 0]));
-}
-
-// Resolve an `--option <A|B|C…>` pick against a set of tradeoffs WITHOUT side
-// effects. Returns the chosen 0-based index, the presented tier-structure options,
-// and the per-song override map — the chosen option's votes with any base `--pin`
-// overrides reconciled on top (see reconcileOptionPins) so the bank stays exact. On
-// an unavailable spec returns `{ error }` with `presented` so the caller can report
-// the choices. Shared by the music-only and fit-merge paths so `--option` behaves
-// identically.
-export function resolveOptionPick(tradeoffs, optionSpec, baseOverrides = {}, cap = Infinity) {
-  const ts = (tradeoffs || []).find((t) => t.kind === 'tier-structure');
-  const presented = (ts?.options || []).filter((o) => Array.isArray(o.perSong) && o.perSong.length);
-  const idx = resolveOptionIndex(optionSpec, presented.length);
-  if (idx == null) {
-    return {
-      idx: null,
-      presented,
-      overrides: null,
-      error: `--option "${optionSpec}" is not available (this round has ${presented.length || 0} option(s): ${
-        presented.map((_, i) => String.fromCharCode(65 + i)).join(', ') || 'none'
-      }).`,
-    };
-  }
-  const chosen = presented[idx];
-  const overrides = reconcileOptionPins(chosen.perSong, baseOverrides || {}, cap);
-  return { idx, presented, overrides, error: null };
-}
-
-// Apply an `--option` pick to a freshly-allocated round and return the resulting
-// `{ tradeoffs, pick }`. `reallocate(overrides)` re-runs the caller's allocation
-// (music-only `allocate` or fit-merge `mergeFitJson`), mutating the songs in place,
-// and returns its tradeoffs; passing `undefined` clears overrides. `initialTradeoffs`
-// is the allocation already produced with `baseOverrides` (the user's `--pin`
-// tweaks). The presented menu is captured WITHOUT those pins so a `--pin` reads as a
-// manual tweak ON TOP of the chosen option rather than getting baked into the menu
-// (a pinned song is otherwise pulled out of the tier pool and would vanish from every
-// option). Exits the process on an unavailable option spec.
-function applyOptionPick({ optionSpec, reason, reallocate, initialTradeoffs, baseOverrides, downOverrides, songs, cap = Infinity }) {
-  const hasPins = baseOverrides && Object.keys(baseOverrides).length > 0;
-  const menuTradeoffs = hasPins ? reallocate(undefined) : initialTradeoffs;
-  const { idx, presented, overrides, error } = resolveOptionPick(menuTradeoffs, optionSpec, baseOverrides, cap);
-  if (error) {
-    console.error(error);
-    process.exit(1);
-  }
-  const tradeoffs = reallocate(overrides);
-  const pick = buildPickRecord({ options: presented, chosenIndex: idx, songs, reason, downOverrides });
-  console.log(
-    `Applied option ${pick.chosen} — ${pick.tierCount} tier${pick.tierCount === 1 ? '' : 's'}, ${pick.shape}.` +
-      (pick.tweaks.length ? ` (${pick.tweaks.length} manual tweak${pick.tweaks.length === 1 ? '' : 's'})` : '') +
-      (pick.reason ? ` Reason: ${pick.reason}` : '')
-  );
-  return { tradeoffs, pick };
-}
+export { reconcileOptionPins, resolveOptionPick };
 
 // Print a left/right-aligned text table (col 0 + the "Song" col left-aligned).
 function printTextTable(headers, rows, songCol) {
@@ -506,60 +378,9 @@ function printBallotCli(tradeoffs, songs = [], ownSongs = []) {
   }
 }
 
-// Append one self-contained line to the global training log (analysis/picks.jsonl):
-// the round, the chosen option + reason + tweaks, every option that was presented
-// (as votes-by-index), and a compact score snapshot of the field. One growing
-// dataset of "options shown → what was chosen and why" across rounds.
-async function recordPickToTrainingLog(roundId, songs, pick) {
-  const logPath = join(dirname(scoresPaths(roundId).dir), 'picks.jsonl');
-  const entry = {
-    round: roundId,
-    pickedAt: pick.pickedAt,
-    chosen: pick.chosen,
-    tierCount: pick.tierCount,
-    shape: pick.shape,
-    reason: pick.reason,
-    tweaks: pick.tweaks,
-    options: pick.options.map((o) => ({
-      letter: o.letter,
-      tierCount: o.tierCount,
-      bucketCount: o.bucketCount,
-      shape: o.shape,
-      isChosen: o.isChosen,
-      votesByIndex: Object.fromEntries(o.perSong.map((s) => [s.rawOrderIndex, s.votes])),
-    })),
-    field: (songs || []).map((s) => ({
-      rawOrderIndex: s.rawOrderIndex,
-      title: s.title,
-      artist: s.artist,
-      fitScore: s.fitScore ?? null,
-      fitTier: s.fitTier ?? null,
-      // Music-only songs carry `score`/`finalVotes`; merged songs carry
-      // `musicScore`/`draftVotes`. Fall back so the log is meaningful for both.
-      musicScore: s.musicScore ?? s.score ?? null,
-      combinedScore: s.combinedScore ?? null,
-      draftVotes: s.draftVotes ?? s.finalVotes ?? 0,
-    })),
-  };
-  // Idempotent per round: re-running a pick replaces that round's prior line rather
-  // than appending a duplicate, so the log stays one-row-per-round for training.
-  let prior = [];
-  try {
-    prior = (await readFile(logPath, 'utf8'))
-      .split('\n')
-      .filter(Boolean)
-      .filter((l) => {
-        try {
-          return JSON.parse(l).round !== roundId;
-        } catch {
-          return true;
-        }
-      });
-  } catch (err) {
-    if (err.code !== 'ENOENT') throw err;
-  }
-  await writeFile(logPath, `${[...prior, JSON.stringify(entry)].join('\n')}\n`, 'utf8');
-  console.log(`Logged pick to ${logPath}`);
+function slimProfile(profile) {
+  const { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand } = profile;
+  return { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand };
 }
 
 // ---------------------------------------------------------------------------
@@ -569,7 +390,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.file) {
     console.error(
-      'Usage: node scripts/parse-round.mjs <round.html|round.txt> [--mode objective|subjective] [--no-json] [--lenient] [--shape ...] [--down-shape concentrated|flat|curved] [--tier-count <n>] [--bucket-count <n>] [--option <A|B|C> [--reason "why"]] [--favorite-band <min>|--no-favorite-band] [--pin <i>:<v> (negative <v> pins downvotes, e.g. 6:-2)] [--fit <fit.json> [--rank combined] [--weights <fit>:<music>] [--gate ...] [--cutoff ...]]'
+      'Usage: node scripts/parse-round.mjs <round.html|round.txt> [--mode objective|subjective] [--no-json] [--lenient] [--shape ...] [--down-shape concentrated|flat|curved] [--tier-count <n>] [--bucket-count <n>] [--favorite-band <min>|--no-favorite-band] [--pin <i>:<v>]'
     );
     process.exit(1);
   }
@@ -619,87 +440,27 @@ async function main() {
   );
   if (args.rank) profile.rankBy = args.rank;
 
-  // Merge path: join an LLM fit JSON with the parsed music scores, allocate on
-  // the blend, and write draftVotes back into the fit JSON for render-fit-html.
+  const roundId = roundIdFromInput(args.file);
+
   if (args.fit) {
-    const fitRaw = await readFile(args.fit, 'utf8');
-    let fitData;
-    try {
-      fitData = JSON.parse(fitRaw);
-    } catch (err) {
-      console.error(`Could not parse fit JSON from ${args.fit}: ${err.message}`);
-      process.exit(1);
-    }
-    const roundId = roundIdFromInput(args.file);
-    const mergeProfile = {
-      ...enrichProfileWithBudget(profile, parsed.budget),
-      rankBy: args.rank || 'combined',
-    };
-    let { tradeoffs } = mergeFitJson(parsed, fitData, mergeProfile);
-
-    // --option <A|B|C…> picks a distribution fork by its column letter and applies
-    // it deterministically (sugar over per-song pins), so a pick is one clean flag
-    // even when two options happen to share a tier/bucket-count label.
-    if (args.option != null) {
-      const picked = applyOptionPick({
-        optionSpec: args.option,
-        reason: args.reason,
-        reallocate: (overrides) => mergeFitJson(parsed, fitData, { ...mergeProfile, overrides }).tradeoffs,
-        initialTradeoffs: tradeoffs,
-        baseOverrides: profile.overrides,
-        downOverrides: profile.downOverrides,
-        songs: parsed.songs,
-        cap: upCap,
-      });
-      tradeoffs = picked.tradeoffs;
-      fitData.pick = picked.pick;
-      await recordPickToTrainingLog(roundId, fitData.songs, picked.pick);
-    } else if (args.reason != null) {
-      console.error('--reason needs an --option pick to attach to; ignoring.');
-    }
-
-    const scoresOut = scoresPaths(roundId).json;
-    await mkdir(scoresPaths(roundId).dir, { recursive: true });
-    await writeFile(scoresOut, JSON.stringify(fitData, null, 2), 'utf8');
-    console.log(`Wrote ${scoresOut} (merged scores + draftVotes; fit-only source unchanged: ${args.fit})`);
-    const calls = tradeoffs.filter((t) => t.kind !== 'budget-mismatch');
-    if (calls.length) {
-      console.log(`\n${calls.length} tradeoff(s) need your call:`);
-      for (const t of calls) printTradeoffCli(t);
-    }
-    printBallotCli(tradeoffs, fitData.songs, parsed.ownSongs);
-    warnBudgetMismatch(tradeoffs);
-    return;
+    console.error(`Deprecated: --fit on parse. Use: just merge ${roundId}`);
+    process.exit(1);
+  }
+  if (args.option != null) {
+    const reasonHint = args.reason ? ` --reason "${args.reason}"` : '';
+    console.error(`Deprecated: --option on parse. Use: just pick ${roundId} ${args.option}${reasonHint}`);
+    process.exit(1);
+  }
+  if (args.reason != null) {
+    console.error(`Deprecated: --reason on parse. Use: just pick ${roundId} <A|B|C> --reason "…"`);
+    process.exit(1);
   }
 
   const budget = parsed.budget.upvoteBankSize ?? 0;
   const cap = parsed.budget.maxUpvotesPerSong ?? Infinity;
-  let { tradeoffs } = allocate(parsed.songs, budget, cap, profile);
+  const { tradeoffs } = allocate(parsed.songs, budget, cap, profile);
 
-  const roundId = roundIdFromInput(args.file);
-
-  // --option works the same here as on the merge path: pick a surfaced distribution
-  // fork by letter and apply it deterministically (sugar over per-song pins).
-  let pick = null;
-  if (args.option != null) {
-    const picked = applyOptionPick({
-      optionSpec: args.option,
-      reason: args.reason,
-      reallocate: (overrides) => allocate(parsed.songs, budget, cap, { ...profile, overrides }).tradeoffs,
-      initialTradeoffs: tradeoffs,
-      baseOverrides: profile.overrides,
-      downOverrides: profile.downOverrides,
-      songs: parsed.songs,
-      cap,
-    });
-    tradeoffs = picked.tradeoffs;
-    pick = picked.pick;
-    await recordPickToTrainingLog(roundId, parsed.songs, pick);
-  } else if (args.reason != null) {
-    console.error('--reason needs an --option pick to attach to; ignoring.');
-  }
-
-  const ctx = { ...parsed, mode: args.mode, tradeoffs, pick };
+  const ctx = { ...parsed, mode: args.mode, tradeoffs, pick: null };
   const md = buildMarkdown(ctx);
 
   const paths = musicPaths(roundId);
@@ -708,10 +469,17 @@ async function main() {
   console.log(`Wrote ${paths.md}`);
 
   if (args.json) {
-    const payload = buildJsonPayload(ctx);
+    const payload = buildJsonPayload({ ...ctx, profile: slimProfile(profile) });
     await writeFile(paths.json, JSON.stringify(payload, null, 2), 'utf8');
     console.log(`Wrote ${paths.json}`);
   }
+
+  const calls = tradeoffs.filter((t) => t.kind !== 'budget-mismatch');
+  if (calls.length) {
+    console.log(`\n${calls.length} tradeoff(s) need your call — use just pick ${roundId} <A|B|C> --reason "…"`);
+    for (const t of calls) printTradeoffCli(t);
+  }
+  printBallotCli(tradeoffs, parsed.songs, parsed.ownSongs);
   warnBudgetMismatch(tradeoffs);
 }
 

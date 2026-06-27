@@ -103,12 +103,22 @@ function pipelineState(name) {
   }
 
   let missingScores = 0;
+  let hasPick = false;
   if (hasParse) {
     try {
       const data = JSON.parse(readFileSync(music.json, 'utf8'));
       if (Array.isArray(data.songs)) {
         missingScores = data.songs.filter((s) => s.needsUserInput).length;
       }
+      hasPick = !!data.pick;
+    } catch {
+      // unreadable JSON
+    }
+  }
+  if (!hasPick && hasScoresJson) {
+    try {
+      const data = JSON.parse(readFileSync(scores.json, 'utf8'));
+      hasPick = !!data.pick;
     } catch {
       // unreadable JSON
     }
@@ -135,6 +145,7 @@ function pipelineState(name) {
     hasScoresHtml,
     scoresHtmlFresh,
     missingScores,
+    hasPick,
   };
 }
 
@@ -152,17 +163,29 @@ function nextStep(st) {
     };
   }
   if (!st.hasFitJson) {
+    if (!st.hasPick && st.hasParse) {
+      return {
+        kind: 'pick',
+        label: `pick a distribution → just pick ${st.name} <A|B|C> --reason "…" (see ${st.music.md})`,
+      };
+    }
     return {
       kind: 'advisory',
       label:
-        `music-only round: done — open ${st.music.md} for draft votes; ` +
+        `music-only round: open ${st.music.md} for draft votes; ` +
         `thematic rounds only: fit research → ${st.fit.json}`,
     };
   }
   if (!st.hasScoresJson) {
     return {
       kind: 'merge',
-      label: `merge fit + music → ${st.scores.json} (node scripts/parse-round.mjs ${st.inputPath} --fit ${st.fit.json})`,
+      label: `merge fit + music → ${st.scores.json} (just merge ${st.name})`,
+    };
+  }
+  if (!st.hasPick) {
+    return {
+      kind: 'pick',
+      label: `pick a distribution → just pick ${st.name} <A|B|C> --reason "…"`,
     };
   }
   if (!st.hasScoresHtml || !st.scoresHtmlFresh) {
@@ -192,6 +215,20 @@ function runScript(scriptName, args) {
   return res.status ?? 1;
 }
 
+function cmdMerge(name, flags) {
+  const base = resolveOrExit(name, listAllRoundIds(), 'round');
+  process.exit(runScript('merge-scores.mjs', [base, ...flags]));
+}
+
+function cmdPick(name, option, flags) {
+  const base = resolveOrExit(name, listAllRoundIds(), 'round');
+  if (!option) {
+    console.error('Usage: ml pick <name> <A|B|C> [--reason "…"] [--pin …]');
+    process.exit(1);
+  }
+  process.exit(runScript('pick-round.mjs', [base, option, ...flags]));
+}
+
 function cmdParse(name, flags) {
   const base = resolveOrExit(name, listRoundInputIds(), 'round');
   process.exit(runScript('parse-round.mjs', [inputPathFor(base), ...flags]));
@@ -213,7 +250,7 @@ function cmdScores(name, flags) {
   const base = resolveOrExit(name, listAllRoundIds(), 'round');
   const scoresJson = scoresPaths(base).json;
   if (!existsSync(scoresJson)) {
-    console.error(`No scores JSON at ${scoresJson}. Run merge first (--fit).`);
+    console.error(`No scores JSON at ${scoresJson}. Run merge first (just merge ${base}).`);
     process.exit(1);
   }
   // The merged scores deliverable ranks by the blended combinedScore (with music as
@@ -268,6 +305,10 @@ function cmdRun(name) {
     case 'parse':
       return process.exit(runScript('parse-round.mjs', [st.inputPath]));
     case 'merge':
+      console.log(`${base}: ${step.label}`);
+      warnMissingScores(st);
+      return process.exit(runScript('merge-scores.mjs', [base]));
+    case 'pick':
       console.log(`${base}: ${step.label}`);
       warnMissingScores(st);
       break;
@@ -377,6 +418,8 @@ function cmdStatusAll() {
 function usage() {
   console.log(`Usage:
   ml parse  <name> [--mode objective|subjective] [--no-json]
+  ml merge  <name> [--rank combined] [--weights <fit>:<music>] [--gate …]
+  ml pick   <name> <A|B|C> [--reason "…"] [--pin …] [--scores]
   ml fit    <name> [--out <path>] [--order fit|combined|raw]
   ml scores <name> [--out <path>] [--order fit|combined|raw]
   ml final  <name> [--out <path>] [--order votes|score|raw]
@@ -397,6 +440,14 @@ function main() {
     case 'parse':
       if (!name) return usage();
       return cmdParse(name, flags);
+    case 'merge':
+      if (!name) return usage();
+      return cmdMerge(name, flags);
+    case 'pick': {
+      if (!name) return usage();
+      const option = flags[0] && !flags[0].startsWith('-') ? flags.shift() : null;
+      return cmdPick(name, option, flags);
+    }
     case 'fit':
       if (!name) return usage();
       return cmdFit(name, flags);

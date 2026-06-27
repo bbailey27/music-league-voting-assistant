@@ -312,11 +312,12 @@ export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mo
   return L.join('\n');
 }
 
-export function buildJsonPayload({ round, budget, songs, totalSongs, ownSkipped, mode, tradeoffs, ownSongs = [], pick = null }) {
+export function buildJsonPayload({ round, budget, songs, totalSongs, ownSkipped, mode, tradeoffs, ownSongs = [], pick = null, profile = null }) {
   return {
     round,
     mode,
     budget,
+    ...(profile ? { profile } : {}),
     ...(pick ? { pick } : {}),
     totals: {
       totalSongs,

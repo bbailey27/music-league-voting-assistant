@@ -11,6 +11,21 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-06-26 — Three-stage pipeline: parse / merge / pick
+
+**Change.** Split monolithic parse flags into stage scripts: `merge-scores.mjs`
+(music.json + fit.json → scores.json), `pick-round.mjs` (JSON-only `--option` /
+`--reason` / `--pin`), shared logic in `scripts/round/pick.mjs`. `parse-round.mjs`
+no longer accepts `--fit`, `--option`, or `--reason` (deprecated with redirect
+hints). `ml.mjs` / `just` add `merge` and `pick`; parse writes `profile` snapshot
+into music.json for pick replay.
+
+**Why.** Wave 2 of pipeline-cleanup master plan — parse never writes `pick`, pick
+never reads HTML, merge never picks.
+
+**Refs.** working tree — `scripts/merge-scores.mjs`, `scripts/pick-round.mjs`,
+`scripts/round/pick.mjs`, `scripts/parse-round.mjs`, `scripts/ml.mjs`, `justfile`.
+
 ## 2026-06-26 — Split score-core into focused modules
 
 **Change.** `scripts/score-core.mjs` is now a thin re-export barrel over

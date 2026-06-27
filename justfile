@@ -5,9 +5,13 @@ default:
 parse name *flags:
     node scripts/ml.mjs parse "{{name}}" {{flags}}
 
-# Record a distribution pick (--option + reason); pass reason as one quoted argument
-pick name option reason *flags:
-    node scripts/ml.mjs parse "{{name}}" --option "{{option}}" --reason "{{reason}}" {{flags}}
+# Merge music.json + fit.json → scores.json (thematic rounds; fuzzy name)
+merge name *flags:
+    node scripts/ml.mjs merge "{{name}}" {{flags}}
+
+# Record a distribution pick (JSON-only; no HTML re-read)
+pick name option *flags:
+    node scripts/ml.mjs pick "{{name}}" "{{option}}" {{flags}}
 
 # Render fit-only JSON → data/analysis/<round>/fit.html (fuzzy name; extra flags pass through)
 fit name *flags:

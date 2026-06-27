@@ -1,0 +1,278 @@
+#!/usr/bin/env node
+// JSON-only distribution pick: load music.json (+ fit.json for thematic), replay
+// allocation, apply --option, write pick + refreshed md/json + picks.jsonl.
+// Never reads round HTML.
+//
+// Usage: node scripts/pick-round.mjs <round-id> <A|B|C> [--reason "…"]
+//        [--pin <i>:<v>] [--down-shape ...] [--scores] [--dry-run]
+
+import { existsSync } from 'node:fs';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
+import {
+  allocate,
+  buildMarkdown,
+  buildJsonPayload,
+  mergeFitJson,
+  enrichProfileWithBudget,
+} from './score-core.mjs';
+import { matchFlag, matchRestFlag } from './cli-args.mjs';
+import { musicPaths, fitPaths, scoresPaths } from './paths.mjs';
+import {
+  parsePins,
+  pinCapError,
+  parseTierCount,
+  parseBucketCount,
+  parseFavoriteBand,
+  parseDownShape,
+  parseWeights,
+  buildGate,
+} from './parse-round.mjs';
+import { applyOptionPick, recordPickToTrainingLog } from './round/pick.mjs';
+
+function parseArgs(argv) {
+  const args = {
+    roundId: null,
+    option: null,
+    reason: null,
+    scores: false,
+    dryRun: false,
+    shape: null,
+    downShape: null,
+    rank: null,
+    gate: null,
+    cutoff: null,
+    weights: null,
+    pin: [],
+    tierCount: null,
+    bucketCount: null,
+    favoriteBand: null,
+  };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--scores') {
+      args.scores = true;
+      continue;
+    }
+    if (a === '--dry-run') {
+      args.dryRun = true;
+      continue;
+    }
+    if (a === '--no-favorite-band') {
+      args.favoriteBand = false;
+      continue;
+    }
+    const flags = [
+      ['reason', (v) => {
+        args.reason = v;
+      }],
+      ['shape', (v) => {
+        args.shape = v;
+      }],
+      ['down-shape', (v) => {
+        args.downShape = v;
+      }],
+      ['rank', (v) => {
+        args.rank = v;
+      }],
+      ['gate', (v) => {
+        args.gate = v;
+      }],
+      ['cutoff', (v) => {
+        args.cutoff = v;
+      }],
+      ['weights', (v) => {
+        args.weights = v;
+      }],
+      ['pin', (v) => {
+        args.pin.push(v);
+      }],
+      ['tier-count', (v) => {
+        args.tierCount = v;
+      }],
+      ['bucket-count', (v) => {
+        args.bucketCount = v;
+      }],
+      ['favorite-band', (v) => {
+        args.favoriteBand = v;
+      }],
+    ];
+    let matched = false;
+    for (const [name, setter] of flags) {
+      const parse =
+        name === 'reason'
+          ? (argv, idx, flagName, set) => matchRestFlag(argv, idx, flagName, set)
+          : matchFlag;
+      const next = parse(argv, i, name, setter);
+      if (next != null) {
+        i = next;
+        matched = true;
+        break;
+      }
+    }
+    if (matched) continue;
+    if (!args.roundId && !a.startsWith('-')) {
+      args.roundId = a;
+      continue;
+    }
+    if (!args.option && !a.startsWith('-')) {
+      args.option = a;
+      continue;
+    }
+  }
+  return args;
+}
+
+function songsFromPayload(data) {
+  return (data.songs || []).map((s) => ({ ...s }));
+}
+
+function buildProfile(args, stored, budget, mode) {
+  const gate = buildGate(args) ?? stored?.gate;
+  const weights = parseWeights(args.weights) ?? stored?.weights;
+  const pins = parsePins(args.pin.length ? args.pin : undefined);
+  const overrides = pins?.overrides ?? stored?.overrides;
+  const downOverrides = pins?.downOverrides ?? stored?.downOverrides;
+  const tierCount = parseTierCount(args.tierCount) ?? stored?.tierCount;
+  const bucketCount = parseBucketCount(args.bucketCount) ?? stored?.bucketCount;
+  const favoriteBand = args.favoriteBand !== null ? parseFavoriteBand(args.favoriteBand) : stored?.favoriteBand;
+  const downShape = parseDownShape(args.downShape) ?? stored?.downShape;
+  const shape = args.shape ?? stored?.shape ?? 'auto';
+  const rankBy = args.rank ?? stored?.rankBy ?? (mode === 'thematic' ? 'combined' : 'music');
+  return enrichProfileWithBudget(
+    { shape, downShape, gate, weights, overrides, downOverrides, tierCount, bucketCount, favoriteBand, rankBy },
+    budget
+  );
+}
+
+function slimProfile(profile) {
+  const { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand } = profile;
+  return { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand };
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  if (!args.roundId || args.option == null) {
+    console.error(
+      'Usage: node scripts/pick-round.mjs <round-id> <A|B|C> [--reason "…"] [--pin …] [--down-shape …] [--scores] [--dry-run]'
+    );
+    process.exit(1);
+  }
+
+  const roundId = args.roundId;
+  const musicJson = musicPaths(roundId).json;
+  const fitJson = fitPaths(roundId).json;
+  const useMerge = args.scores || existsSync(fitJson);
+
+  let musicData;
+  try {
+    musicData = JSON.parse(await readFile(musicJson, 'utf8'));
+  } catch (err) {
+    console.error(`Could not read ${musicJson}: ${err.message}. Run just parse first.`);
+    process.exit(1);
+  }
+
+  const budget = musicData.budget;
+  const upCap = budget?.maxUpvotesPerSong ?? Infinity;
+  const downCap = budget?.maxDownvotesPerSong ?? Infinity;
+  const profile = buildProfile(args, musicData.profile, budget, musicData.mode);
+  const capErr = pinCapError(profile.overrides, profile.downOverrides, upCap, downCap);
+  if (capErr) {
+    console.error(capErr);
+    process.exit(1);
+  }
+
+  if (useMerge) {
+    let fitData;
+    try {
+      fitData = JSON.parse(await readFile(fitJson, 'utf8'));
+    } catch (err) {
+      console.error(`Could not read ${fitJson}: ${err.message}. Complete fit research first.`);
+      process.exit(1);
+    }
+    const parsed = {
+      round: musicData.round,
+      budget: musicData.budget,
+      songs: songsFromPayload(musicData),
+      ownSongs: musicData.ownSongs || [],
+    };
+    const mergeProfile = { ...profile, rankBy: profile.rankBy || 'combined' };
+    let { tradeoffs } = mergeFitJson(parsed, fitData, mergeProfile);
+    const picked = applyOptionPick({
+      optionSpec: args.option,
+      reason: args.reason,
+      reallocate: (overrides) => mergeFitJson(parsed, fitData, { ...mergeProfile, overrides }).tradeoffs,
+      initialTradeoffs: tradeoffs,
+      baseOverrides: profile.overrides,
+      downOverrides: profile.downOverrides,
+      songs: parsed.songs,
+      cap: upCap,
+      exitOnError: !args.dryRun,
+    });
+    if (args.dryRun) {
+      if (picked.error) console.error(picked.error);
+      else console.log(`Would pick option ${picked.pick?.chosen} (thematic → scores.json)`);
+      return;
+    }
+    tradeoffs = picked.tradeoffs;
+    fitData.pick = picked.pick;
+    fitData.tradeoffs = tradeoffs;
+    await mkdir(scoresPaths(roundId).dir, { recursive: true });
+    await writeFile(scoresPaths(roundId).json, JSON.stringify(fitData, null, 2), 'utf8');
+    console.log(`Wrote ${scoresPaths(roundId).json}`);
+    await recordPickToTrainingLog(roundId, fitData.songs, picked.pick);
+    return;
+  }
+
+  const songs = songsFromPayload(musicData);
+  const upBudget = budget?.upvoteBankSize ?? 0;
+  let { tradeoffs } = allocate(songs, upBudget, upCap, profile);
+
+  const picked = applyOptionPick({
+    optionSpec: args.option,
+    reason: args.reason,
+    reallocate: (overrides) => allocate(songs, upBudget, upCap, { ...profile, overrides }).tradeoffs,
+    initialTradeoffs: tradeoffs,
+    baseOverrides: profile.overrides,
+    downOverrides: profile.downOverrides,
+    songs,
+    cap: upCap,
+    exitOnError: !args.dryRun,
+  });
+
+  if (args.dryRun) {
+    if (picked.error) console.error(picked.error);
+    else console.log(`Would pick option ${picked.pick?.chosen} on ${musicJson}`);
+    return;
+  }
+
+  tradeoffs = picked.tradeoffs;
+  const ctx = {
+    round: musicData.round,
+    budget: musicData.budget,
+    songs,
+    totalSongs: musicData.totals?.totalSongs ?? songs.length,
+    ownSkipped: musicData.totals?.ownSkipped ?? 0,
+    ownSongs: musicData.ownSongs || [],
+    mode: musicData.mode,
+    tradeoffs,
+    pick: picked.pick,
+  };
+  const md = buildMarkdown(ctx);
+  const paths = musicPaths(roundId);
+  await mkdir(paths.dir, { recursive: true });
+  await writeFile(paths.md, md, 'utf8');
+  console.log(`Wrote ${paths.md}`);
+
+  const payload = buildJsonPayload({ ...ctx, profile: musicData.profile ?? slimProfile(profile) });
+  await writeFile(paths.json, JSON.stringify(payload, null, 2), 'utf8');
+  console.log(`Wrote ${paths.json}`);
+  await recordPickToTrainingLog(roundId, songs, picked.pick);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
