@@ -23,7 +23,7 @@ import {
 import { parseRoundDocument, recoverEscapedSource } from './extract-html.mjs';
 import { parseRoundText } from './parse-text.mjs';
 import { buildComboBallot } from './render-html-shared.mjs';
-import { matchFlag, takePositional } from './cli-args.mjs';
+import { matchFlag, matchRestFlag, takePositional } from './cli-args.mjs';
 import {
   roundIdFromInput,
   musicPaths,
@@ -114,7 +114,11 @@ function parseArgs(argv) {
     ];
     let matched = false;
     for (const [name, setter] of flags) {
-      const next = matchFlag(argv, i, name, setter);
+      const parse =
+        name === 'reason'
+          ? (argv, idx, flagName, set) => matchRestFlag(argv, idx, flagName, set)
+          : matchFlag;
+      const next = parse(argv, i, name, setter);
       if (next != null) {
         i = next;
         matched = true;

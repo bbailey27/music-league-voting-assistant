@@ -10,7 +10,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { basename, dirname, join, extname } from 'node:path';
 import { formatScore } from './score-core.mjs';
 import { matchFlag, takePositional } from './cli-args.mjs';
-import { esc, tierHue, chip, tradeoffsHtml, pickHtml, comboBallotHtml, RENDER_FIT_STYLE, scoreRangeFromSongs, scoreHeatAttrs, buildVoteTierMap, voteTierAttrs } from './render-html-shared.mjs';
+import { esc, tierHue, chip, tradeoffsHtml, pickHtml, comboBallotHtml, RENDER_FIT_STYLE, scoreRangeFromSongs, scoreHeatAttrs, buildVoteTierMap, voteTierAttrs, cardIdentityHtml, cardMetaHtml, themeChipsHtml, rationaleHtml, buildHtmlDocument } from './render-html-shared.mjs';
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -105,11 +105,7 @@ ${rows}
 
 function renderCard(s, combineLabel, weights, ranges, voteTierMap) {
   const hue = tierHue(s.fitTier);
-  const cardHue = hue;
-  const themes = Array.isArray(s.themesHit) ? s.themesHit : [];
-  const themeChips = themes.length
-    ? themes.map((t) => chip(t)).join('')
-    : '<span class="muted">no themes</span>';
+  const themeChips = themeChipsHtml(s, { emptyFallback: '<span class="muted">no themes</span>' });
 
   const flags = Array.isArray(s.flags) ? s.flags : [];
   let flagChips = flags.map((f) => `<span class="flag">${esc(f)}</span>`).join('');
@@ -120,11 +116,6 @@ function renderCard(s, combineLabel, weights, ranges, voteTierMap) {
       s.musicLift.overTier
     )}</span>`;
   }
-
-  const meta = [];
-  if (s.confidence) meta.push(`<span class="meta-item">confidence: ${esc(s.confidence)}</span>`);
-  if (s.basis) meta.push(`<span class="meta-item">basis: ${esc(s.basis)}</span>`);
-  if (s.submitterAssist) meta.push('<span class="meta-item">submitter-assist</span>');
 
   const scores = [
     `<span${scoreHeatAttrs(s.fitScore, ranges?.fit, 'score')} title="fit score">fit ${formatScore(s.fitScore)}</span>`,
@@ -164,12 +155,8 @@ function renderCard(s, combineLabel, weights, ranges, voteTierMap) {
 
   const tierAttrs = ` class="tier" style="--tier-hue:${hue}"`;
 
-  return `<article class="card" style="--tier-hue:${cardHue}">
-  <div class="identity">
-    <span class="rank">#${esc(s.rawOrderIndex)}</span>
-    <span class="title">${esc(s.title)}</span>
-    <span class="artist">${esc(s.artist)}</span>
-  </div>
+  return `<article class="card" style="--tier-hue:${hue}">
+  ${cardIdentityHtml(s)}
   <div class="body">
     <div class="card-head">
       <span${tierAttrs}>${esc(s.fitTier)}</span>
@@ -178,9 +165,9 @@ function renderCard(s, combineLabel, weights, ranges, voteTierMap) {
     </div>
     ${normLine}
     ${flagChips ? `<div class="flags">${flagChips}</div>` : ''}
-    ${s.rationale ? `<p class="rationale">${esc(s.rationale)}</p>` : ''}
+    ${rationaleHtml(s)}
     ${s.musicComment ? `<p class="music-note"><span class="label">your note</span> ${esc(s.musicComment)}</p>` : ''}
-    ${meta.length ? `<div class="meta">${meta.join('')}</div>` : ''}
+    ${cardMetaHtml(s)}
   </div>
 </article>`;
 }
@@ -264,33 +251,20 @@ function renderCombine(data) {
 // ---------------------------------------------------------------------------
 // Document
 // ---------------------------------------------------------------------------
-const STYLE = RENDER_FIT_STYLE;
-
 function renderDocument(data, order) {
   const r = data.round || {};
   const docTitle = r.prompt || r.title || 'Fit report';
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(docTitle)} — fit report</title>
-<style>${STYLE}</style>
-</head>
-<body>
-<main class="wrap">
-${renderHead(data)}
-${renderScale(data)}
-${renderCandidates(data, order)}
-${tradeoffsHtml(data.tradeoffs)}
-${pickHtml(data.pick)}
-${renderHighlights(data)}
-${renderCombine(data)}
-${comboBallotHtml(data.tradeoffs, data.songs, data.ownSongs)}
-</main>
-</body>
-</html>
-`;
+  const body = [
+    renderHead(data),
+    renderScale(data),
+    renderCandidates(data, order),
+    tradeoffsHtml(data.tradeoffs),
+    pickHtml(data.pick),
+    renderHighlights(data),
+    renderCombine(data),
+    comboBallotHtml(data.tradeoffs, data.songs, data.ownSongs),
+  ].join('\n');
+  return buildHtmlDocument(docTitle, 'fit report', RENDER_FIT_STYLE, body);
 }
 
 // ---------------------------------------------------------------------------

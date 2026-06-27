@@ -15,7 +15,7 @@ export function esc(s) {
 // to match the vote-tier palette: purple = best, blue = good, green = mid,
 // teal = lower, orange = weak, red = worst. Songs with no fit signal fall back
 // to a neutral hue.
-export const TIER_HUE = {
+const TIER_HUE = {
   excellent: 270,
   strong: 220,
   solid: 145,
@@ -31,10 +31,10 @@ export function tierHue(tier) {
 
 // Purple (270) → red (0) heat scale for numeric scores within a round's spread.
 // Same direction as the discrete tier/vote palettes: high = purple, low = red.
-export const SCORE_HUE_LO = 0;
-export const SCORE_HUE_HI = 270;
+const SCORE_HUE_LO = 0;
+const SCORE_HUE_HI = 270;
 
-export function scoreRangeMinMax(values) {
+function scoreRangeMinMax(values) {
   let min = Infinity;
   let max = -Infinity;
   for (const v of values) {
@@ -104,6 +104,57 @@ export function voteTierAttrs(votes, voteTierMap, extraClasses = '') {
 export function chip(text, hue) {
   const style = hue == null ? '' : ` style="--chip-hue:${hue}"`;
   return `<span class="chip"${style}>${esc(text)}</span>`;
+}
+
+// Shared card sub-sections used by both fit and final renderers.
+
+// Theme keyword chips. Returns the joined chip spans, or `emptyFallback` when absent.
+export function themeChipsHtml(s, { emptyFallback = '' } = {}) {
+  const themes = Array.isArray(s.themesHit) ? s.themesHit : [];
+  if (!themes.length) return emptyFallback;
+  return themes.map((t) => chip(t)).join('');
+}
+
+// LLM fit rationale paragraph with a "fit" label, or empty string when absent.
+export function rationaleHtml(s) {
+  if (!s.rationale) return '';
+  return `<p class="rationale"><span class="label">fit</span> ${esc(s.rationale)}</p>`;
+}
+
+// The identity column: raw-order index, title, artist stacked.
+export function cardIdentityHtml(s) {
+  return `<div class="identity">
+    <span class="rank">#${esc(s.rawOrderIndex)}</span>
+    <span class="title">${esc(s.title)}</span>
+    <span class="artist">${esc(s.artist)}</span>
+  </div>`;
+}
+
+// The submitter-assist / confidence / basis meta row (empty string when absent).
+export function cardMetaHtml(s) {
+  const items = [];
+  if (s.confidence) items.push(`<span class="meta-item">confidence: ${esc(s.confidence)}</span>`);
+  if (s.basis) items.push(`<span class="meta-item">basis: ${esc(s.basis)}</span>`);
+  if (s.submitterAssist) items.push('<span class="meta-item">submitter-assist</span>');
+  return items.length ? `<div class="meta">${items.join('')}</div>` : '';
+}
+
+// Shared self-contained HTML page shell. `titleSuffix` appears after " — " in <title>.
+export function buildHtmlDocument(docTitle, titleSuffix, style, body) {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(docTitle)} — ${titleSuffix}</title>
+<style>${style}</style>
+</head>
+<body>
+<main class="wrap">
+${body}</main>
+</body>
+</html>
+`;
 }
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];

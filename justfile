@@ -5,6 +5,10 @@ default:
 parse name *flags:
     node scripts/ml.mjs parse "{{name}}" {{flags}}
 
+# Record a distribution pick (--option + reason); pass reason as one quoted argument
+pick name option reason *flags:
+    node scripts/ml.mjs parse "{{name}}" --option "{{option}}" --reason "{{reason}}" {{flags}}
+
 # Render fit-only JSON → data/analysis/<round>/fit.html (fuzzy name; extra flags pass through)
 fit name *flags:
     node scripts/ml.mjs fit "{{name}}" {{flags}}

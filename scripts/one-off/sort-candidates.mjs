@@ -89,7 +89,7 @@ for (const line of lines) {
   // Strip old score brackets before processing
   const cleaned = line.replace(/\s+\[\d+\]$/, "");
   // Handle both " — " (em-dash) and " - " (hyphen) as title/artist separators
-  const m = cleaned.match(/^- (.+?)(?:\s+[—\-]+\s+.+)?$/);
+  const m = cleaned.match(/^- (.+?)(?:\s+[—-]+\s+.+)?$/);
   if (m) {
     const rawTitle = m[1].replace(/\?$/, "");
     const shortTitle = rawTitle.replace(/ \(.*$/, "");
@@ -108,7 +108,7 @@ console.log("Sorted candidates.md by engagement scores.");
 const allEntries = [];
 for (const line of lines) {
   const cleaned = line.replace(/\s+\[\d+\]$/, "");
-  const m = cleaned.match(/^- (.+?)(?:\s+[—\-]+\s+.+)?$/);
+  const m = cleaned.match(/^- (.+?)(?:\s+[—-]+\s+.+)?$/);
   if (m) {
     const rawTitle = m[1].replace(/\?$/, "");
     const shortTitle = rawTitle.replace(/ \(.*$/, "");

@@ -30,7 +30,7 @@ import {
 } from './score-core.mjs';
 import { parseDownShape } from './parse-round.mjs';
 import { matchFlag, takePositional } from './cli-args.mjs';
-import { esc, tierHue, chip, tradeoffsHtml, pickHtml, comboBallotHtml, NEUTRAL_HUE, RENDER_FINAL_STYLE, buildVoteTierMap, voteTierAttrs } from './render-html-shared.mjs';
+import { esc, tierHue, tradeoffsHtml, pickHtml, comboBallotHtml, NEUTRAL_HUE, RENDER_FINAL_STYLE, buildVoteTierMap, voteTierAttrs, cardIdentityHtml, cardMetaHtml, themeChipsHtml, rationaleHtml, buildHtmlDocument } from './render-html-shared.mjs';
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -217,6 +217,7 @@ function renderCard(s, voteTierMap) {
   const mods = modifierText(s);
 
   const scores = [];
+
   if (s.score != null)
     scores.push(
       `<span class="score your" title="your music score">your ${formatScore(s.score)}${mods ? ` <span class="mods">${esc(mods)}</span>` : ''}</span>`
@@ -232,27 +233,17 @@ function renderCard(s, voteTierMap) {
   scores.push(voteBadge(s, voteTierMap));
 
   const flags = statusFlags(s);
-  const themes = Array.isArray(s.themesHit) ? s.themesHit : [];
-  const themeChips = themes.length ? themes.map((t) => chip(t)).join('') : '';
-
-  const meta = [];
-  if (s.confidence) meta.push(`<span class="meta-item">confidence: ${esc(s.confidence)}</span>`);
-  if (s.basis) meta.push(`<span class="meta-item">basis: ${esc(s.basis)}</span>`);
-  if (s.submitterAssist) meta.push('<span class="meta-item">submitter-assist</span>');
+  const themeChips = themeChipsHtml(s);
 
   return `<article class="card" style="--tier-hue:${hue}">
-  <div class="identity">
-    <span class="rank">#${esc(s.rawOrderIndex)}</span>
-    <span class="title">${esc(s.title)}</span>
-    <span class="artist">${esc(s.artist)}</span>
-  </div>
+  ${cardIdentityHtml(s)}
   <div class="body">
     <div class="card-head">${scores.join('')}</div>
     ${flags.length ? `<div class="flags">${flags.join('')}</div>` : ''}
     ${s.userComment ? `<p class="comment"><span class="label">your comment</span> ${esc(s.userComment)}</p>` : '<p class="comment muted"><span class="label">your comment</span> (none)</p>'}
     ${themeChips ? `<div class="themes">${themeChips}</div>` : ''}
-    ${s.rationale ? `<p class="rationale"><span class="label">fit</span> ${esc(s.rationale)}</p>` : ''}
-    ${meta.length ? `<div class="meta">${meta.join('')}</div>` : ''}
+    ${rationaleHtml(s)}
+    ${cardMetaHtml(s)}
   </div>
 </article>`;
 }
@@ -311,34 +302,21 @@ ${lis}
 // ---------------------------------------------------------------------------
 // Document
 // ---------------------------------------------------------------------------
-const STYLE = RENDER_FINAL_STYLE;
-
 function renderDocument(model, order) {
   const r = model.round;
   const docTitle = r.prompt || r.title || 'Draft votes';
   const songs = model.songs;
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(docTitle)} — draft votes</title>
-<style>${STYLE}</style>
-</head>
-<body>
-<main class="wrap">
-${renderHead(model)}
-${renderCandidates(model, order)}
-${renderTradeoffs(model)}
-${pickHtml(model.pick)}
-${renderList('Needs my score (blank boxes)', songs.filter((s) => s.needsUserInput))}
-${renderList('Needs review', songs.filter((s) => s.needsReview), 'review')}
-${renderList('Disqualified (no points)', songs.filter((s) => s.isDisqualified))}
-${comboBallotHtml(model.tradeoffs, model.songs, model.ownSongs)}
-</main>
-</body>
-</html>
-`;
+  const body = [
+    renderHead(model),
+    renderCandidates(model, order),
+    renderTradeoffs(model),
+    pickHtml(model.pick),
+    renderList('Needs my score (blank boxes)', songs.filter((s) => s.needsUserInput)),
+    renderList('Needs review', songs.filter((s) => s.needsReview), 'review'),
+    renderList('Disqualified (no points)', songs.filter((s) => s.isDisqualified)),
+    comboBallotHtml(model.tradeoffs, model.songs, model.ownSongs),
+  ].join('\n');
+  return buildHtmlDocument(docTitle, 'draft votes', RENDER_FINAL_STYLE, body);
 }
 
 // ---------------------------------------------------------------------------
