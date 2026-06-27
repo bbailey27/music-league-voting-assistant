@@ -19,17 +19,17 @@ whichever song wins the round becomes the canonical next link (usually not yours
 
 You're handing the **next** player a slot. A submission is good only if voters can both (a) read
 your title as a clear continuation, and (b) picture a viable next title. So you're optimizing the
-*end* of the sentence as much as the words you add.
+_end_ of the sentence as much as the words you add.
 
 ## Inputs
 
-| Thing | Location |
-| --- | --- |
-| Sentence so far + the scene/story | from the user |
-| Title pool (largest first) | `data/ref/all-scrobbles.csv` (col0 title), `all-songs-no-inst.csv`, `chill-minor-rock-etc-search.csv`, `fav-songs.csv` (all col0 = title, col1 = artist) |
-| Prefix scan tool | `scripts/title-prefix-scan.mjs` (reusable CLI) |
-| Story-5 word bank | `scripts/one-off/story-5-prefix-scan.mjs` |
-| Per-round writeup | `data/analysis/<round>/candidates.md` |
+| Thing                             | Location                                                                                                                                                 |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sentence so far + the scene/story | from the user                                                                                                                                            |
+| Title pool (largest first)        | `data/ref/all-scrobbles.csv` (col0 title), `all-songs-no-inst.csv`, `chill-minor-rock-etc-search.csv`, `fav-songs.csv` (all col0 = title, col1 = artist) |
+| Prefix scan tool                  | `scripts/title-prefix-scan.mjs` (reusable CLI)                                                                                                           |
+| Story-5 word bank                 | `scripts/one-off/story-5-prefix-scan.mjs`                                                                                                                |
+| Per-round writeup                 | `data/analysis/<round>/candidates.md`                                                                                                                    |
 
 `song-topic-summaries.csv` is about **meaning** — irrelevant here.
 
@@ -55,7 +55,7 @@ one-off for a new round if you need custom patterns beyond simple prefix strings
 ## Workflow
 
 1. **Frame the scene + voice.** Who is "I/me"? Who's the audience? What pronouns are fixed
-   (e.g. the girl is *her/she*)? Get the user's skip list.
+   (e.g. the girl is _her/she_)? Get the user's skip list.
 2. **Get the leading words.** The user usually has candidate joiners ("to…", "don't…", "I'm…").
    Each continuation is a real title that **starts with** that word.
 3. **Scan the CSVs** for those leading words (local, cheap — not a web search). Hand the user the
@@ -69,18 +69,47 @@ one-off for a new round if you need custom patterns beyond simple prefix strings
 1. **Grammar / sense first.** Reads cleanly after the sentence so far; fits the story with no
    insider context (voters only see sentence-so-far + your title).
 2. **Pronoun consistency.** "I/me" must stay the same character. The "you" rule is narrow:
-   don't *narrate about* a fixed third party as "you" — but a **spoken plea/imperative** that
+   don't _narrate about_ a fixed third party as "you" — but a **spoken plea/imperative** that
    uses "you" ("Don't Leave Me", "Open Your Eyes") is fine and often strong.
 3. **Tense.** Present tense is welcome — the title pool skews present, and switching to present
    flows when a character starts speaking. Match what reads naturally.
 4. **Leave a good end (continuability).** Voters won't vote if they can't picture a next title.
    - A clean full stop → next can be any new sentence (safe).
-   - A half-finished ending is fine **and can guide** the next part — *if* common titles fill the
+   - A half-finished ending is fine **and can guide** the next part — _if_ common titles fill the
      slot. A slot that begs a common **noun/verb** ("Burn Up …the sky") is good; one that begs a
      **scarce connector** ("…me / …her / …and / …to / …till") is rough.
    - **Resolutions/endings are weak** (the story feels over → nothing to add).
 5. **Contribution.** Move the story; a whole idea beats filler. **Oblique is fine but must still
-   connect** — a poetic beat needs a clear referent in *this* scene.
+   connect** — a poetic beat needs a clear referent in _this_ scene.
+
+## Second-opinion review rubric
+
+Use this when the user asks for grammar/story-flow judgment, especially after marking candidates.
+Do not collapse everything into a single "good/bad" take; split grammar from narrative judgment.
+
+For each candidate:
+
+1. **Insert the exact title** after the sentence fragment and read it literally, but judge story
+   flow against the **full sentence/story so far**, not only the current fragment.
+2. **Choose one parse:** same-sentence continuation, new sentence, quoted/thought sentence, or
+   fragment/cliffhanger.
+3. **State intended punctuation** if the parse depends on it: none, comma, period, colon, dash, or
+   line break. Treat punctuation as a submission clarification, not as a risk by itself.
+4. **Flag only concrete grammar risks:** pronoun mismatch, tense shift, unclear subject, or
+   impossible object/complement. Do not treat incomplete or dangling continuations as problems by
+   default; in this game they can make the next entry feel connected.
+5. **Assess story flow separately:** whether it advances, reverses, clarifies, or stalls the full
+   pact scene, including who the bargain may be for and what it implies about "her," the narrator,
+   and the devil.
+6. **Check the next slot:** wide, medium, narrow, or dead end for the next player. The real risk
+   with an incomplete ending is whether it forces a very narrow set of next words, especially words
+   that are hard to find at the start of real song titles.
+
+Output columns should be: `candidate`, `parse`, `grammar`, `punctuation`, `story flow`,
+`next slot`, `risk`. Keep comments terse and do not pre-rank unless asked. Do not list "needs
+punctuation" as a risk when a new sentence or fragment is a valid intended parse; only note it in
+the punctuation column. Do not list "incomplete" as a risk unless the next slot is narrow and likely
+hard to satisfy from title-prefix searches.
 
 ## Strong modes (observed to land well)
 
@@ -92,7 +121,7 @@ one-off for a new round if you need custom patterns beyond simple prefix strings
 ## Switching to a character addressing someone (tense/voice trap)
 
 A present-tense imperative right after past narration ("…made a pact. **Stay alive.**") can leave
-voters unsure *who's speaking* — the tense flips with no cue. The natural fix is a narrative frame
+voters unsure _who's speaking_ — the tense flips with no cue. The natural fix is a narrative frame
 ("I said to her…"), **but those first-person speech-frame titles are almost never in a title pool**
 (scanned `i said / i told / i whispered / and she / so i / then i` → all 0). Workaround that needs
 no frame: pick an address that **contains "me / my"** ("Don't Leave Me", "Speak to Me", "Call My

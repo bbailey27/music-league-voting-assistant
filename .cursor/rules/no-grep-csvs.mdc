@@ -1,0 +1,31 @@
+---
+description: Never grep/rg directly on the song reference CSVs
+globs:
+alwaysApply: true
+---
+
+# Never grep the song CSVs directly
+
+The files in `data/ref/` (`all-scrobbles.csv`, `all-songs-no-inst.csv`,
+`fav-songs.csv`, `chill-minor-rock-etc-search.csv`) contain many columns
+beyond the title. Running `grep` / `rg` on them produces noisy, misleading
+results because the search term can match album names, artist names, playlist
+names, or other metadata — not just titles.
+
+Always use the dedicated scan scripts instead:
+
+| Need                                  | Script                                              |
+| ------------------------------------- | --------------------------------------------------- |
+| Titles **starting with** a word       | `node scripts/title-prefix-scan.mjs <prefix> [...]` |
+| Titles **containing** a word anywhere | `node scripts/title-contains-scan.mjs <word> [...]` |
+
+Both scripts parse the CSVs properly, extract only the title column, normalize
+and dedup, and produce a clean grouped report.
+
+## Presenting results
+
+1. Always write output to a file with `--out <path>` (e.g. under `data/analysis/<round>/`).
+2. Tell the user exactly where the file is.
+3. Also reproduce the **full, unfiltered** results directly in the visible chat
+   response — not buried in a collapsed tool-output block. Every matching title
+   must appear; do not summarize, filter, editorialize, or omit any hits.
