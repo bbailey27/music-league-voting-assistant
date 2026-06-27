@@ -194,7 +194,48 @@ function renderTierStructure(L, t) {
   L.push('');
 }
 
-export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mode, tradeoffs, ownSongs = [] }) {
+export function renderPickMarkdown(L, pick) {
+  const opts = (pick?.options || []).filter((o) => Array.isArray(o.perSong) && o.perSong.length);
+  if (!opts.length) return;
+  L.push('## Your pick');
+  L.push('');
+  L.push(
+    `- **Option ${pick.chosen}** — ${pick.tierCount} tier${pick.tierCount === 1 ? '' : 's'}, \`${pick.shape}\`${
+      pick.reason ? ` — ${cell(pick.reason)}` : ''
+    }`
+  );
+  if (pick.tweaks?.length) {
+    L.push(`- Manual tweaks: ${pick.tweaks.length}`);
+  }
+  L.push('');
+  L.push('## Options considered');
+  L.push('');
+  const trunc = (s) => (String(s).length > 30 ? `${String(s).slice(0, 29)}…` : String(s));
+  const headers = ['#', 'Song', 'Score', ...opts.map((o) => o.letter)];
+  const aligns = ['right', 'left', 'right', ...opts.map(() => 'right')];
+  const rows0 = opts[0].perSong;
+  const rows = rows0.map((r, ri) => [
+    String(r.rawOrderIndex),
+    trunc(r.title),
+    formatScore(r.score ?? r.rank),
+    ...opts.map((o) => String(o.perSong[ri]?.votes ?? 0)),
+  ]);
+  rows.push([
+    '',
+    'Total',
+    '',
+    ...opts.map((o) => String(o.perSong.reduce((a, s) => a + (s.votes || 0), 0))),
+  ]);
+  renderTable(L, headers, aligns, rows, '  ');
+  L.push('');
+  opts.forEach((o) => {
+    const tag = o.isChosen ? ' **(chosen)**' : '';
+    L.push(`  - **${o.letter}**${tag} — ${o.tierCount} tier${o.tierCount === 1 ? '' : 's'}, \`${o.shape}\``);
+  });
+  L.push('');
+}
+
+export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mode, tradeoffs, ownSongs = [], pick = null }) {
   const scored = songs.filter((s) => s.score != null).sort(rankedSort);
   const disqualified = songs.filter((s) => s.isDisqualified);
   const needsInput = songs.filter((s) => s.needsUserInput);
@@ -295,7 +336,7 @@ export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mo
     L.push('');
   }
 
-  if (Array.isArray(tradeoffs) && tradeoffs.length) {
+  if (Array.isArray(tradeoffs) && tradeoffs.length && !pick) {
     L.push('## Needs your call (tradeoffs)');
     L.push('');
     for (const t of tradeoffs) {
@@ -305,6 +346,8 @@ export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mo
     }
     L.push('');
   }
+
+  if (pick) renderPickMarkdown(L, pick);
 
   L.push('---');
   L.push('Draft allocation — rebalance as needed. Tiers are relative to this round only.');

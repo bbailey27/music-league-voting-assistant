@@ -315,7 +315,7 @@ const ballotDown = (s) => Number(s.finalDownvotes ?? s.draftDownvotes ?? 0) || 0
 // user resolve it by hand (or via a downvote pin). Per-column totals report each
 // axis's intended budget plus a conflict count. Identical columns are deduped.
 // Pure; consumed by both the HTML report and the CLI.
-export function buildComboBallot(tradeoffs, songs = [], ownSongs = []) {
+export function buildComboBallot(tradeoffs, songs = [], ownSongs = [], pick = null) {
   const list = Array.isArray(tradeoffs) ? tradeoffs : [];
   const upTr = list.find((t) => t.kind === 'tier-structure');
   const downTr = list.find((t) => t.kind === 'down-structure');
@@ -337,7 +337,9 @@ export function buildComboBallot(tradeoffs, songs = [], ownSongs = []) {
     return m;
   };
 
-  // Up axis: tier-structure options if present, else the single live allocation.
+  const pickOptions = pick?.options?.filter((o) => Array.isArray(o.perSong) && o.perSong.length) || [];
+
+  // Up axis: tier-structure options if present, else frozen pick menu, else live allocation.
   const upOptions =
     upTr && Array.isArray(upTr.options) && upTr.options.length
       ? upTr.options.map((o, i) => ({
@@ -345,7 +347,13 @@ export function buildComboBallot(tradeoffs, songs = [], ownSongs = []) {
           selector: `--option ${OPTION_LETTERS[i]}`,
           votes: mapVotes(o.perSong),
         }))
-      : [{ code: null, selector: null, votes: defaultMap(ballotUp) }];
+      : pickOptions.length
+        ? pickOptions.map((o, i) => ({
+            code: o.letter || OPTION_LETTERS[i],
+            selector: `--option ${o.letter || OPTION_LETTERS[i]}`,
+            votes: mapVotes(o.perSong),
+          }))
+        : [{ code: null, selector: null, votes: defaultMap(ballotUp) }];
 
   // Down axis: down-structure shapes if present, else the single live down shape,
   // else none at all (up-only columns).
@@ -417,8 +425,8 @@ export function buildComboBallot(tradeoffs, songs = [], ownSongs = []) {
 
 // Render the combo ballot as a (horizontally scrollable) table: rows are raw
 // submission slots (own songs interleaved as dashes), columns are deduped combos.
-export function comboBallotHtml(tradeoffs, songs = [], ownSongs = []) {
-  const { combos, rows } = buildComboBallot(tradeoffs, songs, ownSongs);
+export function comboBallotHtml(tradeoffs, songs = [], ownSongs = [], pick = null) {
+  const { combos, rows } = buildComboBallot(tradeoffs, songs, ownSongs, pick);
   if (!combos.length || !rows.length) return '';
   if (!combos.some((c) => c.totals.up > 0 || c.totals.down > 0)) return '';
   const anyConflict = combos.some((c) => c.totals.conflicts > 0);

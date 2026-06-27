@@ -262,7 +262,7 @@ function renderDocument(data, order) {
     pickHtml(data.pick),
     renderHighlights(data),
     renderCombine(data),
-    comboBallotHtml(data.tradeoffs, data.songs, data.ownSongs),
+    comboBallotHtml(data.tradeoffs, data.songs, data.ownSongs, data.pick),
   ].join('\n');
   return buildHtmlDocument(docTitle, 'fit report', RENDER_FIT_STYLE, body);
 }

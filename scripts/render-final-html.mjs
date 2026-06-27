@@ -314,7 +314,7 @@ function renderDocument(model, order) {
     renderList('Needs my score (blank boxes)', songs.filter((s) => s.needsUserInput)),
     renderList('Needs review', songs.filter((s) => s.needsReview), 'review'),
     renderList('Disqualified (no points)', songs.filter((s) => s.isDisqualified)),
-    comboBallotHtml(model.tradeoffs, model.songs, model.ownSongs),
+    comboBallotHtml(model.tradeoffs, model.songs, model.ownSongs, model.pick),
   ].join('\n');
   return buildHtmlDocument(docTitle, 'draft votes', RENDER_FINAL_STYLE, body);
 }

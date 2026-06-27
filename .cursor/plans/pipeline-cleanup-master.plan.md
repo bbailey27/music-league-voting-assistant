@@ -1,7 +1,7 @@
 ---
 name: pipeline-cleanup-master
 overview: "Sequence the pipeline stage split, pick preservation, CLI/docs, score-core and parse-round module refactors, allocator fixes, pure-render alignment, and spec/test catch-up — with explicit gates and deferred work called out."
-status: pending
+status: in_progress
 isProject: true
 related: split-pipeline-stages, pick-preserves-options, split-score-core-into-modules, split-parse-round-into-modules, improve-just-cli-and-docs, preserve-manual-fit-scores, allocator-fill-and-maybe-funding-fixes
 ---
@@ -282,10 +282,10 @@ Update this table as waves complete (newest change at top):
 
 | Wave | Plan | Status |
 | --- | --- | --- |
-| — | pipeline-cleanup-master | pending |
-| 0–1 | split-score-core-into-modules | pending |
-| 2 | split-pipeline-stages | pending |
-| 2 | pick-preserves-options | pending |
+| — | pipeline-cleanup-master | in_progress |
+| 0–1 | split-score-core-into-modules | done |
+| 2 | split-pipeline-stages | done |
+| 2 | pick-preserves-options | partial (render + ballot; tests pending) |
 | 2b | preserve-manual-fit-scores | pending |
 | 3 | split-parse-round-into-modules | pending |
 | 4 | allocator-fill-and-maybe-funding-fixes | pending |
