@@ -165,7 +165,7 @@ silently under-budget) ballot:
    bank). Now the pin is reconciled at the margin: a net-positive pin sheds the
    surplus from the lowest-ranked unpinned funded songs; a net-negative pin promotes
    the next candidates (best-ranked unfunded first, then below-cap). `--option A
-   --pin 9:2` now yields `2-2-2-2` by dropping the bottom funded song, summing to 8.
+--pin 9:2` now yields `2-2-2-2` by dropping the bottom funded song, summing to 8.
 2. **`budget-mismatch` tradeoff** (`flagBudgetMismatch` in `score-core.mjs`, all
    `allocate` return paths). Any final allocation whose up/down totals ≠ the banks is
    flagged (`over` set when a bank is exceeded). CLI prints a loud `⛔ OVER BUDGET` /

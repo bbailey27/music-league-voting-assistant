@@ -445,6 +445,13 @@ function usage() {
   cmdHelp(null);
 }
 
+const HELP_PIN = `  --pin <index>:<votes>   pin one song's votes (repeatable; comma-separate multiples)
+                          index = raw order # (first column in music.md "Raw order"
+                                  table and the CLI ballot — Music League entry order)
+                          votes > 0 = upvotes on that song (9:2 → 2 up on song #9)
+                          votes < 0 = downvotes when downvotes are on (6:-2 → 2 down on #6)
+                          Unpinned songs reflow so the up/down banks stay exact.`;
+
 const HELP = {
   overview: `Music League pipeline — parse → (merge) → pick → render
 
@@ -472,7 +479,27 @@ Commands:
   ml parse | merge | pick | fit | scores | final | run | status | tidy | help
 
 <name> is a fuzzy match (e.g. "tarot" or "2026-06-09").
-Run "ml help <cmd>" for flags and an example.`,
+Run "ml help <cmd>" for flags and an example (parse, merge, pick, final, pin).`,
+  pin: `ml help pin — manual vote overrides (--pin)
+
+Format:  --pin <index>:<votes>     (repeatable; comma-separate: --pin 9:2,12:1)
+
+  index   Raw submission order — the # column in music.md "Raw order (for entering
+          votes)" and the ballot printed after parse/pick. Same numbering Music
+          League uses when you enter votes by position (0, 1, 2, …).
+
+  votes   Integer count on that song:
+          • positive → upvotes   (9:2  = give song #9 exactly 2 upvotes)
+          • negative → downvotes when the round has downvotes enabled (6:-2 = 2 down on #6)
+
+Other songs are re-allocated around the pin so the vote bank is still spent exactly.
+On pick, a pin is a tweak on top of the chosen option (logged as a manual tweak).
+
+Works on:  parse (explore)  merge (thematic explore)  pick (commit with tweak)
+
+Examples:
+  just parse kpop-favorite --pin 3:3          # explore: pin #3 to 3 upvotes
+  just pick story-5 A --pin 9:2 --reason "pin Two Evils to 2; reflow drops In The Heat"`,
   parse: `ml parse <name> [flags]
 
 Parse a saved round HTML or text file → music.md + music.json.
@@ -483,7 +510,7 @@ Flags (explore allocation before pick):
   --shape auto|bell|balanced|top-heavy|compressed|relative
   --tier-count <n>       force distinct point tiers
   --bucket-count <n>     force funded tier count
-  --pin <i>:<v>          pin a song's up/down votes (raw order index)
+${HELP_PIN}
   --favorite-band <min>  merge scores ≥ min into one top tier (default 80)
   --no-favorite-band     disable favorite-band merge
   --no-json              skip music.json
@@ -494,7 +521,8 @@ Deprecated (warns, use separate stage):
   --fit, --option, --reason
 
 Example:
-  just parse kpop-favorite --shape auto`,
+  just parse kpop-favorite --shape auto
+  ml help pin   # full --pin reference`,
   merge: `ml merge <name> [flags]
 
 Merge music.json + fit.json → scores.json. Never reads HTML.
@@ -504,11 +532,14 @@ Flags (thematic profile + allocation knobs):
   --weights <fit>:<music>   e.g. 3:2
   --gate passFail|passFailMaybe
   --cutoff <axis>:<min>     e.g. fit:70
-  --shape, --down-shape, --pin, --tier-count, --bucket-count
+  --shape, --down-shape
+${HELP_PIN}
+  --tier-count, --bucket-count
   --favorite-band, --no-favorite-band
 
 Example:
-  just merge tarot --rank combined --weights 3:2`,
+  just merge tarot --rank combined --weights 3:2
+  ml help pin   # full --pin reference`,
   pick: `ml pick <name> <A|B|C> [flags]
 
 Record a distribution choice. JSON-only — never re-reads HTML.
@@ -517,14 +548,16 @@ refreshes the markdown report, and appends picks.jsonl.
 
 Flags:
   --reason "why"           rationale stored in the pick record
-  --pin <i>:<v>            pin after applying the option
+${HELP_PIN}
   --down-shape flat|curved|concentrated
   --shape, --tier-count, --bucket-count  (replay allocation)
   --scores                 write pick to scores.json (thematic default path)
   --dry-run                show pick without writing
 
 Example:
-  just pick tarot C --reason "thematic standouts land on 75 anchor"`,
+  just pick tarot C --reason "thematic standouts land on 75 anchor"
+  just pick story-5 A --pin 9:2 --reason "pin Two Evils to 2"
+  ml help pin   # full --pin reference`,
   final: `ml final <name> [flags]
 
 Render the draft-vote HTML deliverable:
@@ -548,7 +581,7 @@ function cmdHelp(topic) {
   }
   const text = HELP[key];
   if (!text) {
-    console.error(`Unknown help topic "${topic}". Try: parse, merge, pick, final\n`);
+    console.error(`Unknown help topic "${topic}". Try: parse, merge, pick, final, pin\n`);
     console.log(HELP.overview);
     process.exit(1);
   }

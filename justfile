@@ -33,7 +33,7 @@ run name:
 status name="":
     node scripts/ml.mjs status "{{name}}"
 
-# Show workflow overview or per-command help (parse | merge | pick | final)
+# Show workflow overview or per-command help (parse | merge | pick | final | pin)
 help topic="":
     node scripts/ml.mjs help {{topic}}
 
