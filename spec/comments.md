@@ -21,10 +21,9 @@ Examples:
 '75 for chorus, lower for verses'
 '72 music, 8 fit'
 
-These are valid scoring evidence and should not be discarded. Fit tokens
-(`fit 8`, tier words armed with `fit`, `pass`/`maybe`/`fail`) are parsed into a
-canonical fit signal — see the Manual Fit Notation section of
-[score-parsing.md](score-parsing.md).
+These are valid scoring evidence and should not be discarded. See
+[scoring-comments.md](scoring-comments.md) for how to write music and fit scores;
+[score-parsing.md](score-parsing.md) for parser details.
 
 Terms such as:
 

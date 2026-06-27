@@ -25,7 +25,7 @@ Everything works without it too — see [Without `just](#without-just)` below.
 
 Round inputs, analysis outputs, and reference data are **not** stored in this repo.
 They live in a separate **private** git repository (`music-league-data`) mounted as a
-git submodule at `**data/`** (`data/rounds/`, `data/analysis/`, `data/ref/`). This keeps
+git submodule at `**data/`\*\* (`data/rounds/`, `data/analysis/`, `data/ref/`). This keeps
 the code public as a portfolio while exact round comments and personal lists stay private.
 
 Note: The original device needs the github-personal alias referenced in .gitmodules. On other devices, set a local alias for the correct url:
@@ -124,18 +124,18 @@ just help pick                   # flags + example for one stage
 `just` recipes forward to the dispatcher (`scripts/ml.mjs`); extra flags pass straight
 through to the underlying scripts. Run `just --list` or `just help` for the full set.
 
-| Command | Stage | Reads HTML? |
-| --- | --- | --- |
-| `just parse <name>` | HTML → `music.json` | Yes |
-| `just merge <name>` | `music.json` + `fit.json` → `scores.json` | No |
-| `just pick <name> <A\|B\|C>` | record distribution choice | No |
-| `just fit <name>` | render `fit.html` from `fit.json` | No |
-| `just scores <name>` | render `scores.html` from `scores.json` | No |
-| `just final <name>` | render deliverable HTML | No |
-| `just run <name>` | next scriptable step | varies |
-| `just status [name]` | pipeline checklist | — |
-| `just help [cmd]` | workflow / per-command flags | — |
-| `just tidy` | date-slug + archive stale rounds | — |
+| Command                      | Stage                                     | Reads HTML? |
+| ---------------------------- | ----------------------------------------- | ----------- |
+| `just parse <name>`          | HTML → `music.json`                       | Yes         |
+| `just merge <name>`          | `music.json` + `fit.json` → `scores.json` | No          |
+| `just pick <name> <A\|B\|C>` | record distribution choice                | No          |
+| `just fit <name>`            | render `fit.html` from `fit.json`         | No          |
+| `just scores <name>`         | render `scores.html` from `scores.json`   | No          |
+| `just final <name>`          | render deliverable HTML                   | No          |
+| `just run <name>`            | next scriptable step                      | varies      |
+| `just status [name]`         | pipeline checklist                        | —           |
+| `just help [cmd]`            | workflow / per-command flags              | —           |
+| `just tidy`                  | date-slug + archive stale rounds          | —           |
 
 **Flag ownership:** explore allocation with `--shape`, `--tier-count`, `--pin` on
 **parse**; thematic profile with `--rank`, `--weights`, `--gate` on **merge**; record
@@ -188,20 +188,27 @@ From each `div.song`, skipping your own submissions (`mine: true`):
 
 ## How comments are scored (your comment only)
 
-| You wrote                 | Interpreted as                                                                             |
-| ------------------------- | ------------------------------------------------------------------------------------------ |
-| `755`                     | 75.5 (3 digits → ÷10)                                                                      |
-| `73`                      | 73 (2 digits → as-is)                                                                      |
-| `7`                       | 70 (1 digit → ×10)                                                                         |
-| `74 soft punk`            | 74, with the text kept as the comment                                                      |
-| `73+` / `73=`             | 73, `+` up-nudge tiebreak                                                                  |
-| `73-`                     | 73, `-` down-nudge tiebreak                                                                |
-| `74?`                     | 74, `?` uncertainty flag (not negative)                                                    |
-| `74 play`                 | 74, playlist-add (positive tiebreak)                                                       |
-| `no` / `nope` / `invalid` | disqualified (no vote)                                                                     |
-| `-` (bare)                | disqualified — true DQ *or* an unspecified low score unlikely to place; either way no vote |
-| words only, no number     | disqualified (objective) / needs review (subjective)                                       |
-| empty box                 | needs a score (you'll be prompted, never invented)                                         |
+**Full guide:** [spec/scoring-comments.md](spec/scoring-comments.md) — how to write
+comments (music first, fit on the remainder, tier/gate tables, `--fit-words`).
+
+| You wrote             | Interpreted as                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------ |
+| `755`                 | 75.5 (3 digits → ÷10)                                                                      |
+| `73`                  | 73 (2 digits → as-is)                                                                      |
+| `7`                   | 70 (1 digit → ×10)                                                                         |
+| `74 soft punk`        | 74, with the text kept as the comment                                                      |
+| `73+` / `73=`         | 73, `+` up-nudge tiebreak                                                                  |
+| `73-`                 | 73, `-` down-nudge tiebreak                                                                |
+| `74?`                 | 74, score-uncertain (`?` on the number)                                                    |
+| `75+?` / `7-?`        | modifier applies; `?` qualifies the `+` or `-`, not the score                              |
+| `74 play`             | 74, playlist-add (positive tiebreak)                                                       |
+| `74 play?`            | 74, playlist nudge; `?` qualifies `play`, not the score                                    |
+| `-` (bare)            | disqualified — true DQ _or_ an unspecified low score unlikely to place; either way no vote |
+| words only, no number | disqualified (objective) / needs review (subjective)                                       |
+| empty box             | needs a score (you'll be prompted, never invented)                                         |
+
+Use `just parse <round> --fit-words` when comments include tier/gate words or a bare
+second fit number — see [spec/scoring-comments.md](spec/scoring-comments.md).
 
 ## How the draft allocation works
 
@@ -212,14 +219,14 @@ score gaps (and 75/80 anchors), so adjacent point tiers differ by exactly 1 by
 construction.
 
 1. **1-D clustering** (Ckmeans.1d.dp) finds natural score gaps; equal scores stay in
-  the same tier (`tierKey`). Scores ≥ 80 merge into one shared favorite top tier by
-  default (R2).
+   the same tier (`tierKey`). Scores ≥ 80 merge into one shared favorite top tier by
+   default (R2).
 2. **`auto` shape** enumerates budget-exact staircases and prefers the shortest top
-  that lands on real gaps — no cap-reaching waterfill.
+   that lands on real gaps — no cap-reaching waterfill.
 3. **Gate rounds** (`passFailMaybe`): passes are shaped first; maybes fund only at or
-  below the lowest pass tier.
+   below the lowest pass tier.
 4. Budget is spent exactly; per-song caps enforced. Ambiguous splits surface as
-  `tier-structure` tradeoffs — record your choice with `just pick`.
+   `tier-structure` tradeoffs — record your choice with `just pick`.
 
 Dense or oversubscribed rounds naturally push more songs to 0 — treat the output as a
 starting point and rebalance. Full model: [spec/point-allocation.md](spec/point-allocation.md).
@@ -264,8 +271,8 @@ are documented in [spec/fit-evaluation.md](spec/fit-evaluation.md) → Output.
   - `data/ref/` — reference data (e.g. personal favorites list).
 - `spec/analysis-artifacts.md` — naming convention for music / fit / scores files.
 - `tests/fixtures/sample-round/` — synthetic round for docs and tests.
-- `spec/` — the scoring/allocation rules in prose (`score-parsing`, `point-allocation`,
-`comments`, `uncertainty`, `fit-evaluation`, `fit-guidance`). `decisions.md` is the
-running log of how/why those rules changed.
+- `spec/` — the scoring/allocation rules in prose (`score-parsing`, `scoring-comments`,
+  `point-allocation`, `comments`, `uncertainty`, `fit-evaluation`, `fit-guidance`). `decisions.md` is the
+  running log of how/why those rules changed.
 - `tests/regressions/` — captured failure cases to guard against.
 - `.cursor/rules/` — agent guidance mirroring the specs.

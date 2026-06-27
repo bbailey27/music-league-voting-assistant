@@ -39,7 +39,7 @@ function richText(el) {
 }
 
 // Extract the canonical round (songs + budget + metadata) from a parsed DOM.
-export function parseRoundDocument(document, mode) {
+export function parseRoundDocument(document, mode, opts = {}) {
   // Budget config lives in the root Alpine x-data string.
   const budget = {
     upvoteBankSize: null,
@@ -139,7 +139,7 @@ export function parseRoundDocument(document, mode) {
       submitterComment = richText(quoteP.querySelector('span.ws-pre-wrap'));
     }
 
-    const signals = scoreComment(userComment, mode);
+    const signals = scoreComment(userComment, mode, opts);
 
     songs.push({
       rawOrderIndex,

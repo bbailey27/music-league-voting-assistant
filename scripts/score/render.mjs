@@ -110,10 +110,10 @@ export function mergeFitJson(parsed, fitData, profile = {}) {
 }
 export function flagsOf(s) {
   const f = [];
-  if (s.plus) f.push('+');
-  if (s.minus) f.push('-');
+  if (s.plus) f.push(s.plusUncertain ? '+?' : '+');
+  if (s.minus) f.push(s.minusUncertain ? '-?' : '-');
   if (s.uncertain) f.push('?');
-  if (s.playlistAdd) f.push('play');
+  if (s.playlistAdd) f.push(s.playlistUncertain ? 'play?' : 'play');
   if (s.needsReview) f.push('review');
   return f.join(' ');
 }
@@ -401,7 +401,10 @@ export function buildJsonPayload({
       plus: s.plus,
       minus: s.minus,
       uncertain: s.uncertain,
+      plusUncertain: s.plusUncertain ?? false,
+      minusUncertain: s.minusUncertain ?? false,
       playlistAdd: s.playlistAdd,
+      playlistUncertain: s.playlistUncertain ?? false,
       isDisqualified: s.isDisqualified,
       needsUserInput: s.needsUserInput,
       needsReview: s.needsReview,

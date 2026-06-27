@@ -3,14 +3,14 @@
 import { parseHTML } from 'linkedom';
 import { parseRoundDocument, recoverEscapedSource } from '../extract-html.mjs';
 
-export function parseRoundHtml(html, mode) {
+export function parseRoundHtml(html, mode, opts = {}) {
   const { document } = parseHTML(html);
-  const parsed = parseRoundDocument(document, mode);
+  const parsed = parseRoundDocument(document, mode, opts);
   if (parsed.songs.length) return parsed;
   const recovered = recoverEscapedSource(document);
   if (recovered) {
     const { document: recoveredDoc } = parseHTML(recovered);
-    return parseRoundDocument(recoveredDoc, mode);
+    return parseRoundDocument(recoveredDoc, mode, opts);
   }
   return parsed;
 }

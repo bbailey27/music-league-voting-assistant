@@ -13,7 +13,6 @@ isProject: false
 
 | Plan                                                                           | Remaining                                                                                     |
 | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| [preserve-manual-fit-scores.plan.md](preserve-manual-fit-scores.plan.md)       | `--fit-words`, identifier-anchored parse grammar, tests, `spec/score-parsing.md`              |
 | [followup-5-specs-and-tests.plan.md](followup-5-specs-and-tests.plan.md)       | Full spec sync, output snapshot regression test (diff-based), regression prose, extract tests |
 | [split-score-core-into-modules.plan.md](split-score-core-into-modules.plan.md) | Phases 2–4: renderer dedup, split tests, helper dedup — full steps in plan                    |
 | [improve-just-cli-and-docs.plan.md](improve-just-cli-and-docs.plan.md)         | Phase 3: `tests/ml.test.mjs`, e2e fixture — full spec in plan                                 |
@@ -22,7 +21,7 @@ isProject: false
 
 Shipped 2026-06: parse / merge / pick stages, score-core Phase 1 split,
 `scripts/parse/*` modules, `ml help` + README, R1/R2/Bug2 allocator, fit persist +
-pure render. See `spec/decisions.md` (2026-06-26 entries).
+pure render, peel-first comment parse + `--fit-words` (2026-06-27). See `spec/decisions.md`.
 
 - **Review `scripts/one-off/`** for fold-in candidates (also future-plans item 4)
 
@@ -32,10 +31,9 @@ Output snapshot regression test (diff-based): see
 ---
 
 1. ~~Create a script to identify new round input files without a date in the title…~~ **Done** (2026-06-19) — `scripts/maintain-rounds.mjs` / `ml tidy`. See `spec/decisions.md`.
-2. Fix score parsing when extra numbers appear later in a comment — covered by Wave 1
-   [preserve-manual-fit-scores.plan.md](preserve-manual-fit-scores.plan.md) (TDD contract).
-   Key case: `76 fit bonus` → music 76 + **fit shorthand** (`strong`), not numeric fit 76.
-   Generic tier/gate words (`maybe`, `off-theme`) stay behind `--fit-words`.
+2. ~~Fix score parsing when extra numbers appear later in a comment~~ **Done** (2026-06-27) —
+   peel-first parse + `--fit-words`; `76 fit bonus` → music 76 + fit shorthand (`strong`).
+   See `spec/score-parsing.md`, `spec/scoring-comments.md`, `spec/decisions.md`.
 
 3. ~~Improve agent documentation for allocation… user-facing guidance and help commands for CLI…~~ **Mostly done** (2026-06-26) — see [improve-just-cli-and-docs.plan.md](improve-just-cli-and-docs.plan.md) Phase 3 for remaining tests.
 4. Periodically review `scripts/one-off/` for patterns or fixes worth folding into the main pipeline (`parse-round.mjs`, `score-core.mjs`, `ml.mjs`).

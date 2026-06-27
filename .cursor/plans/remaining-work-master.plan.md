@@ -4,7 +4,7 @@ overview: Sequence high-value remaining work — parse correctness first, then r
 status: in_progress
 todos: []
 isProject: true
-related: preserve-manual-fit-scores, followup-5-specs-and-tests, improve-just-cli-and-docs, split-score-core-into-modules, future-plans
+related: followup-5-specs-and-tests, improve-just-cli-and-docs, split-score-core-into-modules, future-plans
 ---
 
 # Master plan: remaining high-value work
@@ -15,7 +15,7 @@ Phase 1, CLI docs). Living backlog without a dedicated plan:
 
 ## Goals
 
-1. **Stop parse misreads** — gate/tier words off by default; peel-first music + remainder fit with `--fit-words`.
+1. ~~**Stop parse misreads**~~ — shipped 2026-06-27 (peel-first + `--fit-words`).
 2. **Regression safety** — diff-based output snapshots + dispatcher tests before refactors.
 3. **Specs match code** — agents and future-you read `spec/` not git history.
 4. **Safe mechanical cleanup** — score-core Phases 2–4 only after tests exist.
@@ -25,8 +25,8 @@ Phase 1, CLI docs). Living backlog without a dedicated plan:
 
 | Plan | Status | Role |
 | --- | --- | --- |
-| [preserve-manual-fit-scores](preserve-manual-fit-scores.plan.md) | partial | **Wave 1** — `--fit-words`, parse grammar |
-| [followup-5-specs-and-tests](followup-5-specs-and-tests.plan.md) | partial | **Waves 1–3** — specs, extract tests, snapshot regression |
+| ~~preserve-manual-fit-scores~~ | **shipped** 2026-06-27 | Wave 1 — peel-first parse, `--fit-words` |
+| [followup-5-specs-and-tests](followup-5-specs-and-tests.plan.md) | partial | **Waves 2–3** — specs, extract tests, snapshot regression |
 | [improve-just-cli-and-docs](improve-just-cli-and-docs.plan.md) | partial | **Wave 2** — `ml.test`, e2e fixture |
 | [split-score-core-into-modules](split-score-core-into-modules.plan.md) | partial | **Wave 4** — renderer dedup, test split, helper dedup |
 | [future-plans](future-plans.plan.md) | living | **Wave 5** backlog |
@@ -39,7 +39,7 @@ Phase 1, CLI docs). Living backlog without a dedicated plan:
 
 ```mermaid
 flowchart TB
-  W1[Wave 1: parse correctness]
+  W1[Wave 1: parse correctness — shipped]
   W2[Wave 2: regression tests]
   W3[Wave 3: spec and rules sync]
   W4[Wave 4: score-core Phases 2-4]
@@ -56,32 +56,18 @@ flowchart TB
 
 ## Waves (execution order)
 
-### Wave 1 — Parse correctness (highest value, TDD)
+### Wave 1 — Parse correctness ✅ shipped 2026-06-27
 
-**Plan:** [preserve-manual-fit-scores](preserve-manual-fit-scores.plan.md) (remaining todos)
+Peel-first comment parsing, `--fit-words` gating, `tests/comment-parse.test.mjs`,
+`spec/score-parsing.md`, owner guide `spec/scoring-comments.md`. Plan file deleted
+per plan lifecycle; see `spec/decisions.md` (2026-06-27 entries).
 
-**Approach:** Test-driven. Lock the [parsing contract](preserve-manual-fit-scores.plan.md#parsing-contract-default---fit-words-off) (music vs fit vs tier vs gate vs ignored), write failing tests for every fixture row, **then** implement. Do not change `comment.mjs` before red tests exist.
+**Gate (met):**
 
-**Problem:** On music-only rounds, `maybe` / `off-theme` / `strong` in free text
-still match unconditionally. Comments like `76 fit bonus` mis-tag the music number.
-
-**Deliverables (order):**
-
-| Step | Item |
-| --- | --- |
-| 1 | Parsing contract agreed (`spec/score-parsing.md` + plan tables) |
-| 2 | `tests/comment-parse.test.mjs` — full matrix; **red** on current code |
-| 3 | `--fit-words` plumbing + `comment.mjs` grammar — **green** |
-| 4 | `spec/decisions.md` entry |
-
-**Gate:**
-
-- [ ] Contract rows reviewed — especially `76 fit bonus` (music 76 + strong shorthand, not fit 76)
-- [ ] All contract tests pass with `fitWords: false` default
-- [ ] `--fit-words` enables tier/gate vocabulary per contract
-- [ ] `npm test` green
-
-**Note:** Overlaps [future-plans](future-plans.plan.md) item 2 — close both when Wave 1 ships.
+- [x] Contract rows reviewed — `76 fit bonus` → music 76 + strong shorthand
+- [x] All contract tests pass with `fitWords: false` default
+- [x] `--fit-words` enables tier/gate vocabulary per contract
+- [x] `npm test` green (134 tests)
 
 ---
 
@@ -117,7 +103,7 @@ catch net beyond unit tests.
 **Deliverables:**
 
 - [ ] `spec/round-input-parsing.md` (new)
-- [ ] `spec/score-parsing.md` — complete (Wave 1 may land most of this)
+- [ ] `spec/score-parsing.md` — complete (Wave 1 landed core contract; owner guide in `spec/scoring-comments.md`)
 - [ ] `spec/fit-evaluation.md`, `spec/comments.md` — aligned with code
 - [ ] `.cursor/rules/parsing.mdc`, `output.mdc`, `allocation.mdc` — refresh
 - [ ] `tests/regressions/006.md` or successor prose fixture
@@ -194,7 +180,7 @@ Wave 4 until Wave 2 snapshot test exists**.
 
 ## Verification checklist (master done)
 
-- [ ] `--fit-words` default-off; parse grammar identifier-anchored
+- [x] `--fit-words` default-off; peel-first parse grammar
 - [ ] Output snapshot regression test repeatable
 - [ ] `tests/ml.test.mjs` + e2e fixture green
 - [ ] Core specs (`round-input-parsing`, `score-parsing`, `point-allocation`) current
@@ -208,7 +194,7 @@ Wave 4 until Wave 2 snapshot test exists**.
 | Wave | Plan | Status |
 | --- | --- | --- |
 | — | remaining-work-master | in_progress |
-| 1 | preserve-manual-fit-scores | partial |
+| 1 | preserve-manual-fit-scores | **shipped** (plan deleted) |
 | 2 | followup-5-specs-and-tests | partial (test slice) |
 | 2 | improve-just-cli-and-docs | partial (Phase 3) |
 | 3 | followup-5-specs-and-tests | partial (spec slice) |

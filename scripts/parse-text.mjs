@@ -132,7 +132,7 @@ function segmentBlocks(lines) {
 }
 
 // Recover one canonical song from a non-own block's lines.
-function parseBlock(blockLines, mode, rawOrderIndex) {
+function parseBlock(blockLines, mode, rawOrderIndex, opts = {}) {
   let needsReview = false;
   let reviewReason = '';
 
@@ -203,7 +203,7 @@ function parseBlock(blockLines, mode, rawOrderIndex) {
     }
   }
 
-  const signals = scoreComment(userComment, mode);
+  const signals = scoreComment(userComment, mode, opts);
   if (needsReview) {
     signals.needsReview = true;
     if (!signals.reviewReason) signals.reviewReason = reviewReason;
@@ -223,7 +223,7 @@ function parseBlock(blockLines, mode, rawOrderIndex) {
   };
 }
 
-function parseStrict(lines, mode) {
+function parseStrict(lines, mode, opts = {}) {
   const { blocks, headerLines } = segmentBlocks(lines);
   const { budget, round } = parseHeader(headerLines);
 
@@ -235,7 +235,7 @@ function parseStrict(lines, mode) {
       ownSkipped++;
       return; // skip the user's own submission, but keep its position in the order
     }
-    songs.push(parseBlock(block.lines, mode, index));
+    songs.push(parseBlock(block.lines, mode, index, opts));
   });
 
   return { round, budget, songs, totalSongs, ownSkipped };
@@ -248,7 +248,7 @@ function parseStrict(lines, mode) {
 // length checksum to pick the user-comment line. Everything is flagged for
 // review since the surrounding structure still can't be fully trusted.
 // ---------------------------------------------------------------------------
-function parseLenient(lines, mode) {
+function parseLenient(lines, mode, opts = {}) {
   const { budget, round } = parseHeader(lines);
 
   // Trim, drop blank + phone/stitch-app chrome, but keep structural lines.
@@ -295,7 +295,7 @@ function parseLenient(lines, mode) {
       }
       if (!userComment) {
         for (let i = block.length - 1; i >= 2; i--) {
-          if (/\d/.test(block[i]) && scoreComment(block[i], mode).score != null) {
+          if (/\d/.test(block[i]) && scoreComment(block[i], mode, opts).score != null) {
             userComment = block[i];
             break;
           }
@@ -312,7 +312,7 @@ function parseLenient(lines, mode) {
     const commentIdx = userComment ? block.indexOf(userComment) : block.length;
     const submitterComment = joinTrim(block.slice(album ? 3 : 2, commentIdx));
 
-    const signals = scoreComment(userComment, mode);
+    const signals = scoreComment(userComment, mode, opts);
     signals.needsReview = true; // lenient parse: always verify
     signals.reviewReason = signals.reviewReason || reason;
 
@@ -349,7 +349,7 @@ export function parseRoundText(text, mode, opts = {}) {
   const hasFooter = lines.some((l) => FOOTER_RE.test(l.trim()));
 
   if (opts.lenient || !hasAlbumArt || !hasFooter) {
-    return parseLenient(lines, mode);
+    return parseLenient(lines, mode, opts);
   }
-  return parseStrict(lines, mode);
+  return parseStrict(lines, mode, opts);
 }

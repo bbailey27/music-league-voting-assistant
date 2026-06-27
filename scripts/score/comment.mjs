@@ -2,13 +2,38 @@
 
 import { FIT_TIER_SCORES, fitTierForScore } from './fit-signal.mjs';
 
-export function scoreComment(rawComment, mode) {
+const SCORE_NUM = /(\d{1,3})(\.\d)?([+\-?=]*)/;
+
+// Owner vocabulary: multi-word fit phrases (checked before numeric N fit).
+const FIT_SHORTHAND = [
+  ['strong', /\bfit\s+bonus\b/i],
+];
+
+const FIT_TIER_SYNONYMS = [
+  ['excellent', /\b(excellent|perfect|ideal|on the nose|spot[- ]?on)\b/i],
+  ['strong', /\b(strong|great)\b/i],
+  ['solid', /\b(solid|good|clearly|on[- ]?theme)\b/i],
+  ['moderate', /\b(moderate|okay|ok|loose|partial)\b/i],
+  ['weak', /\b(weak|single keyword|tenuous|barely)\b/i],
+];
+
+const GATE_WORDS = [
+  ['fail', /\b(fail|fails|off[- ]?theme|invalid)\b/i],
+  ['maybe', /\b(maybe|questionable|borderline|iffy|stretch)\b/i],
+  ['pass', /\b(pass|passes|qualifies|valid|fits|on[- ]?theme)\b/i],
+];
+
+export function scoreComment(rawComment, mode, opts = {}) {
+  const fitWords = opts.fitWords === true;
   const out = {
     score: null,
     plus: false,
     minus: false,
     uncertain: false,
+    plusUncertain: false,
+    minusUncertain: false,
     playlistAdd: false,
+    playlistUncertain: false,
     isDisqualified: false,
     needsUserInput: false,
     needsReview: false,
@@ -23,20 +48,19 @@ export function scoreComment(rawComment, mode) {
   const comment = (rawComment ?? '').trim();
 
   if (comment === '') {
-    out.needsUserInput = true; // empty box = accidental skip, prompt for a score
+    out.needsUserInput = true;
     return out;
   }
 
-  // An all-caps "TODO" marker (usually leading) is a self-reminder that the user
-  // hasn't really decided yet, so treat it like a blank box: prompt for a score
-  // and don't trust any placeholder number sitting next to it.
   if (/\bTODO\b/.test(comment)) {
     out.needsUserInput = true;
     return out;
   }
 
-  const fit = parseFitTokens(comment);
-  const applyFit = () => {
+  const scoringLine = comment.split('\n')[0];
+  const peeled = peelMusic(scoringLine);
+
+  const applyFit = (fit) => {
     if (fit.fitScore != null) {
       out.fitScore = fit.fitScore;
       out.fitTier = fit.fitTier;
@@ -48,117 +72,165 @@ export function scoreComment(rawComment, mode) {
     }
   };
 
-  // First numeric token (optional single decimal) plus any trailing modifiers.
-  // Strip explicit fit-number tokens first so "8 fit" isn't read as music 80.
-  const musicText = comment
-    .replace(/\bfit\s*\d{1,3}(\.\d)?\b/i, ' ')
-    .replace(/\b\d{1,3}(\.\d)?\s*fit\b/i, ' ');
-  const m = musicText.match(/(\d{1,3})(\.\d)?([+\-?=]*)/);
-
-  if (!m) {
-    // No number at all.
-    if (/^-+$/.test(comment)) {
-      // Bare dash: no real score. Ambiguous on purpose — it can mean a true
-      // disqualification, or just "low/unspecified, won't place". Either way it
-      // earns no points, so we group it under disqualified.
+  if (peeled == null) {
+    if (/^-+$/.test(scoringLine)) {
       out.isDisqualified = true;
-    } else if (/\b(invalid|no|nope)\b/i.test(comment)) {
-      out.isDisqualified = true; // explicit disqualifying keyword
-    } else if (fit.fitScore != null || fit.gate) {
-      applyFit(); // words-only but a real manual fit note (e.g. "pass", "strong fit")
-    } else if (mode === 'objective') {
-      out.isDisqualified = true; // words-only -> disqualified in objective rounds
+    } else if (/\b(invalid|no|nope)\b/i.test(scoringLine)) {
+      out.isDisqualified = true;
     } else {
-      out.needsReview = true; // subjective: words may carry fit meaning, don't auto-decide
-      out.reviewReason = 'words-only comment (subjective mode)';
+      const fit = parseFitSignals(scoringLine, '', { fitWords });
+      if (fit.fitScore != null || fit.gate) {
+        applyFit(fit);
+      } else if (mode === 'objective') {
+        out.isDisqualified = true;
+      } else {
+        out.needsReview = true;
+        out.reviewReason = 'words-only comment (subjective mode)';
+      }
     }
     return out;
   }
 
-  const intPart = m[1];
-  const decPart = m[2]; // e.g. ".5"
-  const mods = m[3] || '';
+  out.score = scaleScoreToken(peeled.intPart, peeled.decPart);
+  Object.assign(out, parseAttachedMods(peeled.mods));
+  Object.assign(out, parsePlaylistModifier(scoringLine));
 
-  out.score = scaleScoreToken(intPart, decPart);
+  applyFit(parseFitSignals(scoringLine, peeled.remainder, { fitWords }));
 
-  if (mods.includes('+') || mods.includes('=')) out.plus = true; // '=' is a typo for '+'
-  if (mods.includes('-')) out.minus = true;
-  if (mods.includes('?')) out.uncertain = true;
-
-  // Playlist add: a standalone "play"/"playlist" keyword alongside a score.
-  if (/\bplay(list)?\b/i.test(comment)) out.playlistAdd = true;
-
-  applyFit();
-  // Thematic rounds: a music score with no fit signal yet means "music known,
-  // fit still needs research" — flag it so the LLM prompt picks it up.
   if (mode === 'thematic' && out.fitScore == null && out.gate == null) out.needsResearch = true;
 
   return out;
 }
 
-// Turn a digit token (with optional decimal part) into a 0–100-ish score.
-function scaleScoreToken(intPart, decPart) {
-  if (decPart) return parseFloat(intPart + decPart); // literal decimal, no scaling
-  if (intPart.length === 1) return Number(intPart) * 10; // 7 -> 70
-  if (intPart.length === 2) return Number(intPart); // 73 -> 73
-  return Number(intPart) / 10; // 755 -> 75.5
+// First number on the scoring line is always music; return the rest for fit parsing.
+function peelMusic(scoringLine) {
+  const m = scoringLine.match(SCORE_NUM);
+  if (!m) return null;
+  return {
+    intPart: m[1],
+    decPart: m[2],
+    mods: m[3] || '',
+    remainder: scoringLine.slice(m.index + m[0].length),
+  };
 }
 
-// Tiebreak rank: playlistAdd >= '+' > plain > '-'. Higher wins.
+// Modifiers glued to the music number. `75?` = score uncertain; `75+?` / `7-?` = that
+// modifier is uncertain (the base score is not).
+function parseAttachedMods(raw) {
+  const mods = (raw || '').replace(/=/g, '+');
+  const plus = mods.includes('+');
+  const minus = mods.includes('-');
+  const out = {
+    plus,
+    minus,
+    uncertain: false,
+    plusUncertain: false,
+    minusUncertain: false,
+  };
+  if (!mods.includes('?')) return out;
+
+  const qIdx = mods.indexOf('?');
+  const plusIdx = mods.indexOf('+');
+  const minusIdx = mods.indexOf('-');
+
+  if (plus && qIdx > plusIdx) out.plusUncertain = true;
+  else if (minus && qIdx > minusIdx) out.minusUncertain = true;
+  else if (!plus && !minus) out.uncertain = true;
+  else out.uncertain = true;
+
+  return out;
+}
+
+function parsePlaylistModifier(text) {
+  if (/\bplay(list)?\?(?!\w)/i.test(text)) {
+    return { playlistAdd: true, playlistUncertain: true };
+  }
+  if (/\bplay(list)?\b/i.test(text)) {
+    return { playlistAdd: true, playlistUncertain: false };
+  }
+  return { playlistAdd: false, playlistUncertain: false };
+}
+
+function parseFitSignals(scoringLine, remainder, { fitWords }) {
+  const out = { fitScore: null, fitTier: null, gate: null };
+  const rem = remainder || '';
+
+  for (const [tier, re] of FIT_SHORTHAND) {
+    if (re.test(rem)) {
+      out.fitTier = tier;
+      out.fitScore = FIT_TIER_SCORES[tier];
+      break;
+    }
+  }
+
+  if (out.fitScore == null) {
+    const explicit =
+      rem.match(/\bfit\s*(\d{1,3})(\.\d)?\b/i) ||
+      rem.match(/\b(\d{1,3})(\.\d)?\s+fit\b/i);
+    if (explicit) {
+      out.fitScore = scaleScoreToken(explicit[1], explicit[2]);
+    }
+  }
+
+  if (out.fitScore == null && fitWords) {
+    const second = rem.match(SCORE_NUM);
+    if (second) {
+      out.fitScore = scaleScoreToken(second[1], second[2]);
+    }
+  }
+
+  if (fitWords) {
+    if (out.fitScore == null && !tierNegated(scoringLine)) {
+      for (const [tier, re] of FIT_TIER_SYNONYMS) {
+        if (re.test(scoringLine)) {
+          out.fitTier = tier;
+          out.fitScore = FIT_TIER_SCORES[tier];
+          break;
+        }
+      }
+    }
+    out.gate = matchGate(scoringLine);
+  }
+
+  if (out.fitScore != null && out.fitTier == null) out.fitTier = fitTierForScore(out.fitScore);
+  return out;
+}
+
+function tierNegated(text) {
+  return FIT_TIER_SYNONYMS.some(([, re]) => {
+    const m = text.match(re);
+    if (!m) return false;
+    const after = text.slice(m.index + m[0].length);
+    return /^\s*negative\b/i.test(after);
+  });
+}
+
+function matchGate(text) {
+  for (const [gate, re] of GATE_WORDS) {
+    if (re.test(text)) return gate;
+  }
+  return null;
+}
+
+export function scaleScoreToken(intPart, decPart) {
+  if (decPart) return parseFloat(intPart + decPart);
+  if (intPart.length === 1) return Number(intPart) * 10;
+  if (intPart.length === 2) return Number(intPart);
+  return Number(intPart) / 10;
+}
+
+export function formatMusicModifierFlags(s) {
+  const f = [];
+  if (s.plus) f.push(s.plusUncertain ? '+?' : '+');
+  if (s.minus) f.push(s.minusUncertain ? '-?' : '-');
+  if (s.uncertain) f.push('?');
+  if (s.playlistAdd) f.push(s.playlistUncertain ? 'play?' : 'play');
+  return f.join('');
+}
+
 export function tiebreakRank(s) {
   if (s.playlistAdd) return 3;
   if (s.plus) return 2;
   if (s.minus) return 0;
   return 1;
-}
-const FIT_TIER_SYNONYMS = [
-  ['excellent', /\b(excellent|perfect|ideal|on the nose|spot[- ]?on)\b/i],
-  ['strong', /\b(strong|great)\b/i],
-  ['solid', /\b(solid|good|clearly|on[- ]?theme)\b/i],
-  ['moderate', /\b(moderate|okay|ok|loose|partial)\b/i],
-  ['weak', /\b(weak|single keyword|tenuous|barely)\b/i],
-];
-
-// Pass / maybe / fail flags, checked independently of the tier. fail > maybe >
-// pass when more than one is present.
-const GATE_WORDS = [
-  ['fail', /\b(fail|fails|off[- ]?theme|invalid)\b/i],
-  ['maybe', /\b(maybe|questionable|borderline|iffy|stretch)\b/i],
-  ['pass', /\b(pass|passes|qualifies|valid|fits|on[- ]?theme)\b/i],
-];
-
-// Extract a manual fit signal from a comment: an explicit fit score
-// ("8 fit", "85 fit", or reverse "fit 8"), a tier word, and/or a gate flag.
-function parseFitTokens(comment) {
-  const out = { fitScore: null, fitTier: null, gate: null };
-  if (!comment) return out;
-
-  const num =
-    comment.match(/\bfit\s*(\d{1,3})(\.\d)?\b/i) ||
-    comment.match(/\b(\d{1,3})(\.\d)?\s*fit\b/i);
-  if (num) {
-    const int = num[1];
-    const dec = num[2];
-    out.fitScore = scaleScoreToken(int, dec);
-  }
-
-  const armed = /\bfit\b/i.test(comment) || /\bfit\d/i.test(comment);
-  if (out.fitScore == null && armed) {
-    for (const [tier, re] of FIT_TIER_SYNONYMS) {
-      if (re.test(comment)) {
-        out.fitTier = tier;
-        out.fitScore = FIT_TIER_SCORES[tier];
-        break;
-      }
-    }
-  }
-  if (out.fitScore != null && out.fitTier == null) out.fitTier = fitTierForScore(out.fitScore);
-
-  for (const [gate, re] of GATE_WORDS) {
-    if (re.test(comment)) {
-      out.gate = gate;
-      break;
-    }
-  }
-  return out;
 }

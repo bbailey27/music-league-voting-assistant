@@ -1,7 +1,7 @@
 // Allocation profile + ranking helpers and vote distribution.
 
 import { cell, formatScore } from './format.mjs';
-import { tiebreakRank } from './comment.mjs';
+import { tiebreakRank, formatMusicModifierFlags } from './comment.mjs';
 import {
   FIT_TIER_SCORES,
   DEFAULT_COMBINED_WEIGHTS,
@@ -1072,8 +1072,7 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
   // Same best-first order as posValue, but the actual songs — so a candidate can
   // report the precise raw score (with any +/−/? modifier) sitting in each tier.
   const membersFlat = units.flatMap((u) => u.members);
-  const rawToken = (m) =>
-    `${formatScore(m.score)}${m.plus ? '+' : ''}${m.minus ? '-' : ''}${m.uncertain ? '?' : ''}`;
+  const rawToken = (m) => `${formatScore(m.score)}${formatMusicModifierFlags(m)}`;
   // Per-song unit index and +/− modifier rank, used to tell an *arbitrary*
   // tie-split (equal-score, equal-modifier songs forced to different points — a
   // coin flip) from a *resolvable* one (a +/− picks who takes the extra).

@@ -4,7 +4,7 @@
 // paths or remember which script wants which file.
 //
 // Usage:
-//   node scripts/ml.mjs parse  <name> [--mode objective|subjective] [--no-json]
+//   node scripts/ml.mjs parse  <name> [--mode objective|subjective] [--no-json] [--fit-words]
 //   node scripts/ml.mjs fit    <name> [--out <path>] [--order fit|combined|raw]
 //   node scripts/ml.mjs scores <name> [--out <path>] [--order fit|combined|raw]
 //   node scripts/ml.mjs final  <name> [--out <path>] [--order votes|score|raw]
@@ -488,6 +488,7 @@ Flags (explore allocation before pick):
   --no-favorite-band     disable favorite-band merge
   --no-json              skip music.json
   --lenient              tolerate Live Text / pasted text input
+  --fit-words            parse tier/gate words + 2nd number as fit on scoring line
 
 Deprecated (warns, use separate stage):
   --fit, --option, --reason

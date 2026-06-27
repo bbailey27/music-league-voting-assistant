@@ -72,7 +72,7 @@ penalties in `allocate.mjs`); hard to test without subjective round review.
 
 ## Explicit non-goals
 
-- Not a substitute for parse fixes ([preserve-manual-fit-scores](preserve-manual-fit-scores.plan.md))
+- Not a substitute for parse fixes (shipped — see `spec/score-parsing.md`)
 - Not needed for pipeline stage work ([remaining-work-master](remaining-work-master.plan.md))
 - Do not patch `waterfillLevels` — removed by R1; any new work extends the staircase
 

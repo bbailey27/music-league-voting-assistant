@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Deterministic Music League round parser + draft vote allocator.
-// Usage: node scripts/parse-round.mjs <round.html|round.txt> [--mode objective|subjective] [--no-json] [--lenient]
+// Usage: node scripts/parse-round.mjs <round.html|round.txt> [--mode objective|subjective] [--no-json] [--lenient] [--fit-words]
 //
 // HTML and text inputs both emit the same canonical song list, then share the
 // scorer/allocator/reporter in score-core.mjs. Scoring reads the USER comment
@@ -68,9 +68,14 @@ function parseArgs(argv) {
     favoriteBand: null,
     option: null,
     reason: null,
+    fitWords: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
+    if (a === '--fit-words') {
+      args.fitWords = true;
+      continue;
+    }
     if (a === '--no-json') {
       args.json = false;
       continue;
@@ -150,7 +155,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.file) {
     console.error(
-      'Usage: node scripts/parse-round.mjs <round.html|round.txt> [--mode objective|subjective] [--no-json] [--lenient] [--shape ...] [--down-shape concentrated|flat|curved] [--tier-count <n>] [--bucket-count <n>] [--favorite-band <min>|--no-favorite-band] [--pin <i>:<v>]'
+      'Usage: node scripts/parse-round.mjs <round.html|round.txt> [--mode objective|subjective] [--no-json] [--lenient] [--fit-words] [--shape ...] [--down-shape concentrated|flat|curved] [--tier-count <n>] [--bucket-count <n>] [--favorite-band <min>|--no-favorite-band] [--pin <i>:<v>]'
     );
     process.exit(1);
   }
@@ -163,10 +168,11 @@ async function main() {
 
   const raw = await readFile(args.file, 'utf8');
   const ext = extname(args.file).toLowerCase();
+  const parseOpts = { lenient: args.lenient, fitWords: args.fitWords };
   const parsed =
     ext === '.txt'
-      ? parseRoundText(raw, args.mode, { lenient: args.lenient })
-      : parseRoundHtml(raw, args.mode);
+      ? parseRoundText(raw, args.mode, parseOpts)
+      : parseRoundHtml(raw, args.mode, parseOpts);
 
   if (!parsed.songs.length) {
     console.error(

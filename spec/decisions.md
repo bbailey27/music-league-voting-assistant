@@ -11,6 +11,50 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-06-27 — Modifier-qualified `?` (score vs +/−/play)
+
+**Change.** `?` glued to the music number applies to the **score** only when it is
+the sole modifier (`75?`). When `?` follows `+`, `-`, or `play`, it marks **that
+modifier** uncertain (`75+?`, `7-?`, `74 play?`) — stored as `plusUncertain`,
+`minusUncertain`, `playlistUncertain`. The modifier still applies for tiebreaks.
+
+**Why.** Owner uses `75+?` to question the nudge, not the base score; same pattern for
+playlist second thoughts.
+
+**Refs.** `3b85cae` — `scripts/score/comment.mjs`, `spec/score-parsing.md`,
+`spec/scoring-comments.md`.
+
+## 2026-06-27 — Peel-first comment parsing + `--fit-words`
+
+**Change.** `scoreComment` peels the **first number** on the scoring line (before
+first `\n`) as music, then parses the **remainder** for fit. Tier/gate vocabulary
+requires `--fit-words` (default off). `fit bonus` shorthand maps to strong/85.
+Gate/tier words in the submission tail are ignored.
+
+**Why.** Music is always written first when assigning points; parsing fit tokens before
+music caused misreads (`8 fit` → fit-only, `76 fit bonus` → swallowed music 76).
+Peel-first matches the owner's workflow; `--fit-words` prevents prose gate/tier
+over-matching on default parse.
+
+**Overruled.** Fit-first numeric tokens (`8 fit` alone = fit-only); tier words armed
+only by literal `fit`; unconditional gate-word matching.
+
+**Refs.** `3b85cae` — `scripts/score/comment.mjs`, `spec/score-parsing.md`,
+`spec/scoring-comments.md`, `tests/comment-parse.test.mjs`.
+
+## 2026-06-27 — Plan file lifecycle: commit early, delete on ship
+
+**Change.** New rule `.cursor/rules/plan-lifecycle.mdc`: commit plan files with the
+first wave of an effort; delete finished plans in the last wave (or the same commit
+for single-shot fixes). Keep only partial/deferred plans; open items go to
+`future-plans.plan.md`. Closed pipeline-cleanup master plan and shipped child plans
+removed from `.cursor/plans/`.
+
+**Why.** Plans accumulate fast; `spec/` + `decisions.md` + git tree at commit time
+are enough durable context. No plan slugs in decisions.
+
+**Refs.** `8b806b4` — `.cursor/rules/plan-lifecycle.mdc`, `.cursor/plans/future-plans.plan.md`.
+
 ## 2026-06-26 — Three-stage CLI docs: ml help, status pick row, README
 
 **Change.** `ml help [parse|merge|pick|final]` and `just help` document the
@@ -23,7 +67,7 @@ without reading plan files.
 
 **Refs.** `3442983`, `72ddfe4`, `2bc7ec9` — `scripts/ml.mjs`, README, spec/analysis-artifacts.md.
 
-## 2026-06-26 — Split parse-round into parse/* modules
+## 2026-06-26 — Split parse-round into parse/\* modules
 
 **Change.** `scripts/parse-round.mjs` is a 259-line entry point importing
 `scripts/parse/{cli-flags,cli-print,pipeline}.mjs`. Pure flag validators, terminal

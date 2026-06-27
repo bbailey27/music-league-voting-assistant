@@ -10,13 +10,19 @@
 
 ## Modifiers
 
-- `+` = slight upward tie-break adjustment.
-- `-` = slight downward tie-break adjustment.
-- `?` = uncertainty marker only.
+Modifiers attach to the **music number** (or to `play` / `playlist` on the line).
+You can combine them. **`?` applies to whatever it immediately follows:**
 
-## Typo Normalization
+| You wrote  | Meaning                                            |
+| ---------- | -------------------------------------------------- |
+| `74?`      | score 74; the **score** could move up or down      |
+| `75+?`     | score 75 with `+`; you're unsure about the **`+`** |
+| `7-?`      | score 70 with `-`; you're unsure about the **`-`** |
+| `74 play`  | score 74; playlist-add nudge                       |
+| `74 play?` | score 74; unsure about **playlist** add            |
 
-73= should be interpreted as 73+.
+`73=` is treated as `73+` (typo). The `+` / `-` / `play` still apply for tiebreaks;
+modifier-uncertain flags are for your notes and display (`+?`, `-?`, `play?`).
 
 ## Bare Dash
 
@@ -33,8 +39,9 @@ marker.
 
 ## Uncertain Integers
 
-7? = 70.0 with uncertainty flag.
-6? = 60.0 with uncertainty flag.
+7? = 70.0 with **score** uncertainty.
+6? = 60.0 with **score** uncertainty.
+7-? = 70 with `-` applied; **minus** is uncertain (not score uncertainty).
 
 ## Hard Rules
 
@@ -50,17 +57,41 @@ music score, so thematic/blended rounds can be scored without an LLM when you
 already know the fit. The fit signal feeds the same shape the LLM fit JSON
 produces (`fitScore` / `fitTier` / `gate`, `fitSource: 'manual'`).
 
-- **Explicit fit score:** `8 fit`, `85 fit`, or the reverse `fit 8` — same
-  digit-scaling as music (`8`→80, `85`→85, `855`→85.5). So `7 music, 8 fit` ⇒
-  music 70, fit 80. A bare `8 fit` with no other number is a fit note only, not a
-  music score.
-- **Fit tier word:** `excellent | strong | solid | moderate | weak`, with
-  synonyms (`perfect`→excellent, `single keyword`→weak, `on-theme`→solid, …).
-  Tier words are only honored when the comment is **armed** with the literal word
-  `fit` (e.g. "strong fit"), so prose like "solid track" is never a fit grade.
-- **Gate flag:** `pass` / `maybe` (`questionable`, `borderline`, `stretch`) /
-  `fail` (`off-theme`, `invalid`). `fail > maybe > pass` when more than one matches.
-- **Thematic, fit unknown:** a `music`-labelled number with no fit token marks the
-  song `needsResearch` (in thematic mode) so the LLM step fills it.
-- **Precedence:** a deliberate manual fit signal wins; the LLM fit JSON fills only
-  fit-silent songs.
+### Peel-first (scoring line)
+
+Comments split on the **first newline**. Line 1 is the **scoring line**; the
+submission tail is never scanned for fit/tier/gate.
+
+1. **First number** on the scoring line (+ mods) → **music** `score`. Always — leading
+   `fit` / `music` / prose does not change which digit is music.
+2. **Remainder** of the scoring line (after that number) → fit signals.
+
+There is no fit-only notation; music is always the first number you write.
+
+| Comment           | Music | Fit (from remainder)                            |
+| ----------------- | ----- | ----------------------------------------------- |
+| `75`              | 75    | —                                               |
+| `fit 8` / `8 fit` | 80    | —                                               |
+| `78 music. 8 fit` | 78    | 80 (explicit `8 fit` in remainder)              |
+| `75. 80`          | 75    | 80 (2nd # in remainder; requires `--fit-words`) |
+| `80. fit 75`      | 80    | 75 (2nd # in remainder; requires `--fit-words`) |
+| `76 fit bonus`    | 76    | shorthand → strong / 85                         |
+
+### Fit channels (remainder unless noted)
+
+- **Explicit fit number:** `N fit` / `fit N` in the remainder — same digit-scaling
+  as music (`8`→80). Not matched when part of a shorthand phrase (`fit bonus`).
+- **Second number:** bare 2nd # in remainder → fitScore when `--fit-words` is on.
+- **Fit shorthand:** controlled multi-word phrases in the **remainder** after the
+  music number (e.g. `76 fit bonus` → strong / 85). Not valid without a music score.
+- **Tier / gate words:** only when `--fit-words` is passed; scanned on the full
+  scoring line. Tier synonyms: `excellent | strong | solid | moderate | weak` (+ synonyms).
+  Gate: `pass` / `maybe` / `fail` (`fail > maybe > pass`). Tier + `negative` is ignored.
+  Without `--fit-words`, tier/gate vocabulary in comments is ignored (no over-matching).
+
+### Other
+
+- **Thematic, fit unknown:** a music score with no fit signal marks the song
+  `needsResearch` (in thematic mode) so the LLM step fills it.
+- **Precedence:** manual fit wins; the LLM fit JSON fills only fit-silent songs.
+- **CLI:** `just parse <name> --fit-words` / `ml parse <name> --fit-words`.

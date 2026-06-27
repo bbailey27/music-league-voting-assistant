@@ -25,12 +25,13 @@ test('lenient parser anchors on the N/1000 footer (Live Text K-pop sample)', () 
   assert.equal(byTitle('QUINTESSENCE').userComment, '67 fake score'); // 13/1000
   assert.equal(byTitle('QUINTESSENCE').score, 67);
 
-  // "7-?" -> 70 with minus + uncertain modifiers.
+  // "7-?" -> 70 with minus; ? qualifies the minus, not the score.
   const maria = byTitle('María');
   assert.equal(maria.userComment, '7-?');
   assert.equal(maria.score, 70);
   assert.equal(maria.minus, true);
-  assert.equal(maria.uncertain, true);
+  assert.equal(maria.minusUncertain, true);
+  assert.equal(maria.uncertain, false);
 
   // Empty boxes (0/1000 + "What did you think about this song?") -> needs input.
   assert.equal(byTitle('MOVE').userComment, '');

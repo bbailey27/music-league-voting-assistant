@@ -45,6 +45,25 @@ test('scoreComment modifiers', () => {
   const q = scoreComment('74?', 'objective');
   assert.equal(q.uncertain, true);
   assert.equal(q.score, 74);
+  assert.equal(q.plusUncertain, false);
+
+  const plusQ = scoreComment('75+?', 'objective');
+  assert.equal(plusQ.score, 75);
+  assert.equal(plusQ.plus, true);
+  assert.equal(plusQ.plusUncertain, true);
+  assert.equal(plusQ.uncertain, false);
+
+  const minusQ = scoreComment('7-?', 'objective');
+  assert.equal(minusQ.score, 70);
+  assert.equal(minusQ.minus, true);
+  assert.equal(minusQ.minusUncertain, true);
+  assert.equal(minusQ.uncertain, false);
+
+  const playQ = scoreComment('78 music play?', 'objective');
+  assert.equal(playQ.playlistAdd, true);
+  assert.equal(playQ.playlistUncertain, true);
+  assert.equal(playQ.uncertain, false);
+
   assert.equal(scoreComment('78 music play', 'objective').playlistAdd, true);
 });
 
@@ -64,8 +83,6 @@ test('scoreComment disqualification + needs-input', () => {
 });
 
 test('scoreComment manual fit notation', () => {
-  // Explicit fit number alongside a music score (digit-scaled like music).
-  // Primary style is number-then-word ("8 fit"); the reverse ("fit 8") also parses.
   const both = scoreComment('78 music, 8 fit', 'subjective');
   assert.equal(both.score, 78, 'music score preserved');
   assert.equal(both.fitScore, 80, '8 fit -> 80');
@@ -74,19 +91,18 @@ test('scoreComment manual fit notation', () => {
   assert.equal(reversed.score, 78, 'reverse ordering: music score preserved');
   assert.equal(reversed.fitScore, 80, 'reverse ordering: fit 8 -> 80');
 
-  // "8 fit" alone is a fit note, not a music score.
-  const fitOnly = scoreComment('8 fit', 'subjective');
-  assert.equal(fitOnly.score, null, 'no music score leaks from the fit token');
-  assert.equal(fitOnly.fitScore, 80);
+  const loneEightFit = scoreComment('8 fit', 'subjective');
+  assert.equal(loneEightFit.score, 80, 'first number is music');
+  assert.equal(loneEightFit.fitScore, null);
 
-  // Tier word, but only when armed with the word "fit".
-  assert.equal(scoreComment('strong fit', 'subjective').fitTier, 'strong');
+  assert.equal(scoreComment('strong fit', 'subjective').fitTier, null, 'tier words off by default');
+  assert.equal(scoreComment('strong fit', 'subjective', { fitWords: true }).fitTier, 'strong');
   assert.equal(scoreComment('solid track', 'subjective').fitTier, null, 'prose is not a fit grade');
 
-  // Gate flags map straight through.
-  assert.equal(scoreComment('pass', 'objective').gate, 'pass');
-  assert.equal(scoreComment('borderline, maybe', 'subjective').gate, 'maybe');
-  assert.equal(scoreComment('off-theme', 'subjective').gate, 'fail');
+  assert.equal(scoreComment('pass', 'objective', { fitWords: true }).gate, 'pass');
+  assert.equal(scoreComment('borderline, maybe', 'subjective', { fitWords: true }).gate, 'maybe');
+  assert.equal(scoreComment('off-theme', 'subjective', { fitWords: true }).gate, 'fail');
+  assert.equal(scoreComment('pass', 'objective').gate, null, 'gate words off by default');
 });
 
 test('buildJsonPayload persists needsResearch per song', () => {
