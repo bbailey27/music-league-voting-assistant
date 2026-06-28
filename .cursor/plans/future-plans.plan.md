@@ -42,6 +42,7 @@ Output snapshot regression test (diff-based): see
 7. Clear documentation for available flags in command line mode and what they do. More CLI accessibility for re-runs etc. Both music only and fit rounds.
 8. Surface the fit comment structure doc in the web app
 9. Turn the commands + options into clear UI elements in the web app (likely collapsed until needed) since there's no CLI or LLM to rely on there.
+10. Improve pick - don't think it did the pins or reflow at all (ah it didn't give a warning about a flag with a single dash). when it did pin properly it still only outputted the counts from the original and said there were tweaks. didn't cli output the tiers after the tweaks or anything. should cli output the new ranked table and ballot table. should accept fuzzy round names or track current round (last used with run) and assume that unless specified. said to use --option but from the error determined the usage is just A not --option A. maybe because it's mixing the just recipe inputs vs the ml direct command inputs when it prints things. stop over-clarifying that it no longer re-parses. cli and md tables should display my full comment or at least the parsed modifiers. Said 'needs score' in tiny next in the comment section of the table. that should be super big and obvious in the command line and llm outputs as immediate action before proceeding. maybe a bonus warning when running pick "are you sure you want to finalize with songs missing music scores"
 
 ## Deferred (may not ship)
 
