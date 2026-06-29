@@ -25,6 +25,7 @@ import { ensureDateSlugForInput } from './maintain-rounds.mjs';
 import {
   parsePins,
   pinCapError,
+  pinEligibilityError,
   parseTierCount,
   parseBucketCount,
   parseFavoriteBand,
@@ -33,12 +34,15 @@ import {
   buildGate,
 } from './parse/cli-flags.mjs';
 import { printTradeoffCli, printBallotCli } from './parse/cli-print.mjs';
+import { pickPromptLine } from './cli-commands.mjs';
+import { warnMissingScoresCli } from './parse/cli-warn.mjs';
 import { parseRoundHtml, warnBudgetMismatch, slimProfile } from './parse/pipeline.mjs';
 import { reconcileOptionPins, resolveOptionPick } from './round/pick.mjs';
 
 export {
   parsePins,
   pinCapError,
+  pinEligibilityError,
   parseTierCount,
   parseBucketCount,
   parseFavoriteBand,
@@ -234,7 +238,7 @@ async function main() {
   const cap = parsed.budget.maxUpvotesPerSong ?? Infinity;
   const { tradeoffs } = allocate(parsed.songs, budget, cap, profile);
 
-  const ctx = { ...parsed, mode: args.mode, tradeoffs, pick: null };
+  const ctx = { ...parsed, mode: args.mode, tradeoffs, pick: null, roundId };
   const md = buildMarkdown(ctx);
 
   const paths = musicPaths(roundId);
@@ -248,13 +252,16 @@ async function main() {
     console.log(`Wrote ${paths.json}`);
   }
 
+  warnMissingScoresCli(parsed.songs);
+
   const calls = tradeoffs.filter((t) => t.kind !== 'budget-mismatch');
   if (calls.length) {
-    console.log(`\n${calls.length} tradeoff(s) need your call — use just pick ${roundId} <A|B|C> --reason "…"`);
-    for (const t of calls) printTradeoffCli(t);
+    console.log(`\n${pickPromptLine(roundId, calls.length)}`);
+    for (const t of calls) printTradeoffCli(t, roundId, parsed.songs, parsed.ownSongs);
   }
-  printBallotCli(tradeoffs, parsed.songs, parsed.ownSongs);
+  printBallotCli(tradeoffs, parsed.songs, parsed.ownSongs, roundId);
   warnBudgetMismatch(tradeoffs);
+  warnMissingScoresCli(parsed.songs);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

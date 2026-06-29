@@ -1,5 +1,6 @@
 // Report rendering and fit-research orchestration.
 
+import { formatPickCmd } from '../cli-commands.mjs';
 import { cell, formatScore } from './format.mjs';
 import { tiebreakRank } from './comment.mjs';
 import { DEFAULT_COMBINED_WEIGHTS } from './fit-signal.mjs';
@@ -158,7 +159,7 @@ function renderTable(L, headers, aligns, rows, indent = '') {
 // cell is the votes that option gives the song. This reads as a direct
 // "what changes between options" diff instead of three separate per-option blocks.
 const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
-function renderTierStructure(L, t) {
+function renderTierStructure(L, t, roundId = null) {
   const opts = (t.options || []).filter((o) => Array.isArray(o.perSong) && o.perSong.length);
   if (!opts.length) {
     for (const o of t.options || []) L.push(`  - ${o.label ?? o}`);
@@ -185,10 +186,13 @@ function renderTierStructure(L, t) {
   renderTable(L, headers, aligns, rows, '  ');
   L.push('');
   opts.forEach((o, i) => {
+    const cmd = roundId
+      ? formatPickCmd(roundId, OPTION_LETTERS[i])
+      : `just pick <round> ${OPTION_LETTERS[i]}`;
     L.push(
       `  - **${OPTION_LETTERS[i]}**${i === 0 ? ' (default)' : ''} — ${o.tierCount} tier${
         o.tierCount === 1 ? '' : 's'
-      }, \`${o.shape ?? `bucket-count ${o.bucketCount}`}\`, \`--option ${OPTION_LETTERS[i]}\``
+      }, \`${o.shape ?? `bucket-count ${o.bucketCount}`}\`, \`${cmd}\``
     );
   });
   L.push('');
@@ -235,7 +239,7 @@ export function renderPickMarkdown(L, pick) {
   L.push('');
 }
 
-export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mode, tradeoffs, ownSongs = [], pick = null }) {
+export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mode, tradeoffs, ownSongs = [], pick = null, roundId = null }) {
   const scored = songs.filter((s) => s.score != null).sort(rankedSort);
   const disqualified = songs.filter((s) => s.isDisqualified);
   const needsInput = songs.filter((s) => s.needsUserInput);
@@ -316,9 +320,9 @@ export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mo
 
   // Flag lists
   if (needsInput.length) {
-    L.push('## Needs my score (blank boxes)');
+    L.push('## ⚠ Needs my score (blank boxes) — fix before pick/finalize');
     L.push('');
-    for (const s of needsInput) L.push(`- ${cell(s.title)} — ${cell(s.artist)}`);
+    for (const s of needsInput) L.push(`- **#${s.rawOrderIndex}** ${cell(s.title)} — ${cell(s.artist)}`);
     L.push('');
   }
   if (disqualified.length) {
@@ -341,7 +345,7 @@ export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mo
     L.push('');
     for (const t of tradeoffs) {
       L.push(`- ${cell(t.question)}`);
-      if (t.kind === 'tier-structure') renderTierStructure(L, t);
+      if (t.kind === 'tier-structure') renderTierStructure(L, t, roundId);
       else for (const o of t.options || []) L.push(`  - ${cell(o.label)}`);
     }
     L.push('');

@@ -10,6 +10,8 @@ import { pathToFileURL } from 'node:url';
 import { mergeFitJson, enrichProfileWithBudget } from './score-core.mjs';
 import { matchFlag } from './cli-args.mjs';
 import { musicPaths, fitPaths, scoresPaths } from './paths.mjs';
+import { printTradeoffCli, printBallotCli } from './parse/cli-print.mjs';
+import { pickPromptLine } from './cli-commands.mjs';
 import {
   parsePins,
   pinCapError,
@@ -168,7 +170,9 @@ async function main() {
 
   const calls = (tradeoffs || []).filter((t) => t.kind !== 'budget-mismatch');
   if (calls.length) {
-    console.log(`\n${calls.length} tradeoff(s) need your call — use just pick ${roundId} <A|B|C> --reason "…"`);
+    console.log(`\n${pickPromptLine(roundId, calls.length)}`);
+    for (const t of calls) printTradeoffCli(t, roundId, parsed.songs, parsed.ownSongs);
+    printBallotCli(tradeoffs, parsed.songs, parsed.ownSongs, roundId);
   }
 }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // JSON-only distribution pick: load music.json (+ fit.json for thematic), replay
-// allocation, apply --option, write pick + refreshed md/json + picks.jsonl.
+// allocation, apply chosen letter, write pick + refreshed md/json + picks.jsonl.
 // Never reads round HTML.
 //
 // Usage: node scripts/pick-round.mjs <round-id> <A|B|C> [--reason "…"]
@@ -16,11 +16,12 @@ import {
   mergeFitJson,
   enrichProfileWithBudget,
 } from './score-core.mjs';
-import { matchFlag, matchRestFlag } from './cli-args.mjs';
+import { matchFlag, matchRestFlag, warnUnknownShortFlags } from './cli-args.mjs';
 import { musicPaths, fitPaths, scoresPaths } from './paths.mjs';
 import {
   parsePins,
   pinCapError,
+  pinEligibilityError,
   parseTierCount,
   parseBucketCount,
   parseFavoriteBand,
@@ -29,6 +30,8 @@ import {
   buildGate,
 } from './parse/cli-flags.mjs';
 import { applyOptionPick, recordPickToTrainingLog } from './round/pick.mjs';
+import { printAppliedAllocationCli } from './parse/cli-print.mjs';
+import { warnPickWithMissingScores } from './parse/cli-warn.mjs';
 
 function parseArgs(argv) {
   const args = {
@@ -151,10 +154,12 @@ function slimProfile(profile) {
 }
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  warnUnknownShortFlags(argv);
+  const args = parseArgs(argv);
   if (!args.roundId || args.option == null) {
     console.error(
-      'Usage: node scripts/pick-round.mjs <round-id> <A|B|C> [--reason "…"] [--pin …] [--down-shape …] [--scores] [--dry-run]'
+      'Usage: just pick <round-id> <A|B|C> [--reason "…"] [--pin …] [--down-shape …] [--scores] [--dry-run]'
     );
     process.exit(1);
   }
@@ -182,6 +187,16 @@ async function main() {
     process.exit(1);
   }
 
+  const pinErr = pinEligibilityError(
+    songsFromPayload(musicData),
+    profile.overrides,
+    profile.downOverrides
+  );
+  if (pinErr) {
+    console.error(pinErr);
+    process.exit(1);
+  }
+
   if (useMerge) {
     let fitData;
     try {
@@ -197,6 +212,8 @@ async function main() {
       ownSongs: musicData.ownSongs || [],
     };
     const mergeProfile = { ...profile, rankBy: profile.rankBy || 'combined' };
+    warnPickWithMissingScores(parsed.songs);
+
     let { tradeoffs } = mergeFitJson(parsed, fitData, mergeProfile);
     const picked = applyOptionPick({
       optionSpec: args.option,
@@ -208,6 +225,7 @@ async function main() {
       songs: parsed.songs,
       cap: upCap,
       exitOnError: !args.dryRun,
+      roundId,
     });
     if (args.dryRun) {
       if (picked.error) console.error(picked.error);
@@ -220,11 +238,15 @@ async function main() {
     await mkdir(scoresPaths(roundId).dir, { recursive: true });
     await writeFile(scoresPaths(roundId).json, JSON.stringify(fitData, null, 2), 'utf8');
     console.log(`Wrote ${scoresPaths(roundId).json}`);
+    printAppliedAllocationCli(parsed.songs, parsed.ownSongs, picked.pick);
+    warnPickWithMissingScores(parsed.songs);
     await recordPickToTrainingLog(roundId, fitData.songs, picked.pick);
     return;
   }
 
   const songs = songsFromPayload(musicData);
+  warnPickWithMissingScores(songs);
+
   const upBudget = budget?.upvoteBankSize ?? 0;
   let { tradeoffs } = allocate(songs, upBudget, upCap, profile);
 
@@ -238,6 +260,7 @@ async function main() {
     songs,
     cap: upCap,
     exitOnError: !args.dryRun,
+    roundId,
   });
 
   if (args.dryRun) {
@@ -257,6 +280,7 @@ async function main() {
     mode: musicData.mode,
     tradeoffs,
     pick: picked.pick,
+    roundId,
   };
   const md = buildMarkdown(ctx);
   const paths = musicPaths(roundId);
@@ -267,6 +291,8 @@ async function main() {
   const payload = buildJsonPayload({ ...ctx, profile: musicData.profile ?? slimProfile(profile) });
   await writeFile(paths.json, JSON.stringify(payload, null, 2), 'utf8');
   console.log(`Wrote ${paths.json}`);
+  printAppliedAllocationCli(songs, musicData.ownSongs || [], picked.pick);
+  warnPickWithMissingScores(songs);
   await recordPickToTrainingLog(roundId, songs, picked.pick);
 }
 
