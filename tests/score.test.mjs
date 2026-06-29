@@ -23,6 +23,7 @@ import {
   resolveOptionPick,
   reconcileOptionPins,
   pinCapError,
+  pinEligibilityError,
 } from '../scripts/parse-round.mjs';
 import { buildComboBallot } from '../scripts/render-html-shared.mjs';
 
@@ -468,6 +469,53 @@ test('reconcileOptionPins respects the per-song cap when promoting', () => {
   assert.equal(ov[2], 2, 'promotion stops at the cap');
 });
 
+test('reconcileOptionPins injects out-of-menu pins (blank-score slots) and reflows', () => {
+  const perSong = [
+    { rawOrderIndex: 20, votes: 2 },
+    { rawOrderIndex: 26, votes: 2 },
+    { rawOrderIndex: 22, votes: 2 },
+  ];
+  const ov = reconcileOptionPins(perSong, { 20: 1, 26: 1, 11: 1 });
+  assert.equal(ov[11], 1, 'blank slot pin is kept');
+  assert.equal(ov[20], 1);
+  assert.equal(ov[26], 1);
+  assert.equal(Object.values(ov).reduce((a, b) => a + b, 0), 6, 'budget preserved');
+});
+
+test('pinEligibilityError allows pins on blank-score songs', () => {
+  const songs = [{ rawOrderIndex: 11, title: 'crystals of time', needsUserInput: true }];
+  assert.equal(pinEligibilityError(songs, { 11: 1 }, undefined), null);
+});
+
+test('pinEligibilityError still rejects disqualified pins', () => {
+  const songs = [{ rawOrderIndex: 3, title: 'nope', isDisqualified: true }];
+  assert.match(pinEligibilityError(songs, { 3: 1 }, undefined), /disqualified/i);
+});
+
+test('option pick with blank-score pin keeps bank exact without spill-bumping the top', () => {
+  const base = [
+    { rawOrderIndex: 22, title: 'POSE', score: 78 },
+    { rawOrderIndex: 18, title: 'Sym', score: 76.6 },
+    { rawOrderIndex: 19, title: 'Acid', score: 75.7 },
+    { rawOrderIndex: 20, title: 'Bass', score: 75 },
+    { rawOrderIndex: 26, title: 'Points', score: 75 },
+    { rawOrderIndex: 5, title: 'Happening', score: 74.5 },
+    { rawOrderIndex: 13, title: '1979', score: 74 },
+    { rawOrderIndex: 25, title: 'Armed', score: 74 },
+    { rawOrderIndex: 10, title: '50mg', score: 69 },
+    { rawOrderIndex: 11, title: 'crystals', needsUserInput: true },
+  ].map((s) => ({ ...s, finalVotes: 0, finalDownvotes: 0, isDisqualified: false, isOwn: false }));
+  const { tradeoffs } = allocate([...base], 13, 5, { shape: 'auto' });
+  const ts = tradeoffs.find((t) => t.kind === 'tier-structure');
+  assert.ok(ts?.options?.length, 'tier-structure surfaced');
+  const { overrides } = resolveOptionPick(tradeoffs, 'A', { 20: 1, 26: 1, 19: 1, 11: 1 }, 5);
+  const field = base.map((s) => ({ ...s, finalVotes: 0, finalDownvotes: 0 }));
+  allocate(field, 13, 5, { shape: 'auto', overrides });
+  assert.equal(field.find((s) => s.rawOrderIndex === 11).finalVotes, 1);
+  assert.equal(field.find((s) => s.rawOrderIndex === 22).finalVotes, 2, 'POSE not spill-bumped');
+  assert.equal(sum(field), 13);
+});
+
 test('resolveOptionPick + option pin stays budget-exact end to end (no overshoot)', () => {
   const scores = [78, 77, 76, 75, 74, 73, 72, 71, 70, 69];
   const { tradeoffs } = allocate(mk(scores), 14, 5, { shape: 'auto' });
@@ -496,7 +544,7 @@ test('budget-mismatch is flagged when a bare pin overshoots the bank', () => {
 test('budget-mismatch is flagged when downvote pins underfill the down bank', () => {
   const songs = mk([78, 76, 74, 72, 70, 68]);
   // Down bank is 5 but a single down-pin of 1 is the only downvote committed.
-  const { tradeoffs } = allocate(songs, 6, 5, {
+  const { tradeoffs } = allocate(songs, 5, 5, {
     shape: 'auto',
     downvotesEnabled: true,
     downvoteBudget: 5,
@@ -1146,6 +1194,81 @@ test('normalization: average contender sits near 75 and a clear standout reaches
   assert.ok(c[0] >= 80, 'a both-axes standout reaches the 80 favorite anchor');
 });
 
+test('forced spill lands on DQ before budget-mismatch', () => {
+  const songs = [
+    { title: 'a', rawOrderIndex: 0, score: 78, finalVotes: 0, finalDownvotes: 0 },
+    { title: 'b', rawOrderIndex: 1, score: 75, finalVotes: 0, finalDownvotes: 0 },
+    {
+      title: 'dq',
+      rawOrderIndex: 2,
+      score: null,
+      isDisqualified: true,
+      finalVotes: 0,
+      finalDownvotes: 0,
+    },
+  ];
+  const { tradeoffs } = allocate(songs, 6, 2, { shape: 'auto' });
+  assert.equal(sum(songs), 6);
+  assert.equal(songs[2].finalVotes, 2, 'overflow reaches DQ at cap before giving up');
+  assert.ok(tradeoffs.some((t) => t.kind === 'forced-spill'));
+});
+
+test('forced spill lands on DQ when downvotes enabled', () => {
+  const songs = [
+    { title: 'a', rawOrderIndex: 0, score: 78, finalVotes: 0, finalDownvotes: 0 },
+    { title: 'b', rawOrderIndex: 1, score: 75, finalVotes: 0, finalDownvotes: 0 },
+    {
+      title: 'dq',
+      rawOrderIndex: 2,
+      score: null,
+      isDisqualified: true,
+      finalVotes: 0,
+      finalDownvotes: 0,
+    },
+  ];
+  const { tradeoffs } = allocate(songs, 6, 2, {
+    shape: 'auto',
+    downvotesEnabled: true,
+    downvoteBudget: 1,
+    downvoteCap: 1,
+  });
+  assert.equal(sum(songs), 6);
+  assert.equal(songs[2].finalVotes, 2);
+  assert.ok(tradeoffs.some((t) => t.kind === 'forced-spill'));
+});
+
+test('forced spill can land on blank-score songs when the bank overflows', () => {
+  const songs = [
+    { title: 'a', rawOrderIndex: 0, score: 78, finalVotes: 0, finalDownvotes: 0 },
+    { title: 'b', rawOrderIndex: 1, score: 75, finalVotes: 0, finalDownvotes: 0 },
+    { title: 'blank', rawOrderIndex: 2, needsUserInput: true, finalVotes: 0, finalDownvotes: 0 },
+  ];
+  const { tradeoffs } = allocate(songs, 6, 2, { shape: 'auto' });
+  assert.equal(sum(songs), 6);
+  assert.equal(songs[2].finalVotes, 2);
+  assert.ok(tradeoffs.some((t) => t.kind === 'forced-spill'));
+});
+
+test('forced spill fills blank-score slots before DQ', () => {
+  const songs = [
+    { title: 'a', rawOrderIndex: 0, score: 78, finalVotes: 0, finalDownvotes: 0 },
+    { title: 'blank', rawOrderIndex: 1, needsUserInput: true, finalVotes: 0, finalDownvotes: 0 },
+    {
+      title: 'dq',
+      rawOrderIndex: 2,
+      score: null,
+      isDisqualified: true,
+      finalVotes: 0,
+      finalDownvotes: 0,
+    },
+  ];
+  allocate(songs, 5, 2, { shape: 'auto' });
+  assert.equal(songs[0].finalVotes, 2);
+  assert.equal(songs[1].finalVotes, 2, 'blank absorbs overflow before DQ');
+  assert.equal(songs[2].finalVotes, 1, 'DQ only after blank is capped');
+  assert.equal(sum(songs), 5);
+});
+
 test('budget is always fully spent, spilling onto invalid as a last resort', () => {
   // Thematic round where only a few songs pass the gate and a low per-song cap
   // forces the leftover onto gated-out songs (you still must cast every vote).
@@ -1261,20 +1384,22 @@ test('downvotes target the lowest-ranked eligible songs without upvotes', () => 
   assert.equal(best.finalDownvotes || 0, 0, 'top song is not downvoted');
 });
 
-test('downvote spill spends the bank when caps bind', () => {
+test('caps are hard: budget-mismatch when cap × slots cannot hold the bank', () => {
   const songs = mk([78, 76, 74, 72, 70, 68]);
-  allocate(
+  const { tradeoffs } = allocate(
     songs,
     6,
     3,
     downProfile({ downvoteBudget: 8, downvoteCap: 1 })
   );
-  assert.equal(sum(songs), 6);
-  assert.equal(sumDown(songs), 8);
-  assert.ok(
-    songs.some((s) => (s.finalDownvotes || 0) > 1),
-    'per-song cap is relaxed when the downvote bank exceeds slice capacity'
-  );
+  assert.ok(songs.every((s) => s.finalVotes <= 3));
+  assert.ok(songs.every((s) => (s.finalDownvotes || 0) <= 1));
+  assert.equal(sum(songs), 3);
+  assert.equal(sumDown(songs), 5);
+  const bm = tradeoffs.find((t) => t.kind === 'budget-mismatch');
+  assert.ok(bm && !bm.over, 'under-spent banks are flagged, never cap-busted');
+  assert.match(bm.question, /upvotes 3\/6/);
+  assert.match(bm.question, /downvotes 5\/8/);
 });
 
 test('downvotes disabled leaves behavior unchanged', () => {
@@ -1375,16 +1500,16 @@ test('downvote pin fixes a song\'s downvotes and forces it off the upvote axis',
 
 test('downvote pin is never topped up past its magnitude by spill', () => {
   const songs = mk([90, 85, 80, 75, 70, 65, 60, 55]);
-  // Big bank, generous cap: spill would otherwise pile onto the worst songs.
   allocate(
     songs,
-    6,
+    2,
     3,
-    downProfile({ downvoteBudget: 8, downvoteCap: 4, downShape: 'concentrated', downOverrides: { 7: 1 } })
+    downProfile({ downvoteBudget: 8, downvoteCap: 2, downShape: 'concentrated', downOverrides: { 7: 1 } })
   );
-  const pinned = songs.find((s) => s.rawOrderIndex === 7); // the worst song, pinned low
+  const pinned = songs.find((s) => s.rawOrderIndex === 7);
   assert.equal(pinned.finalDownvotes, 1, 'spill respects the pin instead of topping it up');
-  assert.equal(sumDown(songs), 8, 'remaining bank shaped/spilled onto the others');
+  assert.ok(songs.every((s) => (s.finalDownvotes || 0) <= 2), 'down cap is never exceeded');
+  assert.equal(sumDown(songs), 8, 'remaining bank shaped/spilled onto other zero-up songs');
 });
 
 test('downvote pin appears in every surfaced down-structure option', () => {

@@ -3,6 +3,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { buildPickRecord } from '../score-core.mjs';
+import { pickUsageError } from '../cli-commands.mjs';
 import { scoresPaths } from '../paths.mjs';
 
 const TRADEOFF_OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -46,18 +47,29 @@ export function reconcileOptionPins(perSong, pins, cap = Infinity) {
   delta = total() - budget;
   while (delta < 0) {
     let moved = false;
-    for (const unfundedOnly of [true, false]) {
-      for (let k = 0; k < order.length && delta < 0; k++) {
-        const i = order[k];
-        if (pinned.has(i)) continue;
-        const cur = votes.get(i) || 0;
-        if (unfundedOnly && cur !== 0) continue;
-        if (cur >= cap) continue;
-        votes.set(i, cur + 1);
-        delta++;
-        moved = true;
-      }
-      if (delta >= 0) break;
+    for (const i of order) {
+      if (pinned.has(i)) continue;
+      const cur = votes.get(i) || 0;
+      if (cur !== 0 || cur >= cap) continue;
+      votes.set(i, 1);
+      delta++;
+      moved = true;
+      break;
+    }
+    if (moved) continue;
+    const unfunded = order.filter(
+      (i) => !pinned.has(i) && (votes.get(i) || 0) > 0 && (votes.get(i) || 0) < cap
+    );
+    if (!unfunded.length) break;
+    const vMin = Math.min(...unfunded.map((i) => votes.get(i) || 0));
+    for (const i of order) {
+      if (pinned.has(i)) continue;
+      const cur = votes.get(i) || 0;
+      if (cur !== vMin || cur >= cap) continue;
+      votes.set(i, cur + 1);
+      delta++;
+      moved = true;
+      break;
     }
     if (!moved) break;
   }
@@ -65,7 +77,7 @@ export function reconcileOptionPins(perSong, pins, cap = Infinity) {
   return Object.fromEntries(order.map((i) => [i, votes.get(i) || 0]));
 }
 
-export function resolveOptionPick(tradeoffs, optionSpec, baseOverrides = {}, cap = Infinity) {
+export function resolveOptionPick(tradeoffs, optionSpec, baseOverrides = {}, cap = Infinity, roundId = null) {
   const ts = (tradeoffs || []).find((t) => t.kind === 'tier-structure');
   const presented = (ts?.options || []).filter((o) => Array.isArray(o.perSong) && o.perSong.length);
   const idx = resolveOptionIndex(optionSpec, presented.length);
@@ -74,9 +86,12 @@ export function resolveOptionPick(tradeoffs, optionSpec, baseOverrides = {}, cap
       idx: null,
       presented,
       overrides: null,
-      error: `--option "${optionSpec}" is not available (this round has ${presented.length || 0} option(s): ${
-        presented.map((_, i) => String.fromCharCode(65 + i)).join(', ') || 'none'
-      }).`,
+      error: pickUsageError(
+        roundId,
+        optionSpec,
+        presented.length,
+        presented.map((_, i) => String.fromCharCode(65 + i))
+      ),
     };
   }
   const chosen = presented[idx];
@@ -94,10 +109,17 @@ export function applyOptionPick({
   songs,
   cap = Infinity,
   exitOnError = true,
+  roundId = null,
 }) {
   const hasPins = baseOverrides && Object.keys(baseOverrides).length > 0;
   const menuTradeoffs = hasPins ? reallocate(undefined) : initialTradeoffs;
-  const { idx, presented, overrides, error } = resolveOptionPick(menuTradeoffs, optionSpec, baseOverrides, cap);
+  const { idx, presented, overrides, error } = resolveOptionPick(
+    menuTradeoffs,
+    optionSpec,
+    baseOverrides,
+    cap,
+    roundId
+  );
   if (error) {
     if (exitOnError) {
       console.error(error);

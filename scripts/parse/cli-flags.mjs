@@ -40,6 +40,30 @@ export function pinCapError(overrides, downOverrides, upCap, downCap) {
   return check(overrides, upCap, 'upvotes', '') || check(downOverrides, downCap, 'downvotes', '-');
 }
 
+/** Reject pins on songs that cannot receive allocation votes (own, unknown, DQ). */
+export function pinEligibilityError(songs, overrides, downOverrides) {
+  const byIdx = new Map((songs || []).map((s) => [s.rawOrderIndex, s]));
+  const check = (map, sign) => {
+    if (!map) return null;
+    for (const [k, v] of Object.entries(map)) {
+      const i = Number(k);
+      const s = byIdx.get(i);
+      const label = `#${i}${s?.title ? ` ${s.title}` : ''}`;
+      if (!s) {
+        return `Invalid --pin ${i}:${sign}${v} — ${label} is not in this round.`;
+      }
+      if (s.isOwn) {
+        return `Invalid --pin ${i}:${sign}${v} — ${label} is your own submission (not votable).`;
+      }
+      if (s.isDisqualified) {
+        return `Invalid --pin ${i}:${sign}${v} — ${label} is disqualified and cannot receive votes.`;
+      }
+    }
+    return null;
+  };
+  return check(overrides, '') || check(downOverrides, '-');
+}
+
 function parseCountFlag(spec, flag) {
   if (spec == null || spec === '') return undefined;
   const n = Number(spec);

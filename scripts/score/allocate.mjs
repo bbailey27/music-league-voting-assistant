@@ -242,7 +242,7 @@ function flagBudgetMismatch(songs, upBudget, profile, tradeoffs) {
     question:
       `${over ? '⛔ OVER BUDGET' : '⚠️ Bank not fully spent'}: ${parts.join(', ')}. ` +
       `${over ? 'Exceeding a bank is never a valid ballot — ' : ''}` +
-      `a pin likely over/under-filled a bank; rebalance so each bank totals exactly.`,
+      `rebalance so each bank totals exactly (pins, or caps × eligible slots, may block full spend).`,
     options: [],
   });
 }
@@ -293,9 +293,14 @@ export function allocate(songs, budget, cap = Infinity, profile = {}) {
   }
 
   // Manual overrides pin a song's votes; the remaining budget is shaped around
-  // them. This is also how the web re-runs allocation after a tradeoff pick.
+  // them. Blank-score songs can receive an explicit --pin (manual ballot slot).
   const overrides = profile.overrides || {};
-  const pinned = scored.filter((s) => Number.isFinite(overrides[s.rawOrderIndex]));
+  const pinned = songs.filter((s) => {
+    if (s.isDisqualified || s.isOwn) return false;
+    if (!Number.isFinite(overrides[s.rawOrderIndex])) return false;
+    if (s.needsUserInput) return overrides[s.rawOrderIndex] > 0;
+    return scored.includes(s);
+  });
   for (const s of pinned) s.finalVotes = Math.max(0, Math.min(overrides[s.rawOrderIndex], cap));
   const pinnedTotal = pinned.reduce((a, s) => a + s.finalVotes, 0);
   budget = Math.max(0, budget - pinnedTotal);
@@ -548,7 +553,7 @@ function allocateDownvotes(songs, budget, cap, profile, tradeoffs, downSet) {
     if (distinct.length >= 2) {
       tradeoffs.push({
         kind: 'down-structure',
-        question: `Which downvote shape? Default is ${DOWN_SHAPE_LABEL[chosen]}; pick another with --down-shape <concentrated|flat|curved>.`,
+        question: `Which downvote shape? Default is ${DOWN_SHAPE_LABEL[chosen]}; record with just pick <round> <A|B|C> --down-shape <concentrated|flat|curved>.`,
         options: distinct.map((c) => ({
           label: `${DOWN_SHAPE_LABEL[c.shape]} — ${summarizeDownPerSong(c.perSong)}`,
           value: c.shape,
@@ -763,18 +768,6 @@ function spillDownRemainder(songs, totalBudget, cap, profile, tradeoffs, chosen,
     }
   }
 
-  // Cap-bound: relax cap on worst songs in the down slice (still disjoint from upvotes).
-  if (remaining > 0) {
-    const order = [...downSet].filter(downEligible).sort(byWorst);
-    let j = 0;
-    while (remaining > 0 && order.length) {
-      order[j % order.length].finalDownvotes = (order[j % order.length].finalDownvotes || 0) + 1;
-      remaining--;
-      j++;
-      if (j > order.length * cap * 4) break;
-    }
-  }
-
   if (spilledOutside > 0) {
     tradeoffs.push({
       kind: 'forced-spill-down',
@@ -784,11 +777,23 @@ function spillDownRemainder(songs, totalBudget, cap, profile, tradeoffs, chosen,
   }
 }
 
-// Budget must be spent exactly. If per-song caps left points unspent among the
-// chosen songs, spill the remainder onto the next-best songs as a last resort —
-// the best chosen songs first, then gated-out/below-cutoff, disqualified last —
-// so the votes always total the budget, and flag when we had to dip into the
-// gated/invalid pool. Round-robin within each pool keeps tied songs ≤1 apart.
+// Budget must be spent exactly. Leftover points promote bell-style: fund the best
+// zero first, then step up the weakest funded tier — never pile onto the top song
+// while lower tiers still have room to grow.
+function promoteOneSpill(eligible, cap, byRank) {
+  const list = eligible.filter((s) => (s.finalVotes || 0) < cap).sort(byRank);
+  if (!list.length) return false;
+  const zeros = list.filter((s) => !(s.finalVotes || 0));
+  if (zeros.length) {
+    zeros[0].finalVotes = (zeros[0].finalVotes || 0) + 1;
+    return true;
+  }
+  const vMin = Math.min(...list.map((s) => s.finalVotes || 0));
+  const tier = list.filter((s) => (s.finalVotes || 0) === vMin);
+  tier[0].finalVotes = (tier[0].finalVotes || 0) + 1;
+  return true;
+}
+
 function spillRemainder(songs, totalBudget, cap, profile, tradeoffs, chosen, upSet = null) {
   const allocated = () => songs.reduce((a, s) => a + (s.finalVotes || 0), 0);
   let remaining = totalBudget - allocated();
@@ -797,83 +802,88 @@ function spillRemainder(songs, totalBudget, cap, profile, tradeoffs, chosen, upS
   const rank = (s) => rankValue(s, profile) ?? -Infinity;
   const byRank = (a, b) => rank(b) - rank(a) || tiebreakRank(b) - tiebreakRank(a);
   const inUpPool = (s) => (upSet ? upSet.has(s) : true) && (s.finalDownvotes || 0) === 0;
+  const spillEligible = (s) => {
+    if (s.isOwn || s.isDisqualified) return false;
+    if (!inUpPool(s)) return false;
+    if ((s.finalVotes || 0) >= cap) return false;
+    if (s.needsUserInput) return (s.finalVotes || 0) > 0;
+    return rankValue(s, profile) != null;
+  };
+
   const pools = [
-    [...chosen].filter((s) => inUpPool(s) && s.finalVotes < cap).sort(byRank),
-    songs
-      .filter(
-        (s) =>
-          inUpPool(s) &&
-          !chosen.has(s) &&
-          !s.isDisqualified &&
-          !s.needsUserInput &&
-          rankValue(s, profile) != null
-      )
-      .sort(byRank),
+    [...chosen].filter(spillEligible),
+    songs.filter((s) => spillEligible(s) && !chosen.has(s)),
   ];
-  // Last resort when downvotes reserve the bottom slice: spill only within upSet.
   if (upSet && profile.downvotesEnabled) {
-    pools.push(
-      songs
-        .filter(
-          (s) =>
-            upSet.has(s) &&
-            inUpPool(s) &&
-            !s.needsUserInput &&
-            rankValue(s, profile) != null
-        )
-        .sort(byRank)
-    );
+    pools.push(songs.filter((s) => upSet.has(s) && spillEligible(s) && !chosen.has(s)));
   } else {
     pools.push(
-      songs
-        .filter(
-          (s) =>
-            !chosen.has(s) &&
-            !s.isDisqualified &&
-            !s.needsUserInput &&
-            rankValue(s, profile) != null
-        )
-        .sort(byRank),
-      songs.filter((s) => s.isDisqualified).sort(byRank)
+      songs.filter(
+        (s) =>
+          !chosen.has(s) &&
+          !s.isDisqualified &&
+          !s.isOwn &&
+          !s.needsUserInput &&
+          rankValue(s, profile) != null &&
+          inUpPool(s) &&
+          (s.finalVotes || 0) < cap
+      )
     );
   }
 
   let spilledOutside = 0;
   for (let i = 0; i < pools.length && remaining > 0; i++) {
-    let progress = true;
-    while (remaining > 0 && progress) {
-      progress = false;
-      for (const s of pools[i]) {
-        if (s.finalVotes >= cap) continue;
-        s.finalVotes++;
-        remaining--;
-        progress = true;
-        if (i > 0) spilledOutside++;
-        if (remaining <= 0) break;
-      }
+    while (remaining > 0 && promoteOneSpill(pools[i], cap, byRank)) {
+      remaining--;
+      if (i > 0) spilledOutside++;
     }
   }
+
+  // Last resort (still capped, never own): blank-score slots, then DQ. These run
+  // even when downvotes are enabled — the normal pools above skip them.
+  const forcedSpill = (filter) => {
+    const pool = songs.filter(filter);
+    while (remaining > 0 && promoteOneSpill(pool, cap, byRank)) {
+      remaining--;
+      spilledOutside++;
+    }
+  };
+  forcedSpill(
+    (s) =>
+      s.needsUserInput &&
+      !s.isOwn &&
+      !s.isDisqualified &&
+      (s.finalDownvotes || 0) === 0 &&
+      (s.finalVotes || 0) < cap
+  );
+  forcedSpill(
+    (s) =>
+      s.isDisqualified &&
+      !s.isOwn &&
+      (s.finalDownvotes || 0) === 0 &&
+      (s.finalVotes || 0) < cap
+  );
 
   if (spilledOutside > 0) {
     tradeoffs.push({
       kind: 'forced-spill',
-      question: `Awarded ${spilledOutside} leftover point(s) to gated-out/invalid songs so the votes total the budget (${totalBudget}). Reassign if you'd rather place them elsewhere.`,
+      question: `Awarded ${spilledOutside} leftover point(s) to gated-out, blank-score, or disqualified songs so the votes total the budget (${totalBudget}). Reassign if you'd rather place them elsewhere.`,
       options: [],
     });
   }
 
-  // Cap-bound: relax cap on best songs in the up slice so the bank is spent exactly.
   if (remaining > 0 && upSet) {
-    const order = [...upSet]
-      .filter((s) => (s.finalDownvotes || 0) === 0 && !s.needsUserInput)
-      .sort(byRank);
-    let j = 0;
-    while (remaining > 0 && order.length) {
-      order[j % order.length].finalVotes++;
-      remaining--;
-      j++;
-      if (j > order.length * cap * 4) break;
-    }
+    const tail = songs.filter(
+      (s) =>
+        upSet.has(s) &&
+        (s.finalDownvotes || 0) === 0 &&
+        !s.isDisqualified &&
+        !s.isOwn &&
+        !s.needsUserInput &&
+        rankValue(s, profile) != null &&
+        (s.finalVotes || 0) < cap
+    );
+    while (remaining > 0 && promoteOneSpill(tail, cap, byRank)) remaining--;
   }
 }
 
@@ -1374,7 +1384,7 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
         kind: 'tier-structure',
         question: `Which point split?${
           small ? ' Scores are tightly clustered (small range), so this is a judgment call.' : ''
-        } Default is ${chosen.distinct} tier${chosen.distinct > 1 ? 's' : ''} (option A); pick another with --option <A|B|C> (or --tier-count <n> / --bucket-count <n>).`,
+        } Default is ${chosen.distinct} tier${chosen.distinct > 1 ? 's' : ''} (option A); record with just pick <round> <A|B|C> --reason "…" (or just pick <round> A --tier-count <n> / --bucket-count <n> to force a curve).`,
         options: distinctCands.slice(0, 3).map((c) => ({
           label: `${c.distinct} tier${c.distinct > 1 ? 's' : ''} (bucket-count ${c.K}) — ${summarize(c)}`,
           value: c.K,
