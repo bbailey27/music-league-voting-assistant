@@ -42,6 +42,17 @@ export function matchRestFlag(argv, i, name, onValue) {
   return i + parts.length;
 }
 
+/** Warn when argv uses single-dash flags (this CLI is long-flag only). */
+export function warnUnknownShortFlags(argv) {
+  for (const a of argv) {
+    if (/^-[a-zA-Z]/.test(a) && !a.startsWith('--')) {
+      console.error(
+        `Warning: "${a}" is not a recognized flag — use two dashes (e.g. --pin not -pin).`
+      );
+    }
+  }
+}
+
 /** Assign the first positional token when the file slot is empty. */
 export function takePositional(a, args, key = 'file') {
   if (!a.startsWith('--') && !args[key]) {
