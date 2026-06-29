@@ -139,7 +139,7 @@ through to the underlying scripts. Run `just --list` or `just help` for the full
 
 **Flag ownership:** explore allocation with `--shape`, `--tier-count`, `--pin` on
 **parse**; thematic profile with `--rank`, `--weights`, `--gate` on **merge**; record
-the choice with `--option`/`--reason`/`--pin` on **pick** (via `just pick`).
+the choice with `just pick <name> <letter>` plus optional `--reason` / `--pin`.
 
 Deprecated on parse (warns): `--fit`, `--option`, `--reason` — use `just merge` and
 `just pick` instead.

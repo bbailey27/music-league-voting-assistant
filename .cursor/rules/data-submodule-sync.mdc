@@ -1,0 +1,81 @@
+---
+description: Cursor IDE workflow for the data/ submodule — sidebar, branch picker, push order
+alwaysApply: true
+---
+
+# Data submodule sync (`data/` → `music-league-data`)
+
+`data/` is a **second git repo** inside the project. The parent repo only records which
+**commit SHA** `data/` should be at. Cursor treats them as separate repos in Source
+Control.
+
+When the user commits or syncs via the **sidebar** (not the terminal), guide them using
+**which repo is selected** and **what the branch indicator shows** — not a bash
+checklist unless they ask for commands.
+
+## Two repos in Source Control
+
+The sidebar lists **two** repositories (expand "Source Control Repositories" if needed):
+
+| Repo                                       | What it holds                                                                |
+| ------------------------------------------ | ---------------------------------------------------------------------------- |
+| **music-league-voting-assistant** (parent) | Code, specs — plus a **`data` pointer** entry when the submodule SHA changed |
+| **data** (or **music-league-data**)        | Round HTML, `analysis/`, `ref/` — the actual private files                   |
+
+**Wrong repo = broken sync.** Commits under `data/analysis/…` belong in the **`data`**
+repo. A parent commit that only shows `data` (submodule hash) is just updating the
+pointer.
+
+## Before you commit data files (sidebar)
+
+1. **Select the `data` repo** in Source Control (not the parent).
+2. **Branch indicator** (bottom status bar, or repo header): must say **`main`**, not
+   `HEAD detached at …` or a raw commit hash.
+3. If detached: open the **`data` Git graph** → checkout **`main`** → merge or cherry-pick
+   your work onto `main` before committing. Do not leave new commits only on a detached
+   HEAD.
+4. **Pull/sync `data` first** (cloud/sync on the **`data` repo**) before starting work,
+   so machines don't fork after the shared ancestor.
+
+## Push order (sidebar)
+
+After data changes:
+
+1. **Commit in the `data` repo** — stage files under `analysis/`, `rounds/`, `ref/`.
+2. **Push/sync the `data` repo** — wait until it succeeds (no "ahead of origin").
+3. **Switch to the parent repo** — it should now show **`data`** as a changed submodule
+   pointer (often listed as modified `data`, not individual data files).
+4. **Commit + push/sync the parent** — message like "Update data submodule ref".
+
+**Never push the parent while `data` is still ahead of origin.** That publishes a SHA
+GitHub doesn't have → `not our ref` on the other machine.
+
+When the user is about to sync/commit, **remind them which repo to select and whether
+`data` has been pushed first** — unless they already confirmed both repos are synced.
+
+## Switching machines (sidebar)
+
+1. **Pull/sync the parent** (prefer pull that updates submodules if offered).
+2. **Select the `data` repo** → confirm **`main`**, not detached → **pull/sync**.
+3. If the Git graph shows HEAD below `main`, checkout **`main`**.
+
+## How detached HEAD happens (and what it looks like)
+
+Parent pull, submodule update, or **clicking an old commit in the `data` Git graph**
+checks out one SHA — not the branch. The status bar shows **`HEAD detached`**; the graph
+shows the blue HEAD dot **off** the `main` label.
+
+New commits there are easy to lose across machines until merged onto **`main`** and
+pushed from the **`data` repo**.
+
+**Prevention:** after any parent pull, glance at the **`data` repo** branch indicator.
+If not `main`, checkout `main` in the graph before editing analysis or rounds.
+
+## Red flags in the UI
+
+| What you see                                                   | Meaning                                        |
+| -------------------------------------------------------------- | ---------------------------------------------- |
+| `data` repo: **ahead** of origin, parent already pushed        | Other machine will break — push **`data`** now |
+| `HEAD detached` on **`data`**                                  | Stop — checkout **`main`** before more commits |
+| Parent shows **`data`** changed but you didn't push **`data`** | Push **`data`** first, then commit parent      |
+| Git graph: **`main`** cloud on a commit you don't have         | Pull **`data`** before committing              |

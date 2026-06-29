@@ -11,6 +11,96 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-06-27 — Forced up spill: DQ and blanks before budget-mismatch
+
+**Change.** `spillRemainder` last-resort phases assign capped overflow to blank-score
+slots, then disqualified songs, even when downvotes are enabled. Own submission stays
+excluded.
+
+**Why.** Spill must exhaust every valid sink before `budget-mismatch`; blanks outrank DQ
+when both could absorb overflow.
+
+**Refs.** working tree — `scripts/score/allocate.mjs`, `spec/point-allocation.md`.
+
+## 2026-06-27 — Per-song caps are hard (no spill relaxation)
+
+**Change.** Removed cap-relaxation tails from `spillRemainder` and
+`spillDownRemainder`. When caps × eligible slots cannot hold the full bank, spill
+stops and `budget-mismatch` flags the under-spent remainder.
+
+**Why.** Music League per-song caps are ballot limits, not soft allocator hints.
+
+**Overruled.** Prior spill paths that exceeded `maxUpvotesPerSong` /
+`maxDownvotesPerSong` to force budget exactness.
+
+**Refs.** working tree — `scripts/score/allocate.mjs`, `spec/point-allocation.md`.
+
+## 2026-06-27 — Blank-score `--pin` + bell-style spill (not top dump)
+
+**Change.** `--pin` on `needsUserInput` songs is allowed at pick — counts toward the
+bank and reflows other songs. `reconcileOptionPins` injects out-of-menu pins (blank
+slots) and reflows with the same bell-style promotion (zeros first, weakest tier
+next — not top-first). `spillRemainder` uses that promotion too.
+
+**Why.** User can assign a ballot point without re-parsing; phantom budget from blank
+pins had spilled onto POSE (+3) instead of 74-tier songs.
+
+**Overruled.** 2026-06-27 entry rejecting blank-score pins.
+
+**Refs.** `working tree` · `scripts/score/allocate.mjs`, `scripts/round/pick.mjs`,
+`scripts/parse/cli-flags.mjs`.
+
+## 2026-06-27 — Reject `--pin` on blank-score / out-of-menu songs
+
+**Change.** `pinEligibilityError` rejects `--pin` on `needsUserInput`,
+disqualified, own, or unknown indices at pick time. `reconcileOptionPins` no longer
+injects pins for raw-order slots absent from the chosen option menu.
+
+**Why.** Pinning `#11` (blank score) added a phantom vote to reflow math; allocate
+could not apply it, leaving a spare point that `spillRemainder` gave to POSE (+3).
+
+**Overruled.** Blank-score pins allowed; allocate applies them; spill uses tier promotion.
+
+**Refs.** `working tree` · `scripts/parse/cli-flags.mjs`, `scripts/round/pick.mjs`,
+`scripts/pick-round.mjs`.
+
+## 2026-06-27 — Tradeoff prompts point at pick, not parse re-run
+
+**Change.** `tier-structure` / `down-structure` tradeoff question text now says
+`just pick <round> …` for recording choices (including `--tier-count` /
+`--bucket-count` / `--down-shape`). Removed “on parse” — parse allocation flags
+preview the draft only; pick commits.
+
+**Why.** Three-stage split left misleading “re-run parse with --tier-count” wording
+in allocator output and `music.md`.
+
+**Refs.** `working tree` · `scripts/score/allocate.mjs`, `spec/point-allocation.md`.
+
+## 2026-06-27 — CLI tradeoff tables: Mod/Comment columns + excluded songs
+
+**Change.** Parse/merge/pick CLI tables (`printTradeoffCli`, `printBallotCli`,
+`printAppliedAllocationCli`) add **Mod** and **Comment** columns. Songs with blank
+scores or disqualification that are omitted from the allocation pool append at the
+bottom of the options table with **BLANK** or **-** in Score, **-** in vote columns.
+
+**Why.** Long tradeoff output scrolled past the head missing-score banner; excluded
+songs were invisible in the A/B/C table and modifiers lived only in markdown.
+
+**Refs.** `working tree` · `scripts/parse/cli-table.mjs`, `scripts/parse/cli-print.mjs`.
+
+## 2026-06-27 — Pick CLI shows `just pick`, not `--option`
+
+**Change.** Tradeoff/ballot CLI output, pick error messages, and `music.md` option
+legends now recommend `just pick <round> <letter>` (with flags as needed). Pick prints
+the applied raw-order ballot after commit (including pin tweaks). Parse/merge/pick warn
+prominently on blank scores; pick warns on single-dash flags (`-pin`).
+
+**Why.** `just` is the documented interface; `--option A` and raw `ml` forms mixed with
+positional `just pick name A` and hid post-pin allocations.
+
+**Refs.** `working tree` · `scripts/cli-commands.mjs`, `scripts/parse/cli-print.mjs`,
+`scripts/pick-round.mjs`, `spec/point-allocation.md` (pick stage).
+
 ## 2026-06-27 — Modifier-qualified `?` (score vs +/−/play)
 
 **Change.** `?` glued to the music number applies to the **score** only when it is

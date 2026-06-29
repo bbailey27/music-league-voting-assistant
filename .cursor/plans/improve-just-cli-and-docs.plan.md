@@ -61,9 +61,9 @@ Re-parse only when replacing the HTML export; pick is always a separate JSON ste
 
 | Flags | Stage |
 | --- | --- |
-| `--mode`, `--shape`, `--tier-count`, `--bucket-count`, `--pin` (explore) | **parse** |
+| `--mode`, `--shape`, `--tier-count`, `--bucket-count`, `--pin` | **parse** (preview draft in `music.md` only — does not record pick) |
 | `--rank`, `--weights`, `--gate`, `--cutoff` | **merge** |
-| `--option`, `--reason`, `--pin`, `--down-shape` | **pick** |
+| `--option`, `--reason`, `--pin`, `--down-shape`, `--tier-count`, `--bucket-count` | **pick** (record allocation) |
 | `--order`, `--out` | **render** |
 
 Deprecated on parse (warn → remove): `--fit`, `--option`, `--reason`.

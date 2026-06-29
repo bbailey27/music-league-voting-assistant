@@ -194,9 +194,9 @@ small score range leaves it open), the allocator emits a **`tier-structure`
 tradeoff** listing distinct candidate curves. Options dedupe on the **final point
 distribution**, not tier count — two bucket counts that yield the same tier count
 but different distributions both appear. Each option's `value` is the **bucket
-count (K)**; the label names tier count and bucket count separately. Pick one and
-re-run with `--bucket-count`; `--tier-count <n>` is the friendly "n point tiers"
-knob.
+count (K)**; the label names tier count and bucket count separately. Record with
+`just pick <round> <A|B|C>`, or force a curve with `just pick <round> A
+--tier-count <n>` / `--bucket-count <n>`.
 
 Each option also carries structured `tiers`
 (`{ points, count, scoreHi, scoreLo, scores }`) so the report renders it as a
@@ -332,6 +332,9 @@ pass)`: a `maybe` never earns more points than the lowest-funded pass. By
   up past the pin), and the rest of the down bank is shaped around it.
 - **Pins never legitimize an over-budget ballot.** Exceeding a bank is invalid in
   Music League, so a pin is **not** licensed to overspend. Two guards enforce this:
+  - **`pinEligibilityError`** — `--pin` on own, disqualified, or unknown index is rejected at
+    **pick**. Blank-score songs (`needsUserInput`) **may** be pinned — manual ballot slot
+    without re-parsing.
   - **`--option` + `--pin` reflows** (`reconcileOptionPins`): a pin layered on a
     chosen option is reconciled at the margin so the bank stays exact — a net-positive
     pin (the song gets more than the option gave) **sheds** the surplus from the
@@ -355,12 +358,13 @@ pass)`: a `maybe` never earns more points than the lowest-funded pass. By
   `--no-favorite-band` disables the merge.
 - **`tierCount`** — forces the number of **distinct final point values** (counting
   the `0` band; `0–2 points` = 3 tiers). The allocator picks the best staircase with
-  that many distinct values (nearest achievable if none). Set by accepting a
-  surfaced option or via `--tier-count <n>`.
+  that many distinct values (nearest achievable if none). Set by `just pick
+  <round> <letter>` on a surfaced option, or via `--tier-count <n>` on **pick**
+  (preview-only on parse/merge).
 - **`bucketCount`** — forces **K**, the number of **funded** point tiers (promotion
   steps + 1, excluding the `0` band) — the lower-level knob beneath `tierCount`. Set
-  via `--bucket-count <n>`; wins over `tierCount` if both are given. Both suppress
-  the `tier-structure` tradeoff.
+  via `--bucket-count <n>` on **pick**; wins over `tierCount` if both are given. Both
+  suppress the `tier-structure` tradeoff.
 - **`--option <A|B|C…>`** — record a `tier-structure` fork by column letter
   (**prefer `just pick <round> <letter>`** — JSON-only, never re-reads HTML). Still
   accepted on parse/merge for backward compatibility but deprecated there. Applies
@@ -412,29 +416,33 @@ depends on the scoring type:
 
 ## Budget exactness
 
-The upvote bank is **always spent exactly**: the sum of allocated upvotes must
-equal `upvoteBankSize`. If per-song caps leave a remainder among the chosen
-songs, `spillRemainder` distributes it as a last resort: best chosen songs first,
-then gated-out/below-cutoff, disqualified last — and surfaces a `forced-spill`
-tradeoff when it has to dip into the gated/invalid pool. (Casting every vote is
-required by Music League even when few songs qualify.)
+Per-song caps (`maxUpvotesPerSong`, `maxDownvotesPerSong`) are **hard limits** — the
+allocator never exceeds them. When caps and eligible slots cannot physically hold the
+full bank (e.g. budget 6 / cap 3 with only one up-eligible song), spill stops at the
+cap and `budget-mismatch` flags the under-spent remainder.
+
+Otherwise the upvote bank should be spent exactly: the sum of allocated upvotes equals
+`upvoteBankSize`. If per-song caps leave a remainder among the chosen songs,
+`spillRemainder` distributes it as a last resort: bell-style promotion (best zero,
+then weakest tier) among eligible songs — and surfaces a `forced-spill` tradeoff when
+it has to dip into the gated/invalid pool. (Casting every vote is required by Music
+League when the caps allow it.)
 
 **Leftover budget keeps the curve before it raises the floor.** The staircase is
-enumerated to spend the budget **exactly** (choosing the boundaries is the fill),
-so the descending shape is preserved without flattening into all-1s. Only a
-**forced remainder** — when no budget-exact staircase fits (very high points vs. a
-low per-song cap, or an indivisible split inside a tie) — is spent one point at a time,
-best songs first (by rank, so the spill stays monotonic) and modifier-aware within
-an equal-score unit, up to the hard cap. That is the only path that can split an
-equal-score unit, and it fires only because Music League requires every point to be
-cast. Worked example:
+enumerated to spend the budget **exactly** when a budget-exact staircase exists
+(choosing the boundaries is the fill), so the descending shape is preserved without
+flattening into all-1s. Only a **forced remainder** — when no budget-exact staircase
+fits (very high points vs. a low per-song cap, or an indivisible split inside a tie)
+— is spent one point at a time, best songs first (by rank, so the spill stays
+monotonic) and modifier-aware within an equal-score unit, up to the hard cap. That is
+the only path that can split an equal-score unit, and it fires only because Music
+League requires every point to be cast when caps permit. Worked example:
 budget 22 / cap 2 over 12 songs → `[2×11, 0]` (the bank only fits at the cap).
 Very-high-budget extremes (e.g. budget 50 / cap 5) are atypical; real rounds are
 roughly 10–30 songs and 10–30 points.
 
-When `downvotesEnabled`, the downvote bank is also **always spent exactly**: the
-sum of allocated downvotes must equal `downvoteBankSize`. Skipping downvotes
-because the upvote side is done is invalid.
+When `downvotesEnabled`, the downvote bank is also spent exactly **when caps and
+zero-up slots allow**. Skipping downvotes because the upvote side is done is invalid.
 
 ## Duplicate songs and covers
 
@@ -458,8 +466,10 @@ surfaced as a `combine` option, not an allocator rule.)
 These apply to every allocation — deterministic allocator, manual rebalance, or
 one-off script:
 
-1. **Spend both banks.** Use the entire upvote bank and the entire downvote bank
-   (when enabled), exactly. Neither bank may be partially used or left unspent.
+1. **Spend both banks when caps allow.** Use the entire upvote bank and the entire
+   downvote bank (when enabled) whenever per-song caps and eligible slots can hold
+   them. When they cannot, stop at the cap and surface `budget-mismatch` — never
+   exceed a per-song limit to force exactness.
 2. **No mixed targets.** A single song may receive upvotes, downvotes, or
    neither — never both. The sequenced passes enforce this by construction:
    downvotes only target songs the upvote pass left at zero (plus DQ songs).
@@ -490,7 +500,9 @@ deciding. Each is `{ kind, question, options: [{ label, value }] }`:
 - `maybe-band` — how to reward the questionable band: none, a flat 1-point floor,
   or (in a low-pass round) its own graduated staircase capped at the lowest pass.
 - `preallocation-overflow` — floors exceed budget.
-- `forced-spill` — leftover upvote points had to land on gated-out/invalid songs.
+- `forced-spill` — leftover upvote points had to land on gated-out, blank-score, or
+  disqualified songs (own submission never). Order: scored/gated pool first, then
+  blanks, then DQ — all still capped.
 - `forced-spill-down` — leftover downvote points spilled outside the primary down slice.
 - `tier-split-down` — equal low-tier group can't split downvotes evenly.
 - `down-structure` — which **downvote shape** (concentrated / flat / curved), with
