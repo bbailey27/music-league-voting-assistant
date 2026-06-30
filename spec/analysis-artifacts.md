@@ -60,8 +60,12 @@ and at the start of `ml run` before archiving) keeps the trees tidy:
 - **Name.** Any undated round id — input file in `data/rounds/` and/or folder in
   `data/analysis/` — gets today's date prepended (a round's `.html`/`.txt` inputs
   and analysis folder rename together). Before **5am** local it stamps _yesterday_,
-  so a late-night export keeps the date of the round it came from. Already-dated
-  ids and name collisions are left untouched.
+  so a late-night export keeps the date of the round it came from. If a dated
+  sibling with the same bare slug already exists (common when candidate research
+  started early), the undated id is folded into that sibling instead of stamping
+  a second date. Duplicate dated ids for the same bare slug are merged into the
+  earliest date. Already-dated ids and unresolvable name collisions are left
+  untouched.
 - **Archive.** Rounds whose slug date is **more than 2 days** older than the
   effective today are moved into the archive folders (today + yesterday +
   2-days-ago stay active). Tune the window with `--age N`; undated rounds are

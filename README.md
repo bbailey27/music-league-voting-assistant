@@ -98,31 +98,22 @@ are pre-filled, then save the page (or copy the page source) into
 captured; only server-saved comments appear as `data-comment`. See
 [Getting a usable HTML export](#getting-a-usable-html-export-important) below.
 
-### Status
+### Status and help
 
 ```bash
 just status                      # one line per round: what's done + what's next
 just status tarot                # full checklist + next step for one round
 just help                        # workflow overview
 just help pick                   # flags + example for one stage
+just help flags                  # all flags × which commands accept them
 ```
-
-## Recording your pick
-
-> **I parsed a music-only round. How do I record my final choice?**
->
-> 1. Open `data/analysis/<round>/music.md` — note the option letters (A/B/C) in the
->    tier-structure tradeoff.
-> 2. `just pick <round> <letter> --reason "optional note"` — updates JSON only; does
->    **not** re-read HTML. Full A/B/C menu is preserved in `pick.options`.
-> 3. `just final <round>` — refresh `music.html`.
->
-> Stored in `<round>/music.json` (`pick`) and `data/analysis/picks.jsonl` (training log).
 
 ## Command reference
 
 `just` recipes forward to the dispatcher (`scripts/ml.mjs`); extra flags pass straight
-through to the underlying scripts. Run `just --list` or `just help` for the full set.
+through to the underlying scripts. Run `just --list` or `just help` for the overview;
+`just help <cmd>` for every flag on a command (`parse`, `merge`, `pick`, `final`, `fit`,
+`scores`, `pin`, `flags`, `tidy`, `config`).
 
 | Command                      | Stage                                     | Reads HTML? |
 | ---------------------------- | ----------------------------------------- | ----------- |
@@ -136,13 +127,84 @@ through to the underlying scripts. Run `just --list` or `just help` for the full
 | `just status [name]`         | pipeline checklist                        | —           |
 | `just help [cmd]`            | workflow / per-command flags              | —           |
 | `just tidy`                  | date-slug + archive stale rounds          | —           |
+| `just config`                | local CLI preferences                     | —           |
 
-**Flag ownership:** explore allocation with `--shape`, `--tier-count`, `--pin` on
-**parse**; thematic profile with `--rank`, `--weights`, `--gate` on **merge**; record
-the choice with `just pick <name> <letter>` plus optional `--reason` / `--pin`.
+`<name>` is optional after the first explicit use — the current round is stored in
+`data/.current-round` (e.g. `just pick B --reason "…"` continues the same round).
+
+### CLI flags
+
+Full prose for each flag: `just help flags` or `just help <cmd>`. Summary:
+
+**Allocation / profile** (parse, merge, pick — explore on parse/merge; pick replays then
+records your letter):
+
+| Flag | Values | Effect |
+| ---- | ------ | ------ |
+| `--rank` | `combined` \| `fit` \| `music` | Ranking axis for tiers and tradeoff tables. Default: `combined` on merge and thematic pick; `music` on music-only parse/pick; parse auto-switches to `combined` when comments carry manual fit scores. |
+| `--weights` | `<fit>:<music>` e.g. `3:2` | Blend ratio for combined ranking (normalized to sum 1). Default when omitted: **7:3** on merge/thematic pick; **5:5** on parse with manual fit in comments. |
+| `--gate` | `passFail` \| `passFailMaybe` | Thematic pass/maybe/fail gate model. |
+| `--cutoff` | `<axis>:<min>` e.g. `fit:70` | Numeric cutoff gate on fit or music instead of word gate. |
+| `--shape` | `auto` \| `bell` \| `balanced` \| `top-heavy` \| `compressed` \| `relative` | Upvote curve preset (`auto` = default). |
+| `--down-shape` | `concentrated` \| `flat` \| `curved` | Downvote curve when downs are enabled. Pick also accepts positional `cv` / `fl` / `cc`. |
+| `--tier-count` | positive integer | Force exactly *n* distinct upvote point tiers. |
+| `--bucket-count` | positive integer | Force *n* funded score-cluster tiers. |
+| `--pin` | `<index>:<votes>` | Pin a song's votes (`9:2` up, `6:-2` down). Comma-separate multiples. See `just help pin`. |
+| `--favorite-band` | score e.g. `80` | Merge raw music scores ≥ floor into one shared top tier. |
+| `--no-favorite-band` | — | Disable favorite-band merge. |
+
+**Parse only:**
+
+| Flag | Values | Effect |
+| ---- | ------ | ------ |
+| `--mode` | `objective` \| `subjective` | Blank comments: needsUserInput vs needsReview. |
+| `--no-json` | — | Skip `music.json`. |
+| `--lenient` | — | Tolerate Live Text / pasted round text. |
+| `--fit-words` | — | Parse tier/gate words + second number on scoring line as fit. |
 
 Deprecated on parse (warns): `--fit`, `--option`, `--reason` — use `just merge` and
 `just pick` instead.
+
+**Pick only:**
+
+| Flag | Values | Effect |
+| ---- | ------ | ------ |
+| `--reason` | quoted string | Rationale stored in the pick record. |
+| `--scores` | — | Write pick to `scores.json` (default when `fit.json` exists). |
+| `--dry-run` | — | Resolve and print pick without writing files. |
+| `<A\|B\|C> [cv\|fl\|cc]` | positional | Option letter; optional down-shape shorthand when downs enabled. |
+
+**Render** (`just fit`, `just scores`, `just final`):
+
+| Flag | Values | Effect |
+| ---- | ------ | ------ |
+| `--out` | path | Output HTML path. |
+| `--order` | see below | Card sort order in the HTML report. |
+
+`--order` values by command:
+
+- **fit:** `fit` (default), `combined`, `music`, `raw`
+- **scores / final (scores.json):** `combined` (default), `fit`, `raw`, `votes`, `score`
+- **final (music.json):** `votes` (default), `score`, `raw`
+
+**Other:**
+
+| Command | Flags |
+| ------- | ----- |
+| `just tidy` | `--dry-run` / `-n`, `--no-name`, `--no-archive`, `--age <days>` |
+| `just config` | `comment-width [auto\|<n>\|unset]` — Comment column width in CLI tables |
+
+## Recording your pick
+
+> **I parsed a music-only round. How do I record my final choice?**
+>
+> 1. Open `data/analysis/<round>/music.md` — note the option letters (A/B/C) in the
+>    tier-structure tradeoff.
+> 2. `just pick <round> <letter> --reason "optional note"` — updates JSON only; does
+>    **not** re-read HTML. Full A/B/C menu is preserved in `pick.options`.
+> 3. `just final <round>` — refresh `music.html`.
+>
+> Stored in `<round>/music.json` (`pick`) and `data/analysis/picks.jsonl` (training log).
 
 ### Without `just`
 

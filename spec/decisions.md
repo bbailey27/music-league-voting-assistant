@@ -11,6 +11,147 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-06-30 — Cutoff-gated songs visible in option tables
+
+**Change.** `isExcludedFromAllocation` now treats profile `--cutoff` failures like gate
+`fail` and music DQ: pool-excluded songs append to CLI/markdown/HTML option tables with
+**—** vote cells. Shared `gateClass` lives in `scripts/score/gate.mjs`; table renderers
+thread `profile` into `expandTradeoffRows`.
+
+**Why.** Yesterday's gate-fail fix only checked `song.gate === 'fail'`. Fit cutoffs
+(`--cutoff fit:52`) classify failures via profile, so those songs vanished from the
+A/B/C table.
+
+**Refs.** `working tree` · `scripts/score/gate.mjs`, `scripts/tradeoff-rows.mjs`,
+`tests/cli-table.test.mjs`.
+
+## 2026-06-30 — Parse: manual fit + explicit `--rank combined`
+
+**Change.** `applyManualFitScoring` always fills `combinedScore` when comments carry
+manual fit, including when `--rank combined` is passed explicitly. Only the default
+`rankBy` switch (→ `combined`) is skipped when `--rank` is provided. CLI help documents
+default weights: **5:5** on parse with manual fit, **7:3** on merge/thematic pick.
+
+**Why.** `if (hasManualFit && !args.rank)` treated an explicit `--rank combined` as
+“don’t run combined setup,” leaving `combinedScore` null and hiding Music/Fit/Combined
+columns even though allocation still blended via fallback.
+
+**Refs.** `working tree` — `scripts/parse-round.mjs`, `scripts/cli-help.mjs`,
+`tests/score.test.mjs`.
+
+## 2026-06-29 — Thematic pick: combined rank + option+pin comparison table
+
+**Change.** Fit-path `just pick` now ranks tradeoffs by `combined` (matching `just merge`)
+unless `--rank` overrides — not objective mode’s music default. Pin overrides no longer
+feed the menu merge; `applyOptionPick` reconciles against the unpinned menu only. After
+`just pick B --pin …`, the CLI prints a **B (original) | B (altered)** comparison table
+before the applied ballot.
+
+**Why.** `just pick B --pin 11:3,12:3` used a music-ranked option B (wrong menu vs Up
+table), treated pins as no-ops when the corrupted menu already had 3s, shed mid-tier 2s
+instead of bottom 1s, and showed a 13/15 applied total with no before/after view.
+
+**Refs.** `working tree` · `scripts/pick-round.mjs`, `scripts/round/pick.mjs`,
+`scripts/parse/cli-print.mjs`.
+
+## 2026-06-29 — Gate-fail songs visible in tradeoff / ballot tables
+
+**Change.** `isExcludedFromAllocation` now covers gate `fail` and blank-score songs
+(not just music `-` DQ). Pool-excluded songs append to CLI/markdown/HTML option
+tables with **—** in vote columns and **—** in Combined (when shown); ballot
+combo columns match own-song dashes. Shared logic lives in `scripts/tradeoff-rows.mjs`.
+
+**Why.** Gate-failed entries (e.g. BPM out of range) were omitted from the A/B/C
+comparison table — easy to miss a disqualified song mid-scroll.
+
+**Refs.** `working tree` · `scripts/tradeoff-rows.mjs`, `scripts/parse/cli-table.mjs`,
+`scripts/score/render.mjs`, `scripts/render-html-shared.mjs`.
+
+## 2026-06-29 — CLI comment column: left-aligned, terminal-wide, configurable
+
+**Change.** Pick/ballot Comment column is left-aligned and expands to remaining
+terminal width. Preferences live in gitignored `.ml-config.json`; `just config
+comment-width <auto|n>` sets a per-clone cap (default auto).
+
+**Why.** Wide terminals wasted space with a 28-char right-aligned comment column;
+users wanted readable full comments without reformatting every session.
+
+**Refs.** working tree — `scripts/ml-config.mjs`, `scripts/parse/cli-print.mjs`,
+`scripts/ml.mjs`, `justfile`.
+
+---
+
+## 2026-06-29 — CLI/markdown table width uses terminal display columns
+
+**Change.** Added `scripts/text-width.mjs` (East Asian wide = 2 columns). CLI pick
+tables and markdown `renderTable` pad columns by display width, not JS string length.
+Song titles truncate by display width too.
+
+**Why.** CJK titles like `...말하자면` are 7 code units but 11 terminal columns,
+which shifted Score/Mod/Vote columns one cell right in monospace output.
+
+**Refs.** working tree — `scripts/text-width.mjs`, `scripts/parse/cli-print.mjs`,
+`scripts/score/render.mjs`.
+
+---
+
+## 2026-06-28 — Down option table minus signs; clearer tier-split notes
+
+**Change.** Down pick-option columns show `-1` again (up stays plain `2`). Notes for
+`tier-split` / `tier-split-down` say **same tier (music X, fit Y band)** instead of
+"Tied score 64.3" — the old number was a tier average, not a shared combined score.
+
+**Why.** Minus on down matches ballot/sign convention; combined-mode tiers group by
+music + coarse fit band, so different Combined columns can still be one allocation tier.
+
+**Refs.** working tree — `scripts/parse/cli-table.mjs`, `scripts/parse/cli-print.mjs`,
+`scripts/score/allocate.mjs`.
+
+---
+
+## 2026-06-28 — Pick shorthand `A cc` + fit column in CLI tables
+
+**Change.** Combined-mode CLI tables show **Music / Fit / Combined**. Pick accepts
+up+down in one positional: `just pick <round> A cc` (or `A cc` as one token);
+`cv|fl|cc` = curved|flat|concentrated. `--down-shape` still works. Suggested commands
+in output use the shorthand.
+
+**Why.** Fit was only visible in comments; down shape needed a clearer combo syntax
+than reusing A/B/C or a separate long flag.
+
+**Refs.** working tree — `scripts/cli-commands.mjs`, `scripts/parse/cli-table.mjs`,
+`scripts/parse/cli-print.mjs`, `scripts/pick-round.mjs`, `scripts/ml.mjs`.
+
+---
+
+## 2026-06-28 — Pick CLI: up letter vs down --down-shape
+
+**Change.** Upvote tradeoffs keep column letters **A|B|C**; downvote tradeoffs use
+shape codes **cv|fl|cc** (curved / flat / concentrated). Prompt text and ballot
+legends explain that one command records both axes:
+`just pick <round> <A|B|C> --down-shape <shape>`. Down-structure markdown/HTML
+tables match the CLI. `just pick` persists `--down-shape` into round profile JSON.
+
+**Why.** Both tradeoffs reused A/B/C, so `just pick A` looked ambiguous; down shape
+was already a separate flag but never surfaced clearly in the CLI.
+
+**Refs.** working tree — `scripts/cli-commands.mjs`, `scripts/parse/cli-print.mjs`,
+`scripts/score/render.mjs`, `scripts/render-html-shared.mjs`, `scripts/pick-round.mjs`.
+
+---
+
+## 2026-06-28 — CLI current-round pointer + flag-first args
+
+**Change.** `ml` commands accept an optional round name; when omitted, they reuse
+`data/.current-round` (updated only when the user names a round explicitly).
+Argument parsing treats tokens starting with `-` as flags, so
+`just parse --fit-words` works. `just` recipes pass all args through (`parse *args`).
+
+**Why.** Mid-round workflow should not require retyping the round slug on every step;
+`--fit-words` must not be mistaken for a fuzzy round name.
+
+**Refs.** working tree — `scripts/ml.mjs`, `scripts/paths.mjs`, `justfile`.
+
 ## 2026-06-27 — Forced up spill: DQ and blanks before budget-mismatch
 
 **Change.** `spillRemainder` last-resort phases assign capped overflow to blank-score
@@ -339,6 +480,22 @@ cache makes future themed-submission research cheaper and reproducible.
 
 **Refs.** working tree (`.cursor/skills/submission-song-search/SKILL.md`,
 `data/ref/song-topic-summaries.csv`).
+
+---
+
+## 2026-06-28 — Date-slug sibling merge (early research + later import)
+
+**Change.** `applyDateSlugs` now detects an existing dated round with the same
+bare slug (e.g. `2026-06-27-lfm-art` when slugging undated `lfm-art`) and folds
+the undated input/analysis into that id instead of stamping a fresh date.
+`consolidateDuplicateBareSlugs` merges duplicate dated ids for one bare slug into
+the earliest date. Added `bareSlugOf` / `datedSiblingsOf` in `paths.mjs`.
+
+**Why.** Candidate research often creates an analysis folder before HTML import.
+A later `ml run` on another round could date-slug that folder; importing HTML
+and running again stamped a second date for the same round slug.
+
+**Refs.** working tree (`spec/analysis-artifacts.md` → Date slugs and tidying).
 
 ---
 
