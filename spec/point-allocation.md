@@ -346,7 +346,7 @@ pass)`: a `maybe` never earns more points than the lowest-funded pass. By
     over- or under-filled (a bare pin that doesn't even out, an under-pinned down
     bank, etc.). The allocator emits a `budget-mismatch` tradeoff (so every report
     surfaces it) and the CLI prints a loud `⛔ OVER BUDGET` / `⚠️ Bank not fully
-    spent` line. There is no longer a silent overflow.
+spent` line. There is no longer a silent overflow.
   - **A pin above a real per-song cap is rejected immediately.** `maxUpvotesPerSong`
     / `maxDownvotesPerSong` (Music League encodes "no limit" as `0` → unlimited); a
     pin exceeding a finite cap errors at the CLI (`pinCapError`) instead of being
@@ -359,7 +359,7 @@ pass)`: a `maybe` never earns more points than the lowest-funded pass. By
 - **`tierCount`** — forces the number of **distinct final point values** (counting
   the `0` band; `0–2 points` = 3 tiers). The allocator picks the best staircase with
   that many distinct values (nearest achievable if none). Set by `just pick
-  <round> <letter>` on a surfaced option, or via `--tier-count <n>` on **pick**
+<round> <letter>` on a surfaced option, or via `--tier-count <n>` on **pick**
   (preview-only on parse/merge).
 - **`bucketCount`** — forces **K**, the number of **funded** point tiers (promotion
   steps + 1, excluding the `0` band) — the lower-level knob beneath `tierCount`. Set
@@ -406,13 +406,19 @@ depends on the scoring type:
   **and** same gate class (both passing, or both `maybe`) ⇒ same points. A `75`
   pass and a `75` maybe are in **different fit tiers**, so the matching
   requirement does not apply.
-- **Combined / numeric fit**: **identical modifier-folded music** _and_ the **same
-  coarse fit band** ⇒ same tier. The made-up AI fit number is collapsed to its
-  graded tier (`fitTierForScore`) for the comparison, so tiny fit gaps never split a
-  tier; music (the real axis) must match exactly, but with the `+`/`-` modifier
-  **folded in** — a `74+` and a plain `74` are now **different** combined tiers,
-  because in combined mode the modifier is a real (round-tightness-scaled)
-  contributor to the normalized blend, not just an indivisible-split tiebreak.
+- **Combined / numeric fit**: depends on **fit trust** (`profile.fitTrust`):
+  - **`manual`** — parse with owner-typed fit: `applyManualFitScoring` calls
+    `normalizeCombined` with adaptive fit std floor (rank/sort uses normalized
+    `combinedScore`); `tierKey` buckets on **quantized raw weighted blend** (0.5
+    steps) so equal owner intent (e.g. 90/77 vs 77/90 → raw 83.5) ⇒ equal votes.
+  - **LLM fit** (`fitTrust: llm` — `fit.json` merge, no manual numerics):
+    **identical modifier-folded music** _and_ the **same coarse fit band** ⇒ same
+    tier. The made-up AI fit number is collapsed to its graded tier
+    (`fitTierForScore`) for the comparison, so tiny fit gaps never split a tier;
+    music (the real axis) must match exactly, but with the `+`/`-` modifier
+    **folded in** — a `74+` and a plain `74` are now **different** combined tiers,
+    because in combined mode the modifier is a real (round-tightness-scaled)
+    contributor to the normalized blend, not just an indivisible-split tiebreak.
 
 ## Budget exactness
 

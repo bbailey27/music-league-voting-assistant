@@ -165,15 +165,17 @@ function buildProfile(args, stored, budget, mode) {
   const downShape = parseDownShape(args.downShape) ?? stored?.downShape;
   const shape = args.shape ?? stored?.shape ?? 'auto';
   const rankBy = args.rank ?? stored?.rankBy ?? (mode === 'thematic' ? 'combined' : 'music');
+  const fitTrust = stored?.fitTrust;
   return enrichProfileWithBudget(
-    { shape, downShape, gate, weights, overrides, downOverrides, tierCount, bucketCount, favoriteBand, rankBy },
+    { shape, downShape, gate, weights, overrides, downOverrides, tierCount, bucketCount, favoriteBand, rankBy, fitTrust },
     budget
   );
 }
 
 function slimProfile(profile) {
-  const { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand } = profile;
-  return { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand };
+  const { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand, fitTrust } =
+    profile;
+  return { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand, fitTrust };
 }
 
 /** Profile for menu tradeoffs — pin overrides apply only after option+pin reconcile. */

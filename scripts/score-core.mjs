@@ -11,7 +11,7 @@ export {
   allocate,
   ckmeans1dWeighted,
 } from './score/allocate.mjs';
-export { combinedScore, normalizeCombined, mergeFit, flagMusicLifts } from './score/merge.mjs';
+export { combinedScore, normalizeCombined, mergeFit, flagMusicLifts, resolveFitTrust } from './score/merge.mjs';
 export {
   buildPickRecord,
   mergeFitJson,

@@ -15,7 +15,7 @@ import {
   buildMarkdown,
   buildJsonPayload,
   enrichProfileWithBudget,
-  combinedScore,
+  normalizeCombined,
   MANUAL_FIT_WEIGHTS,
 } from './score-core.mjs';
 import { parseRoundText } from './parse-text.mjs';
@@ -62,7 +62,8 @@ export function applyManualFitScoring(profile, songs, { explicitRank = null, wei
 
   const combineWeights = weights ?? MANUAL_FIT_WEIGHTS;
   profile.weights = combineWeights;
-  for (const s of songs) s.combinedScore = combinedScore(s, combineWeights);
+  profile.fitTrust = 'manual';
+  normalizeCombined(songs, combineWeights, profile.gate, { fitTrust: 'manual' });
   if (!explicitRank) profile.rankBy = 'combined';
   return combineWeights;
 }

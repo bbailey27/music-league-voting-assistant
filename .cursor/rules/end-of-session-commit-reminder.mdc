@@ -1,0 +1,31 @@
+---
+description: Remind the user to commit before ending a session when work is uncommitted
+alwaysApply: true
+---
+
+# End-of-session commit reminder
+
+When the session is winding down — the user says they're done, signs off, or you
+have finished a substantial chunk of work — **do not commit on your own** (see
+`no-auto-commit.mdc`). Instead, **remind the user** if there is uncommitted work.
+
+## When to remind
+
+- User signals end of session ("that's all", "thanks", "logging off", etc.)
+- You are wrapping up after a multi-file feature or refactor
+- `git status` would show modified/untracked files you touched this session
+
+Skip the reminder if the working tree is clean or the user already committed or
+explicitly said they'll commit later.
+
+## What to say (brief)
+
+1. **Uncommitted changes** — note that files are still in the working tree; offer
+   to commit in reasonable chunks if they want (do not run `git commit` unless asked).
+2. **`data/` submodule** — if analysis/rounds under `data/` changed, remind which
+   repo to commit/push first (`data` before parent pointer). See `data-submodule-sync.mdc`.
+3. **Active plan files** — if `.cursor/plans/*.plan.md` with open work was part of
+   this effort, note plan-lifecycle: commit the plan with the effort's first commit,
+   delete when shipped.
+
+Keep it to a short checklist, not a lecture.

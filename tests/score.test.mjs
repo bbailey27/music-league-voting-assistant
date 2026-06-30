@@ -110,26 +110,38 @@ test('scoreComment manual fit notation', () => {
 
 test('applyManualFitScoring: explicit --rank combined still sets combinedScore', () => {
   const songs = [
-    { score: 76, fitScore: 95, fitSource: 'manual' },
-    { score: 90, fitScore: null, fitSource: null },
+    { rawOrderIndex: 0, title: 'a', score: 76, fitScore: 95, fitSource: 'manual' },
+    { rawOrderIndex: 1, title: 'b', score: 90, fitScore: 80, fitSource: 'manual' },
+    { rawOrderIndex: 2, title: 'c', score: 70, fitScore: 70, fitSource: 'manual' },
+    { rawOrderIndex: 3, title: 'd', score: 72, fitScore: 65, fitSource: 'manual' },
+    { rawOrderIndex: 4, title: 'e', score: 68, fitScore: 60, fitSource: 'manual' },
+    { rawOrderIndex: 5, title: 'f', score: 74, fitScore: 75, fitSource: 'manual' },
   ];
   const profile = { rankBy: 'music' };
 
   const weights = applyManualFitScoring(profile, songs, { explicitRank: 'combined' });
   assert.deepEqual(weights, { fit: 0.5, music: 0.5 });
-  assert.equal(songs[0].combinedScore, 85.5);
+  assert.equal(profile.fitTrust, 'manual');
+  assert.ok(songs[0].combinedScore != null);
+  assert.ok(songs[0].fitNorm != null && songs[0].musicNorm != null, 'uses normalizeCombined');
   assert.equal(profile.rankBy, 'music', 'explicit rank applied after manual-fit setup');
 
   profile.rankBy = 'combined';
-  assert.equal(songs[0].combinedScore, 85.5);
+  assert.ok(songs[0].combinedScore != null);
 });
 
 test('applyManualFitScoring: defaults rankBy to combined when rank omitted', () => {
-  const songs = [{ score: 76, fitScore: 95, fitSource: 'manual' }];
+  const songs = [
+    { rawOrderIndex: 0, title: 'a', score: 76, fitScore: 95, fitSource: 'manual' },
+    { rawOrderIndex: 1, title: 'b', score: 70, fitScore: 70, fitSource: 'manual' },
+    { rawOrderIndex: 2, title: 'c', score: 72, fitScore: 65, fitSource: 'manual' },
+    { rawOrderIndex: 3, title: 'd', score: 68, fitScore: 60, fitSource: 'manual' },
+  ];
   const profile = {};
   applyManualFitScoring(profile, songs, {});
   assert.equal(profile.rankBy, 'combined');
-  assert.equal(songs[0].combinedScore, 85.5);
+  assert.equal(profile.fitTrust, 'manual');
+  assert.ok(songs[0].combinedScore != null);
 });
 
 test('applyManualFitScoring: no-op without manual fit', () => {
@@ -1117,13 +1129,47 @@ test('combined: equal music + same coarse fit band share a tier', () => {
     { title: 'C', rawOrderIndex: 2, score: 75, fitScore: 45 },
     { title: 'D', rawOrderIndex: 3, score: 60, fitScore: 30 },
   ];
-  allocate(songs, 8, 5, { rankBy: 'combined', shape: 'bell' });
+  normalizeCombined(songs, undefined, null, { fitTrust: 'llm' });
+  allocate(songs, 8, 5, { rankBy: 'combined', fitTrust: 'llm', shape: 'bell' });
   assert.equal(sum(songs), 8);
   assert.ok(
     Math.abs(songs[0].finalVotes - songs[1].finalVotes) <= 1,
     'near-equal fit does not separate equal-music songs'
   );
   assert.ok(songs[0].finalVotes >= songs[2].finalVotes, 'higher fit band ranks at least as high');
+});
+
+test('manual fitTrust: symmetric raw combined ties tier and votes (KARMA/Stone)', () => {
+  const songs = [
+    { rawOrderIndex: 0, title: 'KARMA', score: 90, fitScore: 77, fitSource: 'manual' },
+    { rawOrderIndex: 1, title: 'Stone', score: 77, fitScore: 90, fitSource: 'manual' },
+    { rawOrderIndex: 2, title: 'f1', score: 70, fitScore: 60, fitSource: 'manual' },
+    { rawOrderIndex: 3, title: 'f2', score: 72, fitScore: 65, fitSource: 'manual' },
+    { rawOrderIndex: 4, title: 'f3', score: 74, fitScore: 70, fitSource: 'manual' },
+    { rawOrderIndex: 5, title: 'f4', score: 68, fitScore: 55, fitSource: 'manual' },
+    { rawOrderIndex: 6, title: 'f5', score: 65, fitScore: 50, fitSource: 'manual' },
+  ];
+  normalizeCombined(songs, { fit: 0.5, music: 0.5 }, null, { fitTrust: 'manual' });
+  assert.equal(0.5 * 77 + 0.5 * 90, 0.5 * 90 + 0.5 * 77, 'raw combined ties');
+  allocate(songs, 14, 5, {
+    rankBy: 'combined',
+    fitTrust: 'manual',
+    weights: { fit: 0.5, music: 0.5 },
+    shape: 'bell',
+  });
+  assert.equal(songs[0].finalVotes, songs[1].finalVotes, 'equal raw Combined ⇒ equal votes');
+});
+
+test('normalizeCombined manual: wide fit field differentiates scores', () => {
+  const songs = [
+    { rawOrderIndex: 0, title: 'hi', score: 80, fitScore: 95, fitSource: 'manual' },
+    { rawOrderIndex: 1, title: 'lo', score: 80, fitScore: 40, fitSource: 'manual' },
+    { rawOrderIndex: 2, title: 'm1', score: 75, fitScore: 70, fitSource: 'manual' },
+    { rawOrderIndex: 3, title: 'm2', score: 72, fitScore: 65, fitSource: 'manual' },
+    { rawOrderIndex: 4, title: 'm3', score: 70, fitScore: 55, fitSource: 'manual' },
+  ];
+  normalizeCombined(songs, { fit: 0.5, music: 0.5 }, null, { fitTrust: 'manual' });
+  assert.ok(songs[0].combinedScore > songs[1].combinedScore, 'wide fit spread separates songs');
 });
 
 // ---------------------------------------------------------------------------
@@ -1371,6 +1417,8 @@ test('mergeFit: LLM fills fit-silent songs, manual wins, combined is set', () =>
   assert.equal(songs[1].fitSource, 'llm');
   assert.equal(songs[1].rationale, 'on theme', 'context fields carried for rendering');
   assert.ok(songs[0].combinedScore != null && songs[1].combinedScore != null, 'combined scores set');
+  // Manual fit on the field → adaptive fit floor (not LLM dampening).
+  assert.ok(songs[0].fitNorm != null);
 });
 
 test('mergeFitJson: gate words in fitTier drive a passFail allocation + writeback', () => {

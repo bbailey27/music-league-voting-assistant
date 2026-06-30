@@ -11,6 +11,32 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-06-30 — Combined tier equality by fit trust (manual vs LLM)
+
+**Change.** Two combined sub-modes via `profile.fitTrust`:
+
+- **`manual`** — parse with owner-typed fit: `applyManualFitScoring` calls
+  `normalizeCombined` with adaptive fit std floor for rank/sort; `tierKey` buckets
+  on quantized **raw** weighted blend so equal owner intent (90/77 vs 77/90) ⇒
+  equal votes even when normalized display scores differ.
+- **`llm`** — merge / fit.json: unchanged dampened fit floor (14) and
+  `music + coarse fit band` tierKey.
+
+`resolveFitTrust()` picks mode; any manual fit on the field wins for mixed rounds.
+`fitTrust` persists in slim profile JSON.
+
+**Why.** Raw 0.5×fit + 0.5×music display tied KARMA/Stone at 83.5, but
+`tierKey` used `c:90|solid` vs `c:77|excellent` → different vote units. Owner
+numeric fit should not silently apply LLM coarse-band cutoffs.
+
+**Overruled.** Using coarse fit bands for manual numerics (85 vs 86 crossing
+excellent/strong was unintentional).
+
+**Refs.** `working tree` · `scripts/score/merge.mjs`, `scripts/score/allocate.mjs`,
+`scripts/parse-round.mjs`, `spec/point-allocation.md` (Same score = same tier).
+
+---
+
 ## 2026-06-30 — Cutoff-gated songs visible in option tables
 
 **Change.** `isExcludedFromAllocation` now treats profile `--cutoff` failures like gate

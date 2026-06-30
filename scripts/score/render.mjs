@@ -5,7 +5,7 @@ import { expandTradeoffRows, isExcludedFromAllocation } from '../tradeoff-rows.m
 import { cell, formatScore } from './format.mjs';
 import { tiebreakRank } from './comment.mjs';
 import { DEFAULT_COMBINED_WEIGHTS } from './fit-signal.mjs';
-import { mergeFit, normTitle } from './merge.mjs';
+import { mergeFit, normTitle, resolveFitTrust } from './merge.mjs';
 import { allocate, enrichProfileWithBudget } from './allocate.mjs';
 import { displayWidth, padEndDisplay, padStartDisplay } from '../text-width.mjs';
 
@@ -72,12 +72,13 @@ export function mergeFitJson(parsed, fitData, profile = {}) {
   const weights = profile.weights || DEFAULT_COMBINED_WEIGHTS;
   const rankBy = profile.rankBy || 'combined';
   mergeFit(parsed.songs, fitData.songs || [], { weights, gate: profile.gate });
+  const fitTrust = resolveFitTrust(parsed.songs, profile.gate);
 
   const { tradeoffs } = allocate(
     parsed.songs,
     parsed.budget?.upvoteBankSize ?? 0,
     parsed.budget?.maxUpvotesPerSong ?? Infinity,
-    enrichProfileWithBudget({ ...profile, rankBy, weights }, parsed.budget)
+    enrichProfileWithBudget({ ...profile, rankBy, weights, fitTrust }, parsed.budget)
   );
 
   const byIndex = new Map(parsed.songs.map((s) => [s.rawOrderIndex, s]));

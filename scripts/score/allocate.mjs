@@ -113,12 +113,27 @@ function coarseFit(s) {
   return '';
 }
 
+// Quantize a rank value to fixed steps (matches music score granularity).
+function quantizeScore(v, step = 0.5) {
+  if (v == null || Number.isNaN(v)) return '';
+  return Math.round(v / step) * step;
+}
+
+function combinedFitTrust(profile) {
+  return profile.fitTrust === 'manual' ? 'manual' : 'llm';
+}
+
 // Human label for a tierKey group — what "same tier" means for this rankBy mode.
 function describeTierGroup(members, profile) {
   if (!members?.length) return 'same tier';
   const s = members[0];
   switch (profile.rankBy) {
     case 'combined': {
+      if (combinedFitTrust(profile) === 'manual') {
+        const raw = combinedScore(s, profile.weights || DEFAULT_COMBINED_WEIGHTS);
+        const c = quantizeScore(raw, 0.5);
+        return c !== '' ? `combined ${formatScore(c)}` : 'combined ?';
+      }
       const music = effectiveMusic(s);
       const musicLabel =
         music != null && music !== ''
@@ -153,6 +168,10 @@ function tierKey(s, profile) {
     case 'fit':
       return `f:${coarseFit(s)}`;
     case 'combined':
+      if (combinedFitTrust(profile) === 'manual') {
+        const raw = combinedScore(s, profile.weights || DEFAULT_COMBINED_WEIGHTS);
+        return `c:b:${quantizeScore(raw, 0.5)}`;
+      }
       // Modifier-folded music (effectiveMusic) is the exact axis here: a `74+` and a
       // plain `74` are now different tiers (the fold-in earned it), while the made-up
       // fit number is fuzzed to its coarse band so tiny fit gaps never split a tier.

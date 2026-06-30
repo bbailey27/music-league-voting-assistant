@@ -37,10 +37,10 @@ Sub-52 songs are scored on that remaining curve but excluded from vote allocatio
 
 ## Where this applies
 
-| Path                                         | Status                                                                                                                                                             |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `mergeFit` / LLM rounds (`merge-scores.mjs`) | **Shipped** — passes `profile.gate` into `normalizeCombined`                                                                                                       |
-| Manual-fit parse (`applyManualFitScoring`)   | **Planned** — must pass `profile.gate` when wired to `normalizeCombined` ([combined-tier-trust-modes plan](../../.cursor/plans/combined-tier-trust-modes.plan.md)) |
+| Path                                         | Status                                                                               |
+| -------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `mergeFit` / LLM rounds (`merge-scores.mjs`) | **Shipped** — passes `profile.gate` into `normalizeCombined`                         |
+| Manual-fit parse (`applyManualFitScoring`)   | **Shipped** — passes `profile.gate` into `normalizeCombined` with `fitTrust: manual` |
 
 ## See also
 

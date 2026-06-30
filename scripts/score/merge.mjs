@@ -64,9 +64,19 @@ function isContender(s, gate) {
   return g !== 'fail';
 }
 
+/** manual = owner-typed fit scores; llm = fit.json / tier-word rounds. */
+export function resolveFitTrust(songs) {
+  return songs.some((s) => s.fitSource === 'manual' && s.fitScore != null) ? 'manual' : 'llm';
+}
+
 // Set `combinedScore` on every song to the normalized, remapped blend. Songs with
 // only one axis fall back to that axis's raw score (kept clean for display).
-export function normalizeCombined(songs, weights = DEFAULT_COMBINED_WEIGHTS, gate = null) {
+export function normalizeCombined(
+  songs,
+  weights = DEFAULT_COMBINED_WEIGHTS,
+  gate = null,
+  { fitTrust = 'llm' } = {}
+) {
   const contenders = songs.filter((s) => isContender(s, gate));
   const fitVals = contenders.map((s) => s.fitScore).filter((v) => v != null);
   const musicVals = contenders.map((s) => effectiveMusic(s)).filter((v) => v != null);
@@ -74,7 +84,8 @@ export function normalizeCombined(songs, weights = DEFAULT_COMBINED_WEIGHTS, gat
 
   const fitMean = smallN || !fitVals.length ? FIT_REF_MEAN : mean(fitVals);
   const musicMean = smallN || !musicVals.length ? MUSIC_REF_MEAN : mean(musicVals);
-  const fitDenom = Math.max(FIT_STD_FLOOR, smallN || !fitVals.length ? 0 : stddev(fitVals, fitMean));
+  const fitFloor = fitTrust === 'manual' ? MUSIC_STD_FLOOR : FIT_STD_FLOOR;
+  const fitDenom = Math.max(fitFloor, smallN || !fitVals.length ? 0 : stddev(fitVals, fitMean));
   const musicDenom = Math.max(MUSIC_STD_FLOOR, smallN || !musicVals.length ? 0 : stddev(musicVals, musicMean));
 
   for (const s of songs) {
@@ -135,9 +146,10 @@ export function mergeFit(songs, fitSongs, { weights = DEFAULT_COMBINED_WEIGHTS, 
   }
   // Combined scores are a per-round normalization, so they must be set in one pass
   // over the whole field (not song-by-song) once fit is merged in.
-  normalizeCombined(songs, weights, gate);
+  const fitTrust = resolveFitTrust(songs, gate);
+  normalizeCombined(songs, weights, gate, { fitTrust });
   flagMusicLifts(songs);
-  return songs;
+  return { songs, fitTrust };
 }
 // Flag songs whose combined rank sits ABOVE a song with a strictly better fit
 // tier — i.e. music (not fit) carried them past it. This is surfaced as a
