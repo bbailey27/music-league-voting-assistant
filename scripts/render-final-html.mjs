@@ -84,6 +84,7 @@ function buildModel(music) {
     pick: music.pick || null,
     combine: music.combine || null,
     combineWeights: music.combineWeights || null,
+    profile: music.profile || null,
   };
 }
 
@@ -215,7 +216,7 @@ function renderTradeoffs(model) {
 
   // Distribution forks render as song×option comparison tables (shared helper);
   // append the qualitative "how to combine" note as a trailing block.
-  const main = tradeoffsHtml(tradeoffs);
+  const main = tradeoffsHtml(tradeoffs, model.songs, model.ownSongs, model.profile);
   let combineBlock = '';
   if (hasCombine) {
     const opts = (combine.options || []).map((o) => `<li>${esc(o)}</li>`).join('');
@@ -258,7 +259,7 @@ function renderDocument(model, order) {
     renderHead(model),
     renderCandidates(model, order),
     renderTradeoffs(model),
-    pickHtml(model.pick),
+    pickHtml(model.pick, model.songs, model.ownSongs, model.profile),
     renderList('Needs my score (blank boxes)', songs.filter((s) => s.needsUserInput)),
     renderList('Needs review', songs.filter((s) => s.needsReview), 'review'),
     renderList('Disqualified (no points)', songs.filter((s) => s.isDisqualified)),

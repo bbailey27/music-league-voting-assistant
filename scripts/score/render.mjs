@@ -1,11 +1,13 @@
 // Report rendering and fit-research orchestration.
 
-import { formatPickCmd } from '../cli-commands.mjs';
+import { formatPickCmd, downShapeShort } from '../cli-commands.mjs';
+import { expandTradeoffRows, isExcludedFromAllocation } from '../tradeoff-rows.mjs';
 import { cell, formatScore } from './format.mjs';
 import { tiebreakRank } from './comment.mjs';
 import { DEFAULT_COMBINED_WEIGHTS } from './fit-signal.mjs';
 import { mergeFit, normTitle } from './merge.mjs';
 import { allocate, enrichProfileWithBudget } from './allocate.mjs';
+import { displayWidth, padEndDisplay, padStartDisplay } from '../text-width.mjs';
 
 export function buildPickRecord({
   options,
@@ -140,11 +142,11 @@ export function rankedSort(a, b) {
 // source is skimmable. `aligns` is 'right' | 'left' per column.
 function renderTable(L, headers, aligns, rows, indent = '') {
   const widths = headers.map((h, i) =>
-    Math.max(h.length, ...rows.map((r) => String(r[i] ?? '').length))
+    Math.max(displayWidth(h), ...rows.map((r) => displayWidth(r[i] ?? '')))
   );
   const cell = (s, i) => {
     const v = String(s ?? '');
-    return aligns[i] === 'right' ? v.padStart(widths[i]) : v.padEnd(widths[i]);
+    return aligns[i] === 'right' ? padStartDisplay(v, widths[i]) : padEndDisplay(v, widths[i]);
   };
   const sep = widths.map((w, i) =>
     aligns[i] === 'right' ? `${'-'.repeat(w - 1)}:` : `:${'-'.repeat(w - 1)}`
@@ -159,23 +161,34 @@ function renderTable(L, headers, aligns, rows, indent = '') {
 // cell is the votes that option gives the song. This reads as a direct
 // "what changes between options" diff instead of three separate per-option blocks.
 const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
-function renderTierStructure(L, t, roundId = null) {
+
+function tradeoffScoreCell(row, perSongRef, profile = null) {
+  if (row.excluded || isExcludedFromAllocation(row.song, profile)) return '-';
+  if (row.ri != null) return formatScore(perSongRef[row.ri]?.score ?? perSongRef[row.ri]?.rank);
+  return formatScore(row.song?.combinedScore ?? row.song?.score);
+}
+
+function renderTierStructure(L, t, roundId = null, songs = [], ownSongs = [], profile = null) {
   const opts = (t.options || []).filter((o) => Array.isArray(o.perSong) && o.perSong.length);
   if (!opts.length) {
     for (const o of t.options || []) L.push(`  - ${o.label ?? o}`);
     L.push('');
     return;
   }
-  const rows0 = opts[0].perSong; // index-aligned across every option
+  const rows0 = opts[0].perSong;
+  const tableRows = expandTradeoffRows(rows0, songs, ownSongs, profile);
   const trunc = (s) => (String(s).length > 30 ? `${String(s).slice(0, 29)}…` : String(s));
   const headers = ['#', 'Song', 'Score', ...opts.map((_, i) => OPTION_LETTERS[i])];
   const aligns = ['right', 'left', 'right', ...opts.map(() => 'right')];
-  const rows = rows0.map((r, ri) => [
-    String(r.rawOrderIndex),
-    trunc(r.title),
-    formatScore(r.score ?? r.rank),
-    ...opts.map((o) => String(o.perSong[ri]?.votes ?? 0)),
-  ]);
+  const rows = tableRows.map((row) => {
+    const excluded = row.excluded || isExcludedFromAllocation(row.song, profile);
+    return [
+      String(row.rawOrderIndex),
+      trunc(row.title),
+      tradeoffScoreCell(row, rows0, profile),
+      ...opts.map((o) => (excluded ? '-' : String(o.perSong[row.ri]?.votes ?? 0))),
+    ];
+  });
   rows.push([
     '',
     'Total',
@@ -198,7 +211,52 @@ function renderTierStructure(L, t, roundId = null) {
   L.push('');
 }
 
-export function renderPickMarkdown(L, pick) {
+function renderDownStructure(L, t, roundId = null, songs = [], ownSongs = [], profile = null) {
+  const opts = (t.options || []).filter((o) => Array.isArray(o.perSong) && o.perSong.length);
+  if (!opts.length) {
+    for (const o of t.options || []) L.push(`  - ${o.label ?? o}`);
+    L.push('');
+    return;
+  }
+  const rows0 = opts[0].perSong;
+  const tableRows = expandTradeoffRows(rows0, songs, ownSongs, profile);
+  const trunc = (s) => (String(s).length > 30 ? `${String(s).slice(0, 29)}…` : String(s));
+  const headers = ['#', 'Song', 'Score', ...opts.map((o) => downShapeShort(o.downShape))];
+  const aligns = ['right', 'left', 'right', ...opts.map(() => 'right')];
+  const fmtDown = (v) => (v > 0 ? `-${v}` : String(v));
+  const rows = tableRows.map((row) => {
+    const excluded = row.excluded || isExcludedFromAllocation(row.song, profile);
+    return [
+      String(row.rawOrderIndex),
+      trunc(row.title),
+      tradeoffScoreCell(row, rows0, profile),
+      ...opts.map((o) => (excluded ? '-' : fmtDown(o.perSong[row.ri]?.votes ?? 0))),
+    ];
+  });
+  rows.push([
+    '',
+    'Total',
+    '',
+    ...opts.map((o) => fmtDown(o.perSong.reduce((a, s) => a + (s.votes || 0), 0))),
+  ]);
+  L.push('');
+  L.push('  Downvote shape (columns: cv=curved, fl=flat, cc=concentrated):');
+  L.push('');
+  renderTable(L, headers, aligns, rows, '  ');
+  L.push('');
+  opts.forEach((o, i) => {
+    const code = downShapeShort(o.downShape);
+    const cmd = roundId
+      ? formatPickCmd(roundId, 'A', { downShape: o.downShape })
+      : `just pick <round> A ${downShapeShort(o.downShape)}`;
+    L.push(
+      `  - **${code}**${i === 0 ? ' (default)' : ''} — ${o.shape ?? o.label ?? o.downShape}, \`${cmd}\` (pair with up letter A|B|C)`
+    );
+  });
+  L.push('');
+}
+
+export function renderPickMarkdown(L, pick, songs = [], ownSongs = [], profile = null) {
   const opts = (pick?.options || []).filter((o) => Array.isArray(o.perSong) && o.perSong.length);
   if (!opts.length) return;
   L.push('## Your pick');
@@ -218,12 +276,16 @@ export function renderPickMarkdown(L, pick) {
   const headers = ['#', 'Song', 'Score', ...opts.map((o) => o.letter)];
   const aligns = ['right', 'left', 'right', ...opts.map(() => 'right')];
   const rows0 = opts[0].perSong;
-  const rows = rows0.map((r, ri) => [
-    String(r.rawOrderIndex),
-    trunc(r.title),
-    formatScore(r.score ?? r.rank),
-    ...opts.map((o) => String(o.perSong[ri]?.votes ?? 0)),
-  ]);
+  const tableRows = expandTradeoffRows(rows0, songs, ownSongs, profile);
+  const rows = tableRows.map((row) => {
+    const excluded = row.excluded || isExcludedFromAllocation(row.song, profile);
+    return [
+      String(row.rawOrderIndex),
+      trunc(row.title),
+      tradeoffScoreCell(row, rows0, profile),
+      ...opts.map((o) => (excluded ? '-' : String(o.perSong[row.ri]?.votes ?? 0))),
+    ];
+  });
   rows.push([
     '',
     'Total',
@@ -239,7 +301,7 @@ export function renderPickMarkdown(L, pick) {
   L.push('');
 }
 
-export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mode, tradeoffs, ownSongs = [], pick = null, roundId = null }) {
+export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mode, tradeoffs, ownSongs = [], pick = null, roundId = null, profile = null }) {
   const scored = songs.filter((s) => s.score != null).sort(rankedSort);
   const disqualified = songs.filter((s) => s.isDisqualified);
   const needsInput = songs.filter((s) => s.needsUserInput);
@@ -345,13 +407,14 @@ export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mo
     L.push('');
     for (const t of tradeoffs) {
       L.push(`- ${cell(t.question)}`);
-      if (t.kind === 'tier-structure') renderTierStructure(L, t, roundId);
+      if (t.kind === 'tier-structure') renderTierStructure(L, t, roundId, songs, ownSongs, profile);
+      else if (t.kind === 'down-structure') renderDownStructure(L, t, roundId, songs, ownSongs, profile);
       else for (const o of t.options || []) L.push(`  - ${cell(o.label)}`);
     }
     L.push('');
   }
 
-  if (pick) renderPickMarkdown(L, pick);
+  if (pick) renderPickMarkdown(L, pick, songs, ownSongs, profile);
 
   L.push('---');
   L.push('Draft allocation — rebalance as needed. Tiers are relative to this round only.');

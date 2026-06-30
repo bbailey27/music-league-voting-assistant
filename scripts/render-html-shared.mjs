@@ -1,6 +1,8 @@
 // Shared HTML rendering helpers and stylesheet fragments for fit/final reports.
 
 import { formatScore } from './score-core.mjs';
+import { downShapeShort } from './cli-commands.mjs';
+import { expandTradeoffRows, isExcludedFromAllocation } from './tradeoff-rows.mjs';
 
 export function esc(s) {
   return String(s ?? '')
@@ -166,7 +168,13 @@ const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 // Downvote magnitudes always display as negative. The raw submission-order ballot
 // is NOT duplicated per option here; it lives once, with a column per up×down combo,
 // in the "Ballot (raw order)" section. Falls back gracefully when `perSong` is absent.
-function tierStructureTableHtml(t, chosenIndex = null) {
+function tradeoffScoreHtml(row, perSongRef, profile = null) {
+  if (row.excluded || isExcludedFromAllocation(row.song, profile)) return '—';
+  if (row.ri != null) return formatScore(perSongRef[row.ri]?.score ?? perSongRef[row.ri]?.rank);
+  return formatScore(row.song?.combinedScore ?? row.song?.score);
+}
+
+function tierStructureTableHtml(t, chosenIndex = null, songs = [], ownSongs = [], profile = null) {
   const down = t.kind === 'down-structure';
   const opts = (t.options || []).filter((o) => Array.isArray(o.perSong) && o.perSong.length);
   if (!opts.length) {
@@ -179,7 +187,12 @@ function tierStructureTableHtml(t, chosenIndex = null) {
   // (a recorded pick); the chosen column also gets a stronger `chosen` class.
   const optClass = (i) =>
     `opt${chosenIndex == null && i === 0 ? ' default' : ''}${i === chosenIndex ? ' chosen' : ''}`;
-  const optHead = opts.map((o, i) => `<th class="num ${optClass(i)}">${OPTION_LETTERS[i]}</th>`).join('');
+  const optHead = opts
+    .map((o, i) => {
+      const label = down ? downShapeShort(o.downShape) : OPTION_LETTERS[i];
+      return `<th class="num ${optClass(i)}">${label}</th>`;
+    })
+    .join('');
   const totalsRow = (extraLead = 0) => {
     const cells = opts
       .map((o, i) => `<td class="num ${optClass(i)}">${fmtVote(o.perSong.reduce((a, s) => a + (s.votes || 0), 0))}</td>`)
@@ -189,15 +202,19 @@ function tierStructureTableHtml(t, chosenIndex = null) {
 
   // Combined/rank order. (The raw-submission-order ballot lives once in the
   // "Ballot (raw order)" section, with a column per up×down combo — not here.)
-  const combinedBody = opts[0].perSong
-    .map((r, ri) => {
+  const tableRows = expandTradeoffRows(opts[0].perSong, songs, ownSongs, profile);
+  const combinedBody = tableRows
+    .map((row) => {
+      const excluded = row.excluded || isExcludedFromAllocation(row.song, profile);
       const cells = opts
         .map((o, i) => {
-          const v = o.perSong[ri]?.votes ?? 0;
+          if (excluded) return `<td class="num ${optClass(i)} excluded">—</td>`;
+          const v = o.perSong[row.ri]?.votes ?? 0;
           return `<td class="num ${optClass(i)}${v > 0 ? ' on' : ''}">${fmtVote(v)}</td>`;
         })
         .join('');
-      return `<tr><td class="num muted">${esc(r.rawOrderIndex)}</td><td>${esc(r.title)}</td><td class="num">${formatScore(r.score ?? r.rank)}</td>${cells}</tr>`;
+      const rowClass = excluded ? ' class="excluded"' : '';
+      return `<tr${rowClass}><td class="num muted">${esc(row.rawOrderIndex)}</td><td>${esc(row.title)}</td><td class="num">${tradeoffScoreHtml(row, opts[0].perSong, profile)}</td>${cells}</tr>`;
     })
     .join('\n');
 
@@ -205,10 +222,11 @@ function tierStructureTableHtml(t, chosenIndex = null) {
     .map((o, i) => {
       const tag = chosenIndex == null && i === 0 ? ' <span class="muted">(default)</span>' : '';
       const pick = i === chosenIndex ? ' <span class="muted">(your pick)</span>' : '';
+      const axisLabel = down ? downShapeShort(o.downShape) : OPTION_LETTERS[i];
       const desc = down
-        ? `<code>${esc(o.shape)}</code>, <code>--down-shape ${esc(o.downShape)}</code>`
+        ? `<code>${esc(o.shape)}</code>, <code>--down-shape ${esc(o.downShape)}</code> (pair with up letter A|B|C)`
         : `${o.tierCount} tier${o.tierCount === 1 ? '' : 's'}, <code>${esc(o.shape)}</code>, <code>--option ${OPTION_LETTERS[i]}</code>`;
-      return `<li><b>${OPTION_LETTERS[i]}</b>${tag}${pick} — ${desc}</li>`;
+      return `<li><b>${axisLabel}</b>${tag}${pick} — ${desc}</li>`;
     })
     .join('');
 
@@ -231,21 +249,24 @@ ${combinedBody}
 // the reason + any manual tweaks, and a collapsed "options considered" comparison
 // (all options, chosen column highlighted) so the alternatives stay visible and
 // auditable after the pick.
-export function pickHtml(pick) {
+export function pickHtml(pick, songs = [], ownSongs = [], profile = null) {
   if (!pick || !Array.isArray(pick.options) || !pick.options.length) return '';
   const ci = pick.chosenIndex ?? pick.options.findIndex((o) => o.isChosen);
   const chosen = pick.options[ci];
   if (!chosen) return '';
 
-  const combinedRows = chosen.perSong
-    .map(
-      (s) =>
-        `<tr${s.votes > 0 ? ' class="has-votes"' : ''}><td class="num muted">${esc(s.rawOrderIndex)}</td><td>${esc(
-          s.title
-        )}</td><td class="num">${formatScore(s.score)}</td><td class="num votes${s.votes > 0 ? ' on' : ''}">${formatScore(
-          s.votes
-        )}</td></tr>`
-    )
+  const tableRows = expandTradeoffRows(chosen.perSong, songs, ownSongs, profile);
+  const combinedRows = tableRows
+    .map((row) => {
+      const excluded = row.excluded || isExcludedFromAllocation(row.song, profile);
+      const votes = excluded ? '—' : formatScore(chosen.perSong[row.ri]?.votes ?? 0);
+      const rowClass = excluded ? ' class="excluded"' : row.ri != null && chosen.perSong[row.ri]?.votes > 0 ? ' class="has-votes"' : '';
+      return `<tr${rowClass}><td class="num muted">${esc(row.rawOrderIndex)}</td><td>${esc(
+          row.title
+        )}</td><td class="num">${tradeoffScoreHtml(row, chosen.perSong, profile)}</td><td class="num votes${
+          !excluded && chosen.perSong[row.ri]?.votes > 0 ? ' on' : ''
+        }">${votes}</td></tr>`;
+    })
     .join('\n');
   const total = chosen.perSong.reduce((a, s) => a + (s.votes || 0), 0);
 
@@ -260,7 +281,7 @@ export function pickHtml(pick) {
 
   const considered = `<details class="considered">
   <summary>Options considered (${pick.options.map((o) => esc(o.letter)).join(' / ')})</summary>
-  ${tierStructureTableHtml({ kind: 'tier-structure', question: '', options: pick.options }, ci)}
+  ${tierStructureTableHtml({ kind: 'tier-structure', question: '', options: pick.options }, ci, songs, ownSongs, profile)}
 </details>`;
 
   return `<section class="pick tradeoffs">
@@ -281,13 +302,13 @@ ${combinedRows}
 
 // Render an allocator "needs your call" tradeoff list: distribution forks become
 // comparison tables; every other kind stays a compact bulleted choice list.
-export function tradeoffsHtml(tradeoffs) {
+export function tradeoffsHtml(tradeoffs, songs = [], ownSongs = [], profile = null) {
   const list = Array.isArray(tradeoffs) ? tradeoffs : [];
   if (!list.length) return '';
   const blocks = list
     .map((t) => {
       if (t.kind === 'tier-structure' || t.kind === 'down-structure')
-        return tierStructureTableHtml(t);
+        return tierStructureTableHtml(t, null, songs, ownSongs, profile);
       const opts = (t.options || []).map((o) => `<li>${esc(o.label ?? o)}</li>`).join('');
       return `<div class="tradeoff"><p class="q">${esc(t.question)}</p>${opts ? `<ul>${opts}</ul>` : ''}</div>`;
     })
@@ -297,10 +318,6 @@ export function tradeoffsHtml(tradeoffs) {
 ${blocks}
 </section>`;
 }
-
-// Short codes for the down-shape axis in combo column labels (e.g. "A·cv").
-const DOWN_SHORT = { curved: 'cv', flat: 'fl', concentrated: 'cc' };
-const downShort = (shape) => DOWN_SHORT[shape] || String(shape || '').slice(0, 2);
 
 // Read the live allocation off a song regardless of report source: final-html uses
 // `finalVotes`/`finalDownvotes`, fit-html uses `draftVotes`/`draftDownvotes`.
@@ -360,7 +377,7 @@ export function buildComboBallot(tradeoffs, songs = [], ownSongs = [], pick = nu
   let downOptions;
   if (downTr && Array.isArray(downTr.options) && downTr.options.length) {
     downOptions = downTr.options.map((o) => ({
-      code: downShort(o.downShape),
+      code: downShapeShort(o.downShape),
       selector: `--down-shape ${o.downShape}`,
       down: mapVotes(o.perSong),
     }));
@@ -370,8 +387,20 @@ export function buildComboBallot(tradeoffs, songs = [], ownSongs = [], pick = nu
   }
 
   const rows = [
-    ...(songs || []).map((s) => ({ rawOrderIndex: s.rawOrderIndex, title: s.title, artist: s.artist, isOwn: false })),
-    ...(ownSongs || []).map((s) => ({ rawOrderIndex: s.rawOrderIndex, title: s.title, artist: s.artist, isOwn: true })),
+    ...(songs || []).map((s) => ({
+      rawOrderIndex: s.rawOrderIndex,
+      title: s.title,
+      artist: s.artist,
+      isOwn: false,
+      song: s,
+    })),
+    ...(ownSongs || []).map((s) => ({
+      rawOrderIndex: s.rawOrderIndex,
+      title: s.title,
+      artist: s.artist,
+      isOwn: true,
+      song: s,
+    })),
   ].sort((a, b) => (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0));
 
   const raw = [];
@@ -444,6 +473,7 @@ export function comboBallotHtml(tradeoffs, songs = [], ownSongs = [], pick = nul
         .map((c) => {
           const v = c.perIndex.get(r.rawOrderIndex);
           if (r.isOwn || v === 'own') return '<td class="c zero">—</td>';
+        if (isExcludedFromAllocation(r.song)) return '<td class="c zero excluded">—</td>';
           if (v === 'conflict')
             return '<td class="c conflict" title="Conflict: upvoted by this option and downvoted by this shape — resolve by hand">!</td>';
           if (v > 0) return `<td class="c up">+${v}</td>`;
@@ -452,7 +482,7 @@ export function comboBallotHtml(tradeoffs, songs = [], ownSongs = [], pick = nul
         })
         .join('');
       const id = `<td class="num muted">${esc(r.rawOrderIndex)}</td><td>${esc(r.title)}</td><td class="muted">${esc(r.artist)}</td>`;
-      return `<tr${r.isOwn ? ' class="own"' : ''}>${id}${cells}</tr>`;
+      return `<tr${r.isOwn ? ' class="own"' : isExcludedFromAllocation(r.song) ? ' class="excluded"' : ''}>${id}${cells}</tr>`;
     })
     .join('\n');
 

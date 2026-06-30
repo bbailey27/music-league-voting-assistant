@@ -10,8 +10,7 @@ import { pathToFileURL } from 'node:url';
 import { mergeFitJson, enrichProfileWithBudget } from './score-core.mjs';
 import { matchFlag } from './cli-args.mjs';
 import { musicPaths, fitPaths, scoresPaths } from './paths.mjs';
-import { printTradeoffCli, printBallotCli } from './parse/cli-print.mjs';
-import { pickPromptLine } from './cli-commands.mjs';
+import { printPickCli } from './parse/cli-print.mjs';
 import {
   parsePins,
   pinCapError,
@@ -168,12 +167,7 @@ async function main() {
   await writeFile(scoresOut, JSON.stringify(merged, null, 2), 'utf8');
   console.log(`Wrote ${scoresOut} (merged scores + draftVotes; fit source unchanged: ${fitJson})`);
 
-  const calls = (tradeoffs || []).filter((t) => t.kind !== 'budget-mismatch');
-  if (calls.length) {
-    console.log(`\n${pickPromptLine(roundId, calls.length)}`);
-    for (const t of calls) printTradeoffCli(t, roundId, parsed.songs, parsed.ownSongs);
-    printBallotCli(tradeoffs, parsed.songs, parsed.ownSongs, roundId);
-  }
+  printPickCli(tradeoffs, roundId, parsed.songs, parsed.ownSongs, parsed.budget, slimProfile(profile));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

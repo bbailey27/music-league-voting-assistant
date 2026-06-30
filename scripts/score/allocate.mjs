@@ -8,6 +8,7 @@ import {
   fitTierForScore,
 } from './fit-signal.mjs';
 import { combinedScore, effectiveMusic } from './merge.mjs';
+import { gateClass, songGate } from './gate.mjs';
 
 // The single number a song is ranked + tiered by, per the profile's rankBy.
 // music (default): the music score; fit: the fit score; combined: the blend.
@@ -101,32 +102,6 @@ function bellWeights(values, center, { width, skew }) {
   });
 }
 
-// Classify a song against the profile's gate/cutoff: 'pass' | 'maybe' | 'fail'.
-// A song's gate flag, from the explicit gate field or a gate word that arrived
-// in fitTier (LLM gate rounds often label the tier itself pass/maybe/fail).
-function songGate(s) {
-  if (s.gate) return s.gate;
-  const t = String(s.fitTier || '').toLowerCase();
-  return t === 'pass' || t === 'maybe' || t === 'fail' ? t : null;
-}
-
-function gateClass(s, profile) {
-  const g = profile.gate;
-  if (!g) return 'pass';
-  if (g.type === 'cutoff') {
-    const v = g.axis === 'fit' ? s.fitScore : rankValue(s, profile);
-    return v != null && v >= g.min ? 'pass' : 'fail';
-  }
-  const gate = songGate(s);
-  if (g.type === 'passFail') return gate === 'fail' ? 'fail' : 'pass';
-  if (g.type === 'passFailMaybe') {
-    if (gate === 'fail') return 'fail';
-    if (gate === 'maybe') return 'maybe';
-    return 'pass';
-  }
-  return 'pass';
-}
-
 // Snap a song's fit signal to a coarse band. Made-up AI fit numbers aren't
 // precise enough to differentiate song-by-song, so we collapse them to the
 // graded tier (or gate word) for same-tier comparisons.
@@ -136,6 +111,32 @@ function coarseFit(s) {
   if (t === 'pass' || t === 'maybe' || t === 'fail') return t; // gate word
   if (s.fitScore != null) return fitTierForScore(s.fitScore);
   return '';
+}
+
+// Human label for a tierKey group — what "same tier" means for this rankBy mode.
+function describeTierGroup(members, profile) {
+  if (!members?.length) return 'same tier';
+  const s = members[0];
+  switch (profile.rankBy) {
+    case 'combined': {
+      const music = effectiveMusic(s);
+      const musicLabel =
+        music != null && music !== ''
+          ? `${formatScore(music)}${formatMusicModifierFlags(s)}`
+          : '?';
+      return `music ${musicLabel}, fit ${coarseFit(s) || '?'} band`;
+    }
+    case 'fit':
+      return `fit ${coarseFit(s) || '?'} band`;
+    default: {
+      const music = s.score;
+      const musicLabel =
+        music != null && music !== ''
+          ? `${formatScore(music)}${formatMusicModifierFlags(s)}`
+          : '?';
+      return `music ${musicLabel}`;
+    }
+  }
 }
 
 // The same-tier key: songs sharing it are treated as equal opinion and must
@@ -553,7 +554,7 @@ function allocateDownvotes(songs, budget, cap, profile, tradeoffs, downSet) {
     if (distinct.length >= 2) {
       tradeoffs.push({
         kind: 'down-structure',
-        question: `Which downvote shape? Default is ${DOWN_SHAPE_LABEL[chosen]}; record with just pick <round> <A|B|C> --down-shape <concentrated|flat|curved>.`,
+        question: `Which downvote shape? Default is ${DOWN_SHAPE_LABEL[chosen]}; record with just pick <round> <A|B|C> --down-shape <concentrated|flat|curved> (letter = up split; --down-shape = down shape).`,
         options: distinct.map((c) => ({
           label: `${DOWN_SHAPE_LABEL[c.shape]} — ${summarizeDownPerSong(c.perSong)}`,
           value: c.shape,
@@ -729,7 +730,7 @@ function allocateBellDown(cands, budget, cap, shape, profile, tradeoffs, allSong
     if (t.members.length > 1 && ambiguous) {
       tradeoffs.push({
         kind: 'tier-split-down',
-        question: `Tied low score ${formatScore(t.value)} can't split ${t.points} downvote(s) evenly across ${t.members.length} songs, and no +/− breaks the tie.`,
+        question: `Same tier (${describeTierGroup(t.members, profile)}) — ${t.points} downvote(s) can't split evenly across ${t.members.length} songs; no +/− picks who gets the extra.`,
         options: ordered.map((m) => ({
           label: `${cell(m.title)} — -${m.finalDownvotes}`,
           value: m.rawOrderIndex,
@@ -1484,7 +1485,7 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
     if (ambiguous) {
       tradeoffs.push({
         kind: 'tier-split',
-        question: `Tied score ${formatScore(u.value)} can't split its points evenly across ${u.members.length} songs, and no +/− breaks the tie.`,
+        question: `Same tier (${describeTierGroup(u.members, profile)}) — points can't split evenly across ${u.members.length} songs; no +/− picks who gets the extra.`,
         options: ordered.map((m) => ({
           label: `${cell(m.title)} — ${m.finalVotes}`,
           value: m.rawOrderIndex,
