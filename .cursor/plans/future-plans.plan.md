@@ -19,6 +19,12 @@ isProject: false
 
 ## Optional polish (no dedicated plan file)
 
+- **Expand [`spec/diagrams/`](../spec/diagrams/README.md)** — workflow flowcharts (mermaid).
+  First diagram shipped: combined normalization contender pool (cutoff / DQ). Add diagrams
+  for: parse → merge → pick → final pipeline, fit-trust modes (manual-numeric vs LLM),
+  `tierKey` / `allocateBell`, comment parse / peel-first, gate + table visibility.
+  Rule: [workflow-diagrams.mdc](../rules/workflow-diagrams.mdc).
+
 Shipped 2026-06: parse / merge / pick stages, score-core Phase 1 split,
 `scripts/parse/*` modules, `ml help` + README, R1/R2/Bug2 allocator, fit persist +
 pure render, peel-first comment parse + `--fit-words` (2026-06-27). See `spec/decisions.md`.

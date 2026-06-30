@@ -1,0 +1,31 @@
+---
+description: Keep spec/diagrams flowcharts in sync when major workflows change
+alwaysApply: true
+---
+
+# Workflow diagrams
+
+Visual flow docs live in [`spec/diagrams/`](../spec/diagrams/README.md) (mermaid flowcharts
+for scoring and pipeline behavior).
+
+## When to update
+
+If you change a **major workflow** — behavior that affects how data moves through parse,
+merge, normalize, allocate, pick, or render — in the same pass:
+
+1. Check whether `spec/diagrams/` already has a diagram for that flow.
+2. **Update** the existing diagram and prose if the flow changed.
+3. **Add** a new file under `spec/diagrams/` (and a row in `README.md`) if none exists.
+
+“Major” means a user-visible or allocator-visible path change, not refactors that preserve
+behavior (rename/move with no semantic change).
+
+## Conventions
+
+- One topic per file; kebab-case filename; link from `spec/diagrams/README.md`.
+- Match diagram style in existing files (camelCase node IDs, `flowchart LR` / `TD`).
+- Note **planned vs shipped** in prose when behavior is not yet in code.
+- Cross-link the implementing script(s) and relevant spec section.
+
+Do not log diagram-only edits in `spec/decisions.md` unless they document a behavior change
+already recorded there.
