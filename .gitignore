@@ -12,6 +12,9 @@ Desktop.ini
 # Node
 node_modules/
 
+# Local CLI preferences (per clone / user)
+.ml-config.json
+
 # Editor / IDE
 .idea/
 *.swp
