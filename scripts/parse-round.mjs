@@ -33,10 +33,9 @@ import {
   parseWeights,
   buildGate,
 } from './parse/cli-flags.mjs';
-import { printTradeoffCli, printBallotCli } from './parse/cli-print.mjs';
-import { pickPromptLine } from './cli-commands.mjs';
+import { printPickCli } from './parse/cli-print.mjs';
 import { warnMissingScoresCli } from './parse/cli-warn.mjs';
-import { parseRoundHtml, warnBudgetMismatch, slimProfile } from './parse/pipeline.mjs';
+import { parseRoundHtml, slimProfile } from './parse/pipeline.mjs';
 import { reconcileOptionPins, resolveOptionPick } from './round/pick.mjs';
 
 export {
@@ -52,6 +51,21 @@ export {
   reconcileOptionPins,
   resolveOptionPick,
 };
+
+// When comments carry manual fit scores, populate combinedScore and default rankBy
+// to combined unless the caller already passed --rank.
+export function applyManualFitScoring(profile, songs, { explicitRank = null, weights = undefined } = {}) {
+  const hasManualFit = songs.some(
+    (s) => s.fitSource === 'manual' && (s.fitScore != null || s.gate != null)
+  );
+  if (!hasManualFit) return null;
+
+  const combineWeights = weights ?? MANUAL_FIT_WEIGHTS;
+  profile.weights = combineWeights;
+  for (const s of songs) s.combinedScore = combinedScore(s, combineWeights);
+  if (!explicitRank) profile.rankBy = 'combined';
+  return combineWeights;
+}
 
 function parseArgs(argv) {
   const args = {
@@ -205,18 +219,11 @@ async function main() {
     { shape: args.shape, downShape, gate, weights, overrides, downOverrides, tierCount, bucketCount, favoriteBand },
     parsed.budget
   );
+  const combineWeights = applyManualFitScoring(profile, parsed.songs, {
+    explicitRank: args.rank,
+    weights,
+  });
   if (args.rank) profile.rankBy = args.rank;
-
-  const hasManualFit = parsed.songs.some(
-    (s) => s.fitSource === 'manual' && (s.fitScore != null || s.gate != null)
-  );
-  let combineWeights = null;
-  if (hasManualFit && !args.rank) {
-    combineWeights = parseWeights(args.weights) || MANUAL_FIT_WEIGHTS;
-    profile.rankBy = 'combined';
-    profile.weights = combineWeights;
-    for (const s of parsed.songs) s.combinedScore = combinedScore(s, combineWeights);
-  }
 
   const roundId = roundIdFromInput(args.file);
 
@@ -238,7 +245,8 @@ async function main() {
   const cap = parsed.budget.maxUpvotesPerSong ?? Infinity;
   const { tradeoffs } = allocate(parsed.songs, budget, cap, profile);
 
-  const ctx = { ...parsed, mode: args.mode, tradeoffs, pick: null, roundId };
+  const slim = slimProfile(profile);
+  const ctx = { ...parsed, mode: args.mode, tradeoffs, pick: null, roundId, profile: slim };
   const md = buildMarkdown(ctx);
 
   const paths = musicPaths(roundId);
@@ -247,21 +255,14 @@ async function main() {
   console.log(`Wrote ${paths.md}`);
 
   if (args.json) {
-    const payload = buildJsonPayload({ ...ctx, profile: slimProfile(profile), combineWeights });
+    const payload = buildJsonPayload({ ...ctx, profile: slim, combineWeights });
     await writeFile(paths.json, JSON.stringify(payload, null, 2), 'utf8');
     console.log(`Wrote ${paths.json}`);
   }
 
   warnMissingScoresCli(parsed.songs);
 
-  const calls = tradeoffs.filter((t) => t.kind !== 'budget-mismatch');
-  if (calls.length) {
-    console.log(`\n${pickPromptLine(roundId, calls.length)}`);
-    for (const t of calls) printTradeoffCli(t, roundId, parsed.songs, parsed.ownSongs);
-  }
-  printBallotCli(tradeoffs, parsed.songs, parsed.ownSongs, roundId);
-  warnBudgetMismatch(tradeoffs);
-  warnMissingScoresCli(parsed.songs);
+  printPickCli(tradeoffs, roundId, parsed.songs, parsed.ownSongs, parsed.budget, slim);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

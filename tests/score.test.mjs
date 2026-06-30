@@ -24,7 +24,9 @@ import {
   reconcileOptionPins,
   pinCapError,
   pinEligibilityError,
+  applyManualFitScoring,
 } from '../scripts/parse-round.mjs';
+import { applyOptionPick } from '../scripts/round/pick.mjs';
 import { buildComboBallot } from '../scripts/render-html-shared.mjs';
 
 // ---------------------------------------------------------------------------
@@ -104,6 +106,37 @@ test('scoreComment manual fit notation', () => {
   assert.equal(scoreComment('borderline, maybe', 'subjective', { fitWords: true }).gate, 'maybe');
   assert.equal(scoreComment('off-theme', 'subjective', { fitWords: true }).gate, 'fail');
   assert.equal(scoreComment('pass', 'objective').gate, null, 'gate words off by default');
+});
+
+test('applyManualFitScoring: explicit --rank combined still sets combinedScore', () => {
+  const songs = [
+    { score: 76, fitScore: 95, fitSource: 'manual' },
+    { score: 90, fitScore: null, fitSource: null },
+  ];
+  const profile = { rankBy: 'music' };
+
+  const weights = applyManualFitScoring(profile, songs, { explicitRank: 'combined' });
+  assert.deepEqual(weights, { fit: 0.5, music: 0.5 });
+  assert.equal(songs[0].combinedScore, 85.5);
+  assert.equal(profile.rankBy, 'music', 'explicit rank applied after manual-fit setup');
+
+  profile.rankBy = 'combined';
+  assert.equal(songs[0].combinedScore, 85.5);
+});
+
+test('applyManualFitScoring: defaults rankBy to combined when rank omitted', () => {
+  const songs = [{ score: 76, fitScore: 95, fitSource: 'manual' }];
+  const profile = {};
+  applyManualFitScoring(profile, songs, {});
+  assert.equal(profile.rankBy, 'combined');
+  assert.equal(songs[0].combinedScore, 85.5);
+});
+
+test('applyManualFitScoring: no-op without manual fit', () => {
+  const songs = [{ score: 76, fitScore: null, fitSource: null }];
+  const profile = { rankBy: 'music' };
+  assert.equal(applyManualFitScoring(profile, songs, {}), null);
+  assert.equal(songs[0].combinedScore, undefined);
 });
 
 test('buildJsonPayload persists needsResearch per song', () => {
@@ -528,6 +561,37 @@ test('resolveOptionPick + option pin stays budget-exact end to end (no overshoot
   const f = mk(scores);
   allocate(f, 14, 5, { shape: 'auto', overrides });
   assert.equal(sum(f), 14, 'option + pin still spends the full bank exactly');
+});
+
+test('applyOptionPick + pin stays budget-exact on combined-ranked menu', () => {
+  const songs = mk([77, 77, 74, 74, 73, 73, 67, 62, 55, 50]).map((s) => ({
+    ...s,
+    combinedScore: s.score,
+    gate: 'pass',
+    fitScore: 93,
+    finalVotes: 0,
+    finalDownvotes: 0,
+  }));
+  const profile = { shape: 'auto', rankBy: 'combined' };
+  const { tradeoffs } = allocate([...songs], 15, 10, profile);
+  const optB = tradeoffs.find((t) => t.kind === 'tier-structure')?.options?.[1];
+  assert.ok(optB, 'option B surfaced');
+  const v0 = optB.perSong.find((p) => p.rawOrderIndex === 0)?.votes ?? 0;
+  const v1 = optB.perSong.find((p) => p.rawOrderIndex === 1)?.votes ?? 0;
+  const field = songs.map((s) => ({ ...s }));
+  const picked = applyOptionPick({
+    optionSpec: 'B',
+    reallocate: (ov) => allocate(field, 15, 10, { ...profile, overrides: ov }).tradeoffs,
+    initialTradeoffs: tradeoffs,
+    baseOverrides: { 0: v0 + 1, 1: v1 + 1 },
+    songs: field,
+    cap: 10,
+    exitOnError: false,
+  });
+  assert.equal(sum(field), 15, 'bank stays exact');
+  assert.equal(field[0].finalVotes, v0 + 1);
+  assert.equal(field[1].finalVotes, v1 + 1);
+  assert.ok(picked.pick?.tweaks?.length, 'records manual tweaks');
 });
 
 test('budget-mismatch is flagged when a bare pin overshoots the bank', () => {
