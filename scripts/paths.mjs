@@ -1,7 +1,7 @@
 // Shared path conventions for rounds/ inputs and analysis/ outputs.
 // Full folder layout and artifact naming: see spec/analysis-artifacts.md.
 
-import { readdirSync, existsSync, statSync } from 'node:fs';
+import { readdirSync, existsSync, statSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 
 // Private round inputs, analysis outputs, and reference data live in the
@@ -12,6 +12,8 @@ export const ROUNDS_DIR = join(DATA_DIR, 'rounds');
 export const ANALYSIS_DIR = join(DATA_DIR, 'analysis');
 export const REF_DIR = join(DATA_DIR, 'ref');
 export const ARCHIVE_DIR = 'archive';
+/** Last round explicitly named on the CLI (`data/.current-round`, one id per line). */
+export const CURRENT_ROUND_FILE = join(DATA_DIR, '.current-round');
 
 export const ARTIFACT = {
   music: { md: 'music.md', json: 'music.json', html: 'music.html' },
@@ -32,6 +34,16 @@ export function hasDatePrefix(roundId) {
 export function datePrefixOf(roundId) {
   const m = DATE_PREFIX_RE.exec(roundId);
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+}
+
+/** Round slug with any leading YYYY-MM-DD- prefix removed (e.g. lfm-art). */
+export function bareSlugOf(roundId) {
+  return roundId.replace(DATE_PREFIX_RE, '');
+}
+
+/** Dated round ids whose bare slug matches (sorted; earliest date first). */
+export function datedSiblingsOf(bareSlug, ids = listAllRoundIds()) {
+  return ids.filter((id) => hasDatePrefix(id) && bareSlugOf(id) === bareSlug).sort();
 }
 
 /** Round id from a saved input or output basename (e.g. 2026-06-09-tarot-hanged-man). */
@@ -111,6 +123,23 @@ export function listAnalysisRoundIds() {
 /** All known round ids from inputs and analysis folders. */
 export function listAllRoundIds() {
   return [...new Set([...listRoundInputIds(), ...listAnalysisRoundIds()])].sort();
+}
+
+/** Round id last set by an explicit `ml <cmd> <name>` (null when unset). */
+export function readCurrentRound() {
+  if (!existsSync(CURRENT_ROUND_FILE)) return null;
+  try {
+    const id = readFileSync(CURRENT_ROUND_FILE, 'utf8').trim();
+    return id || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Persist the canonical round id after the user names a round on the CLI. */
+export function writeCurrentRound(roundId) {
+  mkdirSync(DATA_DIR, { recursive: true });
+  writeFileSync(CURRENT_ROUND_FILE, `${roundId}\n`, 'utf8');
 }
 
 /** Default input path for a round id (HTML preferred over .txt). */

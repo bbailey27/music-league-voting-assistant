@@ -1,16 +1,15 @@
 // Shared CLI table cells — scores, modifiers, comments, excluded songs.
 
 import { formatScore, formatMusicModifierFlags } from '../score-core.mjs';
+import { truncDisplay } from '../text-width.mjs';
+import {
+  expandTradeoffRows,
+  isExcludedFromAllocation,
+  songByIndex,
+  songGate,
+} from '../tradeoff-rows.mjs';
 
-export function songByIndex(songs = [], ownSongs = []) {
-  const m = new Map();
-  for (const s of [...songs, ...ownSongs]) m.set(s.rawOrderIndex, s);
-  return m;
-}
-
-export function isExcludedFromAllocation(s) {
-  return !!s && !s.isOwn && s.isDisqualified;
-}
+export { expandTradeoffRows, isExcludedFromAllocation, songByIndex };
 
 /** Score column: numeric score, BLANK (needs input), or - (disqualified / no score). */
 export function formatCliScore(s) {
@@ -22,6 +21,36 @@ export function formatCliScore(s) {
   return formatScore(s.score);
 }
 
+export function cliShowsCombined(songs = [], ownSongs = []) {
+  return [...songs, ...ownSongs].some((s) => s.combinedScore != null);
+}
+
+/** Combined column when fit+music ranking is active. */
+export function formatCliCombinedScore(s) {
+  if (!s) return '';
+  if (s.isOwn) return '—';
+  if (isExcludedFromAllocation(s)) return '-';
+  if (s.combinedScore == null) return '-';
+  return formatScore(s.combinedScore);
+}
+
+export function formatCliFitScore(s) {
+  if (!s) return '';
+  if (s.isOwn) return '—';
+  if (s.fitScore == null) return '-';
+  return formatScore(s.fitScore);
+}
+
+/** Score column headers/cells when fit+music blend is active (Music / Fit / Combined). */
+export function cliScoreHeaders(showCombined) {
+  return showCombined ? ['Music', 'Fit', 'Combined'] : ['Score'];
+}
+
+export function cliScoreCells(s, showCombined) {
+  if (!showCombined) return [formatCliScore(s)];
+  return [formatCliScore(s), formatCliFitScore(s), formatCliCombinedScore(s)];
+}
+
 export function formatCliMod(s) {
   if (!s || s.isOwn) return '·';
   const mods = formatMusicModifierFlags(s);
@@ -29,52 +58,64 @@ export function formatCliMod(s) {
   if (s.needsReview) return 'review';
   if (s.needsUserInput) return '·';
   if (s.isDisqualified) return 'DQ';
+  if (songGate(s) === 'fail') return 'fail';
   return '·';
+}
+
+/** Scoring line only — same first line scoreComment parses; vote prose after \\n stays in JSON/md. */
+export function cliCommentText(s) {
+  if (!s?.userComment) return '·';
+  const t = String(s.userComment).split(/\r?\n/)[0].trim();
+  return t || '·';
 }
 
 export function formatCliComment(s, max = 28) {
-  if (!s?.userComment) return '·';
-  const t = String(s.userComment).trim();
-  if (!t) return '·';
-  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
+  const t = cliCommentText(s);
+  if (t === '·') return t;
+  return truncDisplay(t, max);
 }
 
-/** perSong rows plus missing/disqualified songs appended (raw order). */
-export function expandTradeoffRows(perSong, songs = [], ownSongs = []) {
-  const byIdx = songByIndex(songs, ownSongs);
-  const included = new Set((perSong || []).map((r) => r.rawOrderIndex));
-  const core = (perSong || []).map((r, ri) => ({
-    rawOrderIndex: r.rawOrderIndex,
-    title: r.title,
-    ri,
-    song: byIdx.get(r.rawOrderIndex),
-    excluded: false,
-  }));
-  const tail = [...(songs || []), ...(ownSongs || [])]
-    .filter((s) => !included.has(s.rawOrderIndex) && !s.isOwn && (s.needsUserInput || s.isDisqualified))
-    .sort((a, b) => a.rawOrderIndex - b.rawOrderIndex)
-    .map((s) => ({
-      rawOrderIndex: s.rawOrderIndex,
-      title: s.title,
-      ri: null,
-      song: s,
-      excluded: true,
-    }));
-  return [...core, ...tail];
-}
-
-export function fmtCliVoteCell(v, { down = false, excluded = false } = {}) {
+/** Option-column vote cell: plain counts for up; minus sign for down. */
+export function fmtCliVoteCell(v, { excluded = false, down = false } = {}) {
   if (excluded) return '-';
-  if (down && v > 0) return `-${v}`;
-  if (v > 0) return String(v);
+  if (v > 0) return down ? `-${v}` : String(v);
   return '·';
 }
 
-export function fmtCliBallotCell(v, excluded = false) {
-  if (excluded) return '-';
-  if (v === 'own') return '—';
-  if (v === 'conflict') return '!';
-  if (v > 0) return `+${v}`;
-  if (v < 0) return String(v);
+/** Raw-order ballot cell; signed (+/−) only when the round uses both vote banks. */
+export function fmtCliBallotVote(s, signed) {
+  if (!s) return '';
+  if (s.isOwn) return '—';
+  if (isExcludedFromAllocation(s)) return '-';
+  const up = s.finalVotes ?? s.draftVotes ?? 0;
+  const down = s.finalDownvotes ?? s.draftDownvotes ?? 0;
+  if (signed) {
+    if (up > 0) return `+${up}`;
+    if (down > 0) return `-${down}`;
+    return '·';
+  }
+  if (up > 0) return String(up);
+  if (down > 0) return String(down);
   return '·';
+}
+
+export function fmtCliBallotVoteTotal(upTotal, downTotal, signed) {
+  if (!upTotal && !downTotal) return '·';
+  if (signed) {
+    const up = upTotal > 0 ? `+${upTotal}` : '';
+    const down = downTotal > 0 ? `/-${downTotal}` : '';
+    return `${up}${down}` || '·';
+  }
+  if (upTotal > 0 && downTotal > 0) return `${upTotal}/${downTotal}`;
+  return String(upTotal || downTotal);
+}
+
+/** @deprecated use fmtCliBallotVote */
+export function fmtCliSignedVote(s) {
+  return fmtCliBallotVote(s, true);
+}
+
+/** @deprecated use fmtCliBallotVoteTotal */
+export function fmtCliSignedVoteTotal(upTotal, downTotal) {
+  return fmtCliBallotVoteTotal(upTotal, downTotal, true);
 }

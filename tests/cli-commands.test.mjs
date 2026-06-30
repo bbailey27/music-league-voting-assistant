@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import {
   formatPickCmd,
   formatLegacySelector,
+  formatPickSpec,
+  parsePickSpec,
+  pickHintLine,
   pickPromptLine,
   pickUsageError,
 } from '../scripts/cli-commands.mjs';
@@ -13,18 +16,28 @@ test('formatPickCmd builds just pick with letter positional arg', () => {
     formatPickCmd('story-5', 'A', { pin: '9:2', reason: 'pin Two Evils' }),
     'just pick story-5 A --pin 9:2 --reason "pin Two Evils"'
   );
-  assert.equal(formatPickCmd('tarot', 'C', { downShape: 'flat', scores: true }), 'just pick tarot C --scores --down-shape flat');
+  assert.equal(formatPickCmd('tarot', 'C', { downShape: 'flat', scores: true }), 'just pick tarot C fl --scores');
+});
+
+test('parsePickSpec and formatPickSpec', () => {
+  assert.deepEqual(parsePickSpec('A cc'), { letter: 'A', downShape: 'concentrated' });
+  assert.deepEqual(parsePickSpec('B·fl'), { letter: 'B', downShape: 'flat' });
+  assert.deepEqual(parsePickSpec('C'), { letter: 'C', downShape: null });
+  assert.equal(formatPickSpec('A', 'concentrated'), 'A cc');
+  assert.equal(formatPickSpec('B'), 'B');
 });
 
 test('formatLegacySelector converts internal --option flags to just pick', () => {
   assert.equal(formatLegacySelector('kpop', '--option B'), 'just pick kpop B');
-  assert.equal(formatLegacySelector('kpop', '--option A --down-shape curved'), 'just pick kpop A --down-shape curved');
-  assert.equal(formatLegacySelector('kpop', '--down-shape flat'), 'just pick kpop A --down-shape flat');
+  assert.equal(formatLegacySelector('kpop', '--option A --down-shape curved'), 'just pick kpop A cv');
+  assert.equal(formatLegacySelector('kpop', '--down-shape flat'), 'just pick kpop A fl');
   assert.equal(formatLegacySelector('kpop', 'default'), 'default allocation');
 });
 
-test('pickPromptLine uses just pick wording', () => {
-  assert.match(pickPromptLine('tarot', 2), /^2 tradeoffs need your call — use just pick tarot/);
+test('pickHintLine is a one-line command hint', () => {
+  assert.equal(pickHintLine('tarot', { hasUp: true, hasDown: false }), 'just pick tarot <A|B|C>');
+  assert.equal(pickHintLine('story-6', { hasUp: true, hasDown: true }), 'just pick story-6 <A|B|C> <cv|fl|cc>');
+  assert.equal(pickPromptLine('story-6', [{ kind: 'down-structure' }]), 'just pick story-6 <A|B|C> <cv|fl|cc>');
 });
 
 test('pickUsageError references just pick example', () => {

@@ -101,6 +101,66 @@ test('ensureDateSlugForInput renames an undated parse path without archiving', a
   }
 });
 
+test('naming joins undated input into an existing dated analysis sibling', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'tidy-sibling-in-'));
+  try {
+    const stamp = slugFor(1);
+    const dated = `${stamp}-lfm-art`;
+    await makeAnalysis(cwd, dated);
+    await makeInput(cwd, 'lfm-art');
+    await tidy(cwd, ['--no-archive']);
+
+    assert.ok(await exists(join(cwd, 'data', 'rounds', `${dated}.html`)));
+    assert.ok(await exists(join(cwd, 'data', 'analysis', dated)));
+    assert.ok(!(await exists(join(cwd, 'data', 'rounds', 'lfm-art.html'))));
+    assert.ok(!(await exists(join(cwd, 'data', 'analysis', 'lfm-art'))));
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('naming merges duplicate dated bare slugs into the earliest date', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'tidy-dup-dated-'));
+  try {
+    const older = `${slugFor(2)}-lfm-art`;
+    const newer = `${slugFor(0)}-lfm-art`;
+    await makeAnalysis(cwd, older);
+    await writeFile(join(cwd, 'data', 'analysis', older, 'fit.json'), '{"songs":[]}', 'utf8');
+    await makeAnalysis(cwd, newer);
+    await writeFile(join(cwd, 'data', 'analysis', newer, 'music.json'), '{"songs":[{"title":"x"}]}', 'utf8');
+    await makeInput(cwd, newer);
+    await tidy(cwd, ['--no-archive']);
+
+    assert.ok(await exists(join(cwd, 'data', 'analysis', older, 'fit.json')));
+    assert.ok(await exists(join(cwd, 'data', 'analysis', older, 'music.json')));
+    assert.ok(await exists(join(cwd, 'data', 'rounds', `${older}.html`)));
+    assert.ok(!(await exists(join(cwd, 'data', 'analysis', newer))));
+    assert.ok(!(await exists(join(cwd, 'data', 'rounds', `${newer}.html`))));
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('ensureDateSlugForInput joins into an existing dated sibling', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'tidy-ensure-sibling-'));
+  const origCwd = process.cwd();
+  try {
+    const stamp = slugFor(1);
+    const dated = `${stamp}-story-5`;
+    await makeAnalysis(cwd, dated);
+    await makeInput(cwd, 'story-5');
+    process.chdir(cwd);
+    const logs = [];
+    const resolved = ensureDateSlugForInput('data/rounds/story-5.html', { log: (m) => logs.push(m) });
+    assert.equal(resolved, `data/rounds/${dated}.html`);
+    assert.ok(logs.some((m) => /merged story-5/.test(m)));
+    assert.ok(await exists(join(cwd, 'data', 'rounds', `${dated}.html`)));
+  } finally {
+    process.chdir(origCwd);
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test('naming leaves already-dated rounds untouched', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'tidy-dated-'));
   try {

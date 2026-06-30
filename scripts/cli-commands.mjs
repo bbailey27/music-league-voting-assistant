@@ -1,5 +1,45 @@
 // User-facing command strings — prefer `just pick` over internal `--option` flags.
 
+/** Short codes for down-shape columns (match combo ballot: A·cv). */
+export const DOWN_SHAPE_SHORT = { curved: 'cv', flat: 'fl', concentrated: 'cc' };
+
+export function downShapeShort(shape) {
+  return DOWN_SHAPE_SHORT[shape] || String(shape || '').slice(0, 2);
+}
+
+const DOWN_SHORT_SET = new Set(Object.values(DOWN_SHAPE_SHORT));
+
+export function downShapeFromShort(short) {
+  const s = String(short || '').toLowerCase();
+  for (const [shape, code] of Object.entries(DOWN_SHAPE_SHORT)) {
+    if (code === s) return shape;
+  }
+  return null;
+}
+
+export function isDownShapeShort(token) {
+  return DOWN_SHORT_SET.has(String(token || '').toLowerCase());
+}
+
+/** Parse pick positional: A, A cc, A·cv, etc. */
+export function parsePickSpec(spec) {
+  const raw = String(spec || '').trim();
+  if (!raw) return { letter: null, downShape: null };
+  const combo = raw.match(/^([A-Za-z])[\s·.\-/]+(cv|fl|cc)$/i);
+  if (combo) {
+    return { letter: combo[1].toUpperCase(), downShape: downShapeFromShort(combo[2]) };
+  }
+  if (/^[A-Za-z]$/.test(raw)) return { letter: raw.toUpperCase(), downShape: null };
+  return { letter: null, downShape: null };
+}
+
+export function formatPickSpec(letter, downShape = null) {
+  if (letter == null || letter === '') return '';
+  const up = String(letter).toUpperCase();
+  const short = downShape ? downShapeShort(downShape) : null;
+  return short ? `${up} ${short}` : up;
+}
+
 function quoteReason(reason) {
   const s = String(reason);
   if (/[\s"'\\]/.test(s)) return JSON.stringify(s);
@@ -9,10 +49,9 @@ function quoteReason(reason) {
 /** Primary pick command (`just pick` is the documented interface). */
 export function formatPickCmd(roundId, letter, extras = {}) {
   if (!roundId || letter == null || letter === '') return null;
-  const parts = ['just', 'pick', roundId, String(letter).toUpperCase()];
-  const { downShape, pin, reason, scores } = extras;
+  const parts = ['just', 'pick', roundId, formatPickSpec(letter, extras.downShape)];
+  const { pin, reason, scores } = extras;
   if (scores) parts.push('--scores');
-  if (downShape) parts.push('--down-shape', downShape);
   if (pin) parts.push('--pin', pin);
   if (reason) parts.push('--reason', quoteReason(reason));
   return parts.join(' ');
@@ -29,10 +68,19 @@ export function formatLegacySelector(roundId, selector, defaultLetter = 'A') {
   return formatPickCmd(roundId, letter, { downShape });
 }
 
-export function pickPromptLine(roundId, count = 1) {
-  const n = Number(count) || 1;
-  const word = n === 1 ? 'tradeoff' : 'tradeoffs';
-  return `${n} ${word} need your call — use just pick ${roundId} <A|B|C> --reason "…"`;
+export function pickHintLine(roundId, { hasUp = true, hasDown = false } = {}) {
+  if (hasDown) return `just pick ${roundId} <A|B|C> <cv|fl|cc>`;
+  return `just pick ${roundId} <A|B|C>`;
+}
+
+/** @deprecated use pickHintLine */
+export function pickPromptLine(roundId, tradeoffsOrCount = 1) {
+  const list = Array.isArray(tradeoffsOrCount)
+    ? tradeoffsOrCount.filter((t) => t.kind === 'tier-structure' || t.kind === 'down-structure')
+    : null;
+  const hasUp = list?.some((t) => t.kind === 'tier-structure') ?? true;
+  const hasDown = list?.some((t) => t.kind === 'down-structure') ?? false;
+  return pickHintLine(roundId, { hasUp, hasDown });
 }
 
 export function pickUsageError(roundId, optionSpec, presentedCount, availableLetters) {

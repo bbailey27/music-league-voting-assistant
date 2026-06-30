@@ -32,6 +32,7 @@ import {
 import { applyOptionPick, recordPickToTrainingLog } from './round/pick.mjs';
 import { printAppliedAllocationCli } from './parse/cli-print.mjs';
 import { warnPickWithMissingScores } from './parse/cli-warn.mjs';
+import { downShapeFromShort, parsePickSpec } from './cli-commands.mjs';
 
 function parseArgs(argv) {
   const args = {
@@ -119,8 +120,30 @@ function parseArgs(argv) {
       continue;
     }
     if (!args.option && !a.startsWith('-')) {
+      const parsed = parsePickSpec(a);
+      if (parsed.letter) {
+        args.option = parsed.letter;
+        if (parsed.downShape && !args.downShape) args.downShape = parsed.downShape;
+        continue;
+      }
+    }
+    if (args.option && !args.downShape && !a.startsWith('-')) {
+      const down = downShapeFromShort(a);
+      if (down) {
+        args.downShape = down;
+        continue;
+      }
+    }
+    if (!args.option && !a.startsWith('-')) {
       args.option = a;
       continue;
+    }
+  }
+  if (args.option && !args.downShape) {
+    const parsed = parsePickSpec(args.option);
+    if (parsed.letter) {
+      args.option = parsed.letter;
+      if (parsed.downShape) args.downShape = parsed.downShape;
     }
   }
   return args;
@@ -153,13 +176,18 @@ function slimProfile(profile) {
   return { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand };
 }
 
+/** Profile for menu tradeoffs — pin overrides apply only after option+pin reconcile. */
+function menuProfile(profile) {
+  return { ...profile, overrides: undefined };
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   warnUnknownShortFlags(argv);
   const args = parseArgs(argv);
   if (!args.roundId || args.option == null) {
     console.error(
-      'Usage: just pick <round-id> <A|B|C> [--reason "…"] [--pin …] [--down-shape …] [--scores] [--dry-run]'
+      'Usage: just pick <round-id> <A|B|C> [cv|fl|cc] [--reason "…"] [--pin …] [--down-shape …] [--scores] [--dry-run]'
     );
     process.exit(1);
   }
@@ -211,14 +239,22 @@ async function main() {
       songs: songsFromPayload(musicData),
       ownSongs: musicData.ownSongs || [],
     };
-    const mergeProfile = { ...profile, rankBy: profile.rankBy || 'combined' };
+    const mergeProfile = {
+      ...menuProfile(profile),
+      rankBy: args.rank ?? musicData.profile?.rankBy ?? 'combined',
+    };
     warnPickWithMissingScores(parsed.songs);
 
     let { tradeoffs } = mergeFitJson(parsed, fitData, mergeProfile);
     const picked = applyOptionPick({
       optionSpec: args.option,
       reason: args.reason,
-      reallocate: (overrides) => mergeFitJson(parsed, fitData, { ...mergeProfile, overrides }).tradeoffs,
+      reallocate: (overrides) =>
+        mergeFitJson(parsed, fitData, {
+          ...mergeProfile,
+          overrides,
+          downOverrides: profile.downOverrides,
+        }).tradeoffs,
       initialTradeoffs: tradeoffs,
       baseOverrides: profile.overrides,
       downOverrides: profile.downOverrides,
@@ -238,7 +274,10 @@ async function main() {
     await mkdir(scoresPaths(roundId).dir, { recursive: true });
     await writeFile(scoresPaths(roundId).json, JSON.stringify(fitData, null, 2), 'utf8');
     console.log(`Wrote ${scoresPaths(roundId).json}`);
-    printAppliedAllocationCli(parsed.songs, parsed.ownSongs, picked.pick);
+    printAppliedAllocationCli(parsed.songs, parsed.ownSongs, picked.pick, parsed.budget, {
+      hadPins: Boolean(profile.overrides && Object.keys(profile.overrides).length),
+      profile: slimProfile(mergeProfile),
+    });
     warnPickWithMissingScores(parsed.songs);
     await recordPickToTrainingLog(roundId, fitData.songs, picked.pick);
     return;
@@ -248,12 +287,13 @@ async function main() {
   warnPickWithMissingScores(songs);
 
   const upBudget = budget?.upvoteBankSize ?? 0;
-  let { tradeoffs } = allocate(songs, upBudget, upCap, profile);
+  let { tradeoffs } = allocate(songs, upBudget, upCap, menuProfile(profile));
 
   const picked = applyOptionPick({
     optionSpec: args.option,
     reason: args.reason,
-    reallocate: (overrides) => allocate(songs, upBudget, upCap, { ...profile, overrides }).tradeoffs,
+    reallocate: (overrides) =>
+      allocate(songs, upBudget, upCap, { ...profile, overrides }).tradeoffs,
     initialTradeoffs: tradeoffs,
     baseOverrides: profile.overrides,
     downOverrides: profile.downOverrides,
@@ -270,6 +310,7 @@ async function main() {
   }
 
   tradeoffs = picked.tradeoffs;
+  const slim = slimProfile(profile);
   const ctx = {
     round: musicData.round,
     budget: musicData.budget,
@@ -281,6 +322,7 @@ async function main() {
     tradeoffs,
     pick: picked.pick,
     roundId,
+    profile: slim,
   };
   const md = buildMarkdown(ctx);
   const paths = musicPaths(roundId);
@@ -288,10 +330,16 @@ async function main() {
   await writeFile(paths.md, md, 'utf8');
   console.log(`Wrote ${paths.md}`);
 
-  const payload = buildJsonPayload({ ...ctx, profile: musicData.profile ?? slimProfile(profile) });
+  const payload = buildJsonPayload({
+    ...ctx,
+    profile: { ...(musicData.profile || {}), ...slim },
+  });
   await writeFile(paths.json, JSON.stringify(payload, null, 2), 'utf8');
   console.log(`Wrote ${paths.json}`);
-  printAppliedAllocationCli(songs, musicData.ownSongs || [], picked.pick);
+  printAppliedAllocationCli(songs, musicData.ownSongs || [], picked.pick, budget, {
+    hadPins: Boolean(profile.overrides && Object.keys(profile.overrides).length),
+    profile: slim,
+  });
   warnPickWithMissingScores(songs);
   await recordPickToTrainingLog(roundId, songs, picked.pick);
 }

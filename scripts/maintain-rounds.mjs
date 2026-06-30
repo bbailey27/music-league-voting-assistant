@@ -2,7 +2,9 @@
 // Keep the rounds/ and analysis/ trees tidy:
 //   1. Date-slug undated rounds  — prepend today's YYYY-MM-DD to any round id
 //      (input file or analysis folder) that lacks a date, matching the
-//      <date>-<slug> convention in spec/analysis-artifacts.md.
+//      <date>-<slug> convention in spec/analysis-artifacts.md. When a dated
+//      sibling with the same bare slug already exists, fold into it instead
+//      of stamping a second date; duplicate dated bare slugs merge to earliest.
 //   2. Archive stale rounds      — move rounds whose slug date is older than the
 //      keep window into rounds/archive/ and analysis/archive/.
 //
@@ -14,15 +16,18 @@
 // Date helpers are exported for tests; the file ops are intentionally simple
 // renameSync moves within the data submodule (reversible via git).
 
-import { existsSync, mkdirSync, renameSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 import {
   ROUNDS_DIR,
   ANALYSIS_DIR,
   ARCHIVE_DIR,
   DATE_PREFIX_RE,
+  bareSlugOf,
   datePrefixOf,
+  datedSiblingsOf,
   hasDatePrefix,
+  listAllRoundIds,
   listRoundInputIds,
   listAnalysisRoundIds,
   roundIdFromInput,
@@ -79,38 +84,150 @@ function analysisDirFor(roundId) {
   }
 }
 
+/** Earliest dated id for a bare slug — preserves an early research session date. */
+function canonicalDatedId(bareSlug, ids = listAllRoundIds()) {
+  const siblings = datedSiblingsOf(bareSlug, ids);
+  return siblings[0] ?? null;
+}
+
+/** Move inputs and analysis from `fromId` into an existing dated `toId`. */
+function mergeRoundInto(fromId, toId, { dryRun = false, log = () => {} } = {}) {
+  const moves = [];
+  for (const { ext } of inputFilesFor(fromId)) {
+    const from = join(ROUNDS_DIR, `${fromId}${ext}`);
+    const to = join(ROUNDS_DIR, `${toId}${ext}`);
+    if (existsSync(to)) {
+      log(`  ! skip merge ${from}: ${to} already exists`);
+      continue;
+    }
+    moves.push([from, to]);
+  }
+  const fromAnalysis = analysisDirFor(fromId);
+  const toAnalysis = join(ANALYSIS_DIR, toId);
+  if (fromAnalysis) {
+    if (analysisDirFor(toId)) {
+      mergeAnalysisDir(fromAnalysis, toAnalysis, dryRun);
+    } else {
+      moves.push([fromAnalysis, toAnalysis]);
+    }
+  }
+  for (const [from, to] of moves) {
+    if (!dryRun) renameSync(from, to);
+  }
+  return moves;
+}
+
+/** Merge `fromDir` into `toDir`; existing target files win on name clashes. */
+function mergeAnalysisDir(fromDir, toDir, dryRun) {
+  for (const name of readdirSync(fromDir)) {
+    if (name.startsWith('.')) continue;
+    const from = join(fromDir, name);
+    const to = join(toDir, name);
+    if (existsSync(to)) {
+      if (statSync(from).isDirectory() && statSync(to).isDirectory()) {
+        mergeAnalysisDir(from, to, dryRun);
+        if (!dryRun) rmSync(from, { recursive: true });
+      }
+      continue;
+    }
+    if (!dryRun) renameSync(from, to);
+  }
+  if (!dryRun) rmSync(fromDir, { recursive: true });
+}
+
+/**
+ * When two dated ids share a bare slug (e.g. early research + later import),
+ * fold extras into the earliest-dated canonical id.
+ */
+export function consolidateDuplicateBareSlugs({ dryRun = false, log = () => {} } = {}) {
+  const byBare = new Map();
+  for (const id of listAllRoundIds()) {
+    if (!hasDatePrefix(id)) continue;
+    const bare = bareSlugOf(id);
+    if (!byBare.has(bare)) byBare.set(bare, []);
+    byBare.get(bare).push(id);
+  }
+
+  const done = [];
+  for (const ids of byBare.values()) {
+    if (ids.length < 2) continue;
+    const [canonical, ...extras] = ids.sort();
+    for (const extra of extras) {
+      mergeRoundInto(extra, canonical, { dryRun, log });
+      log(`  ${dryRun ? 'would merge' : 'merged'} ${extra} → ${canonical}`);
+      done.push({ from: extra, to: canonical });
+    }
+  }
+  return done;
+}
+
 /**
  * Prepend the effective date to every undated round id (input file and/or
  * analysis folder), renaming an id's input(s) and analysis folder together.
- * Returns the renames performed (or that would be performed under dryRun).
+ * When a dated sibling with the same bare slug already exists (typical after
+ * early candidate research), fold the undated id into that sibling instead of
+ * stamping a fresh date. Returns the renames performed (or that would be
+ * performed under dryRun).
  */
 export function applyDateSlugs({ now = new Date(), dryRun = false, log = () => {} } = {}) {
   const stamp = formatDateSlug(effectiveDate(now));
+  const allIds = listAllRoundIds();
   const ids = [...new Set([...listRoundInputIds(), ...listAnalysisRoundIds()])]
     .filter((id) => !hasDatePrefix(id))
     .sort();
 
   const done = [];
   for (const id of ids) {
-    const newId = `${stamp}-${id}`;
+    const existing = canonicalDatedId(id, allIds);
+    const newId = existing ?? `${stamp}-${id}`;
+    const merging = Boolean(existing);
+
     const moves = [];
     for (const { ext } of inputFilesFor(id)) {
-      moves.push([join(ROUNDS_DIR, `${id}${ext}`), join(ROUNDS_DIR, `${newId}${ext}`)]);
+      const from = join(ROUNDS_DIR, `${id}${ext}`);
+      const to = join(ROUNDS_DIR, `${newId}${ext}`);
+      if (existsSync(to)) {
+        if (merging) log(`  ! skip merge ${from}: ${to} already exists`);
+        continue;
+      }
+      moves.push([from, to]);
     }
-    const analysisDir = analysisDirFor(id);
-    if (analysisDir) moves.push([analysisDir, join(ANALYSIS_DIR, newId)]);
 
-    const clash = moves.find(([, to]) => existsSync(to));
-    if (clash) {
-      log(`  ! skip ${id} → ${newId}: ${clash[1]} already exists`);
-      continue;
+    const fromAnalysis = analysisDirFor(id);
+    const toAnalysis = join(ANALYSIS_DIR, newId);
+    if (fromAnalysis) {
+      if (existsSync(toAnalysis)) {
+        if (merging) mergeAnalysisDir(fromAnalysis, toAnalysis, dryRun);
+        else {
+          log(`  ! skip ${id} → ${newId}: ${toAnalysis} already exists`);
+          continue;
+        }
+      } else {
+        moves.push([fromAnalysis, toAnalysis]);
+      }
     }
+
+    if (!merging) {
+      const clash = moves.find(([, to]) => existsSync(to));
+      if (clash) {
+        log(`  ! skip ${id} → ${newId}: ${clash[1]} already exists`);
+        continue;
+      }
+    }
+
     for (const [from, to] of moves) {
       if (!dryRun) renameSync(from, to);
     }
-    log(`  ${dryRun ? 'would name' : 'named'} ${id} → ${newId}`);
-    done.push({ from: id, to: newId, moves });
+
+    if (merging) {
+      log(`  ${dryRun ? 'would merge' : 'merged'} ${id} → ${newId}`);
+    } else {
+      log(`  ${dryRun ? 'would name' : 'named'} ${id} → ${newId}`);
+    }
+    done.push({ from: id, to: newId, moves, merged: merging });
   }
+
+  done.push(...consolidateDuplicateBareSlugs({ dryRun, log }));
   return done;
 }
 

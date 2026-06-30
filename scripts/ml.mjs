@@ -25,8 +25,18 @@ import {
   musicPaths,
   fitPaths,
   scoresPaths,
+  readCurrentRound,
+  writeCurrentRound,
 } from './paths.mjs';
 import { applyDateSlugs, archiveStaleRounds, tidyRounds } from './maintain-rounds.mjs';
+import { downShapeFromShort, parsePickSpec } from './cli-commands.mjs';
+import {
+  formatConfigDisplay,
+  readMlConfig,
+  writeMlConfig,
+  DEFAULT_CLI_COMMENT_WIDTH,
+} from './ml-config.mjs';
+import { HELP, HELP_TOPICS, cmdHelpText } from './cli-help.mjs';
 
 const SCRIPTS_DIR = 'scripts';
 
@@ -65,6 +75,114 @@ function resolveOrExit(query, names, kind) {
   }
   console.error(`No ${kind} matches "${query}". Available:`);
   for (const n of names) console.error(`  ${n}`);
+  process.exit(1);
+}
+
+const VALUE_FLAGS = new Set([
+  '--mode',
+  '--shape',
+  '--down-shape',
+  '--fit',
+  '--rank',
+  '--gate',
+  '--cutoff',
+  '--weights',
+  '--pin',
+  '--tier-count',
+  '--bucket-count',
+  '--favorite-band',
+  '--option',
+  '--reason',
+  '--out',
+  '--order',
+  '--age',
+]);
+
+function nextFlagValue(argv, i, flag) {
+  if (flag.includes('=') || !VALUE_FLAGS.has(flag)) return null;
+  if (i + 1 < argv.length && !argv[i + 1].startsWith('-')) return argv[++i];
+  return null;
+}
+
+/** Split positional round name from flags; name may be omitted (uses current round). */
+function splitRoundArgs(rest) {
+  let name = null;
+  const flags = [];
+  for (let i = 0; i < rest.length; i++) {
+    const t = rest[i];
+    if (t.startsWith('-')) {
+      flags.push(t);
+      const v = nextFlagValue(rest, i, t);
+      if (v != null) {
+        flags.push(v);
+        i++;
+      }
+    } else if (name == null) {
+      name = t;
+    } else {
+      console.error(`Unexpected argument "${t}".`);
+      process.exit(1);
+    }
+  }
+  return { name, flags };
+}
+
+/** Pick: optional name, required A|B|C [cv|fl|cc], then flags (any order). */
+function splitPickArgs(rest) {
+  let name = null;
+  let option = null;
+  const flags = [];
+  for (let i = 0; i < rest.length; i++) {
+    const t = rest[i];
+    if (t.startsWith('-')) {
+      flags.push(t);
+      const v = nextFlagValue(rest, i, t);
+      if (v != null) {
+        flags.push(v);
+        i++;
+      }
+    } else if (option == null) {
+      const parsed = parsePickSpec(t);
+      if (parsed.letter) {
+        option = parsed.letter;
+        if (parsed.downShape) flags.push('--down-shape', parsed.downShape);
+      } else if (name == null) {
+        name = t;
+      } else {
+        console.error(`Unexpected argument "${t}".`);
+        process.exit(1);
+      }
+    } else {
+      const down = downShapeFromShort(t);
+      if (down && !flags.includes('--down-shape')) {
+        flags.push('--down-shape', down);
+      } else {
+        console.error(`Unexpected argument "${t}".`);
+        process.exit(1);
+      }
+    }
+  }
+  return { name, option, flags };
+}
+
+function resolveRoundName(explicitName, candidates, kind) {
+  if (explicitName) {
+    const resolved = resolveOrExit(explicitName, candidates, kind);
+    writeCurrentRound(resolved);
+    return resolved;
+  }
+  const stored = readCurrentRound();
+  if (stored) {
+    if (!candidates.includes(stored)) {
+      console.error(
+        `Current round "${stored}" is not available for this command. Name a round explicitly.`
+      );
+      process.exit(1);
+    }
+    console.log(`(current round: ${stored})`);
+    return stored;
+  }
+  console.error(`No round name — name one explicitly (e.g. just parse story-6).`);
   process.exit(1);
 }
 
@@ -227,27 +345,27 @@ function runScript(scriptName, args) {
   return res.status ?? 1;
 }
 
-function cmdMerge(name, flags) {
-  const base = resolveOrExit(name, listAllRoundIds(), 'round');
+function cmdMerge(explicitName, flags) {
+  const base = resolveRoundName(explicitName, listAllRoundIds(), 'round');
   process.exit(runScript('merge-scores.mjs', [base, ...flags]));
 }
 
-function cmdPick(name, option, flags) {
-  const base = resolveOrExit(name, listAllRoundIds(), 'round');
+function cmdPick(explicitName, option, flags) {
+  const base = resolveRoundName(explicitName, listAllRoundIds(), 'round');
   if (!option) {
-    console.error('Usage: ml pick <name> <A|B|C> [--reason "…"] [--pin …]');
+    console.error('Usage: ml pick [<name>] <A|B|C> [--reason "…"] [--pin …]');
     process.exit(1);
   }
   process.exit(runScript('pick-round.mjs', [base, option, ...flags]));
 }
 
-function cmdParse(name, flags) {
-  const base = resolveOrExit(name, listRoundInputIds(), 'round');
+function cmdParse(explicitName, flags) {
+  const base = resolveRoundName(explicitName, listRoundInputIds(), 'round');
   process.exit(runScript('parse-round.mjs', [inputPathFor(base), ...flags]));
 }
 
-function cmdFit(name, flags) {
-  const base = resolveOrExit(name, listAllRoundIds(), 'round');
+function cmdFit(explicitName, flags) {
+  const base = resolveRoundName(explicitName, listAllRoundIds(), 'round');
   const fitJson = fitPaths(base).json;
   if (!existsSync(fitJson)) {
     console.error(`No fit JSON at ${fitJson}.`);
@@ -258,8 +376,8 @@ function cmdFit(name, flags) {
   );
 }
 
-function cmdScores(name, flags) {
-  const base = resolveOrExit(name, listAllRoundIds(), 'round');
+function cmdScores(explicitName, flags) {
+  const base = resolveRoundName(explicitName, listAllRoundIds(), 'round');
   const scoresJson = scoresPaths(base).json;
   if (!existsSync(scoresJson)) {
     console.error(`No scores JSON at ${scoresJson}. Run merge first (just merge ${base}).`);
@@ -274,8 +392,8 @@ function cmdScores(name, flags) {
   );
 }
 
-function cmdFinal(name, flags) {
-  const base = resolveOrExit(name, listAllRoundIds(), 'round');
+function cmdFinal(explicitName, flags) {
+  const base = resolveRoundName(explicitName, listAllRoundIds(), 'round');
   const st = pipelineState(base);
   if (st.hasScoresJson) {
     process.exit(
@@ -310,18 +428,18 @@ function cmdFinal(name, flags) {
   );
 }
 
-function cmdRun(name) {
+function cmdRun(explicitName, flags) {
   // Tidy first so artifacts generate under the dated name, then resolve against
   // the fresh listing. Archive runs after we know which round to keep active.
   applyDateSlugs({ log: console.log });
-  const base = resolveOrExit(name, listAllRoundIds(), 'round');
+  const base = resolveRoundName(explicitName, listAllRoundIds(), 'round');
   archiveStaleRounds({ keep: new Set([base]), log: console.log });
   const st = pipelineState(base);
   const step = nextStep(st);
 
   switch (step.kind) {
     case 'parse':
-      return process.exit(runScript('parse-round.mjs', [st.inputPath]));
+      return process.exit(runScript('parse-round.mjs', [st.inputPath, ...flags]));
     case 'merge':
       console.log(`${base}: ${step.label}`);
       warnMissingScores(st);
@@ -426,6 +544,8 @@ function cmdStatusAll() {
     console.log('No rounds yet. Add a round export to rounds/NAME.html to start.');
     return;
   }
+  const current = readCurrentRound();
+  if (current) console.log(`Current round: ${current}\n`);
   for (const name of bases) {
     const st = pipelineState(name);
     const step = nextStep(st);
@@ -445,185 +565,94 @@ function usage() {
   cmdHelp(null);
 }
 
-const HELP_PIN = `  --pin <index>:<votes>   pin one song's votes (repeatable; comma-separate multiples)
-                          index = raw order # (first column in music.md "Raw order"
-                                  table and the CLI ballot — Music League entry order)
-                          votes > 0 = upvotes on that song (9:2 → 2 up on song #9)
-                          votes < 0 = downvotes when downvotes are on (6:-2 → 2 down on #6)
-                          Unpinned songs reflow so the up/down banks stay exact.`;
-
-const HELP = {
-  overview: `Music League pipeline — parse → (merge) → pick → render
-
-Stages (each reads/writes JSON; only parse touches HTML):
-  1. parse   HTML/text → music.md + music.json
-  2. merge   music.json + fit.json → scores.json   (thematic only)
-  3. pick    record distribution choice (A/B/C) → pick in JSON + picks.jsonl
-  4. final   render music.html or scores.html
-
-Music-only:
-  just parse <name>
-  just pick <name> B --reason "…"
-  just final <name>
-
-Thematic:
-  just parse <name>
-  # agent writes fit.json
-  just merge <name>
-  just pick <name> C --reason "…"
-  just final <name>
-
-Re-parse only when you replace the HTML export. Pick is always a separate step.
-
-Commands:
-  ml parse | merge | pick | fit | scores | final | run | status | tidy | help
-
-<name> is a fuzzy match (e.g. "tarot" or "2026-06-09").
-Run "ml help <cmd>" for flags and an example (parse, merge, pick, final, pin).`,
-  pin: `ml help pin — manual vote overrides (--pin)
-
-Format:  --pin <index>:<votes>     (repeatable; comma-separate: --pin 9:2,12:1)
-
-  index   Raw submission order — the # column in music.md "Raw order (for entering
-          votes)" and the ballot printed after parse/pick. Same numbering Music
-          League uses when you enter votes by position (0, 1, 2, …).
-
-  votes   Integer count on that song:
-          • positive → upvotes   (9:2  = give song #9 exactly 2 upvotes)
-          • negative → downvotes when the round has downvotes enabled (6:-2 = 2 down on #6)
-
-Other songs are re-allocated around the pin so the vote bank is still spent exactly.
-On pick, a pin is a tweak on top of the chosen option (logged as a manual tweak).
-
-Works on:  parse (explore)  merge (thematic explore)  pick (commit with tweak)
-
-Examples:
-  just parse kpop-favorite --pin 3:3          # explore: pin #3 to 3 upvotes
-  just pick story-5 A --pin 9:2 --reason "pin Two Evils to 2; reflow drops In The Heat"`,
-  parse: `ml parse <name> [flags]
-
-Parse a saved round HTML or text file → music.md + music.json.
-Does NOT write pick or scores. Does NOT read fit.json.
-
-Flags (explore allocation before pick):
-  --mode objective|subjective
-  --shape auto|bell|balanced|top-heavy|compressed|relative
-  --tier-count <n>       force distinct point tiers
-  --bucket-count <n>     force funded tier count
-${HELP_PIN}
-  --favorite-band <min>  merge scores ≥ min into one top tier (default 80)
-  --no-favorite-band     disable favorite-band merge
-  --no-json              skip music.json
-  --lenient              tolerate Live Text / pasted text input
-  --fit-words            parse tier/gate words + 2nd number as fit on scoring line
-
-Deprecated (warns, use separate stage):
-  --fit, --option, --reason
-
-Example:
-  just parse kpop-favorite --shape auto
-  ml help pin   # full --pin reference`,
-  merge: `ml merge <name> [flags]
-
-Merge music.json + fit.json → scores.json. Never reads HTML.
-
-Flags (thematic profile + allocation knobs):
-  --rank combined|fit|music
-  --weights <fit>:<music>   e.g. 3:2
-  --gate passFail|passFailMaybe
-  --cutoff <axis>:<min>     e.g. fit:70
-  --shape, --down-shape
-${HELP_PIN}
-  --tier-count, --bucket-count
-  --favorite-band, --no-favorite-band
-
-Example:
-  just merge tarot --rank combined --weights 3:2
-  ml help pin   # full --pin reference`,
-  pick: `ml pick <name> <A|B|C> [flags]
-
-Record a distribution choice. JSON-only — never re-reads HTML.
-Writes pick to music.json (music-only) or scores.json (thematic with --scores),
-refreshes the markdown report, and appends picks.jsonl.
-
-Flags:
-  --reason "why"           rationale stored in the pick record
-${HELP_PIN}
-  --down-shape flat|curved|concentrated
-  --shape, --tier-count, --bucket-count  (replay allocation)
-  --scores                 write pick to scores.json (thematic default path)
-  --dry-run                show pick without writing
-
-Example:
-  just pick tarot C --reason "thematic standouts land on 75 anchor"
-  just pick story-5 A --pin 9:2 --reason "pin Two Evils to 2"
-  ml help pin   # full --pin reference`,
-  final: `ml final <name> [flags]
-
-Render the draft-vote HTML deliverable:
-  - scores.json → scores.html when merge has run (thematic)
-  - music.json → music.html for music-only rounds
-  Auto-runs merge first if fit.json exists but scores.json does not.
-
-Flags:
-  --out <path>
-  --order combined|fit|raw|votes|score   (renderer sort order)
-
-Example:
-  just final tarot`,
-};
-
 function cmdHelp(topic) {
-  const key = topic?.toLowerCase();
-  if (!key) {
-    console.log(HELP.overview);
+  const text = cmdHelpText(topic);
+  if (text) {
+    console.log(text);
     return;
   }
-  const text = HELP[key];
-  if (!text) {
-    console.error(`Unknown help topic "${topic}". Try: parse, merge, pick, final, pin\n`);
-    console.log(HELP.overview);
+  console.error(`Unknown help topic "${topic}". Try: ${HELP_TOPICS.join(', ')}\n`);
+  console.log(HELP.overview);
+  process.exit(1);
+}
+
+function cmdConfig(rest) {
+  const [key, value] = rest;
+  if (!key) {
+    const shown = formatConfigDisplay();
+    console.log(`config file: ${shown.configFile}`);
+    console.log(`cliCommentWidth: ${shown.cliCommentWidth}`);
+    console.log('\nRun "ml help config" for options.');
+    return;
+  }
+  if (key !== 'comment-width') {
+    console.error(`Unknown config key "${key}". Supported: comment-width\n`);
+    console.log(HELP.config);
     process.exit(1);
   }
-  console.log(text);
+  if (value == null) {
+    console.log(formatConfigDisplay().cliCommentWidth);
+    return;
+  }
+  if (value === 'auto' || value === 'unset') {
+    writeMlConfig({ cliCommentWidth: null });
+    console.log('cliCommentWidth → auto');
+    return;
+  }
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < DEFAULT_CLI_COMMENT_WIDTH) {
+    console.error(`comment-width must be auto or an integer ≥ ${DEFAULT_CLI_COMMENT_WIDTH}.`);
+    process.exit(1);
+  }
+  writeMlConfig({ cliCommentWidth: n });
+  console.log(`cliCommentWidth → ${n}`);
 }
 
 function main() {
   const [, , cmd, ...rest] = process.argv;
-  const name = rest[0];
-  const flags = rest.slice(1);
 
   switch (cmd) {
-    case 'parse':
-      if (!name) return usage();
+    case 'parse': {
+      const { name, flags } = splitRoundArgs(rest);
       return cmdParse(name, flags);
-    case 'merge':
-      if (!name) return usage();
+    }
+    case 'merge': {
+      const { name, flags } = splitRoundArgs(rest);
       return cmdMerge(name, flags);
+    }
     case 'pick': {
-      if (!name) return usage();
-      const option = flags[0] && !flags[0].startsWith('-') ? flags.shift() : null;
+      const { name, option, flags } = splitPickArgs(rest);
       return cmdPick(name, option, flags);
     }
-    case 'fit':
-      if (!name) return usage();
+    case 'fit': {
+      const { name, flags } = splitRoundArgs(rest);
       return cmdFit(name, flags);
-    case 'scores':
-      if (!name) return usage();
+    }
+    case 'scores': {
+      const { name, flags } = splitRoundArgs(rest);
       return cmdScores(name, flags);
-    case 'final':
-      if (!name) return usage();
+    }
+    case 'final': {
+      const { name, flags } = splitRoundArgs(rest);
       return cmdFinal(name, flags);
+    }
     case 'run':
-    case 'next':
-      if (!name) return usage();
-      return cmdRun(name);
-    case 'status':
-      return name ? cmdStatusOne(resolveOrExit(name, listAllRoundIds(), 'round')) : cmdStatusAll();
+    case 'next': {
+      const { name, flags } = splitRoundArgs(rest);
+      return cmdRun(name, flags);
+    }
+    case 'status': {
+      const { name } = splitRoundArgs(rest);
+      return name
+        ? cmdStatusOne(resolveRoundName(name, listAllRoundIds(), 'round'))
+        : cmdStatusAll();
+    }
     case 'tidy':
       return cmdTidy(rest);
+    case 'config':
+      return cmdConfig(rest);
     case 'help':
-      return cmdHelp(name);
+      return cmdHelp(rest[0]);
     case undefined:
     case '-h':
     case '--help':

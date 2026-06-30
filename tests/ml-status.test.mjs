@@ -86,7 +86,50 @@ test('ml status shows pick row and next final step after pick', async () => {
 test('ml help documents stage commands', async () => {
   const { stdout: overview } = await execFileP(process.execPath, [mlScript, 'help'], { cwd: root });
   assert.match(overview, /parse.*merge.*pick/s);
+  assert.match(overview, /\.current-round/);
+  assert.match(overview, /pin, flags, tidy, config/);
   const { stdout: pick } = await execFileP(process.execPath, [mlScript, 'help', 'pick'], { cwd: root });
   assert.match(pick, /JSON-only/);
   assert.match(pick, /just pick/);
+  assert.match(pick, /--rank combined\|fit\|music/);
+  const { stdout: merge } = await execFileP(process.execPath, [mlScript, 'help', 'merge'], { cwd: root });
+  assert.match(merge, /--rank combined\|fit\|music/);
+  const { stdout: flags } = await execFileP(process.execPath, [mlScript, 'help', 'flags'], { cwd: root });
+  assert.match(flags, /--rank combined\|fit\|music\s+✓\s+✓\s+✓/);
+});
+
+test('ml parse --fit-words does not treat the flag as a round name', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'ml-current-test-'));
+  try {
+    await execFileP(process.execPath, [mlScript, 'parse', '--fit-words'], { cwd }).catch((err) => {
+      assert.match(String(err.stderr), /No round name/);
+      assert.doesNotMatch(String(err.stderr), /--fit-words/);
+      return null;
+    });
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('ml stores and reuses current round', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'ml-current-test-'));
+  try {
+    const name = '2026-06-01-demo';
+    await mkdir(join(cwd, 'data', 'rounds'), { recursive: true });
+    await writeFile(join(cwd, 'data', 'rounds', `${name}.html`), '<!doctype html>', 'utf8');
+
+    await execFileP(process.execPath, [mlScript, 'status', name], { cwd });
+
+    const { readFile } = await import('node:fs/promises');
+    const stored = await readFile(join(cwd, 'data', '.current-round'), 'utf8');
+    assert.equal(stored.trim(), name);
+
+    await execFileP(process.execPath, [mlScript, 'merge'], { cwd }).catch((err) => {
+      const combined = `${err.stdout ?? ''}${err.stderr ?? ''}`;
+      assert.match(combined, /\(current round: 2026-06-01-demo\)/);
+      return null;
+    });
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
 });

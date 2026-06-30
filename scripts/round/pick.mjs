@@ -111,10 +111,11 @@ export function applyOptionPick({
   exitOnError = true,
   roundId = null,
 }) {
-  const hasPins = baseOverrides && Object.keys(baseOverrides).length > 0;
-  const menuTradeoffs = hasPins ? reallocate(undefined) : initialTradeoffs;
+  // Pin reconciliation diffs against the unpinned menu (`initialTradeoffs`). Callers
+  // must not pass pin overrides into the merge/allocate that builds that menu — a
+  // pinned pre-pass corrupts the option baseline and reflow targets the wrong songs.
   const { idx, presented, overrides, error } = resolveOptionPick(
-    menuTradeoffs,
+    initialTradeoffs,
     optionSpec,
     baseOverrides,
     cap,
