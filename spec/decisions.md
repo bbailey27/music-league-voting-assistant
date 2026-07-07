@@ -11,6 +11,104 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-07 — Last.fm variant dimensions (language/remix/live/instrumental as columns) + grouping profiles
+
+**Change.** Reworked the Last.fm layer so version info is parsed into COLUMNS instead of the
+title. `lastfm-export.mjs` gains `parseVariant(track)` → `{ title (stripped), language, remix,
+live, instrumental }` and `parseArtist(artist)` → `{ mainArtist, artists[], collab }`;
+`readVariants()` emits a dimensioned base; `rollup(base, keys)` + `PROFILES` compute grouping
+profiles; `artistRollup()` credits every listed artist; `resolveTable()` + `table-map.json`
+pick a consumer's CSV. `normTitle` is now `parseVariant().title`. `lastfm-aggregate.mjs` writes
+`tracks-variants.csv` (base) plus profile files `tracks-affinity/-versions/-pandora.csv`,
+`track-titles.csv` (now stripped), `tracks-chart.csv`, `tracks-literal.csv`, `artists.csv`
+(replacing `tracks-merged.csv`). Rules gained `overrides.set` (dimension sets) and `albumRules`
+(per-album sets); precedence override.set > albumRule.set > auto-extraction. `merge-candidates`
+adds `language` and `instrumental` (≥5 plays) flags. `lastfm-add-rule.mjs` wizard supports
+dimension sets + album rules. Consumers (`title-prefix-scan`, `title-candidate-score`) read via
+`resolveTable` with `--table` / `--table-map` runtime overrides. Docs: `spec/lastfm-data.md`
+(objective) + `data/ref/lastfm/README.md` + `table-map.json` (personal). Seeded EXO Growl rules.
+
+**Grouping profiles.** `affinity` [mainArtist,title] = fuzziest popularity; `versions`
+[mainArtist,title,language,remix] = DEFAULT, splits language/remix/custom versions while live +
+instrumental fold to their nearest sibling; `pandora` adds live+instrumental (splits all);
+`title` [title] = cross-artist matching; `chart`/`literal` stay raw. `mainArtist` keys personal
+profiles so "X feat. Y" counts toward X; `artists.csv` credits every collaborator.
+
+**Why.** Two jobs were awkward when version words lived in the title: rough affinity (wants
+everything merged) and cross-artist title search (wants a stripped title). Columns make grouping
+a key-selection choice and let live/instrumental fold to nearest without hard-coding title
+strings. Some distinctions (EXO raw `Growl` Korean vs Chinese) depend on album, not title, so
+album-aware rules are required — hence `albumRules` + `override.set`. Personal "which table for
+which job" is kept in the data submodule so a public fork stays clean (fork-safe defaults in
+code). Instrumentals with real plays are surfaced as fixes since they're usually mis-scrobbles.
+
+**Refs.** `working tree` · `scripts/lastfm-export.mjs`, `scripts/lastfm-aggregate.mjs`,
+`scripts/lastfm-merge-candidates.mjs`, `scripts/lastfm-add-rule.mjs`, `scripts/title-prefix-scan.mjs`,
+`scripts/title-candidate-score.mjs`, `data/ref/lastfm/{merge-rules,table-map}.json`, `data/ref/lastfm/{README,lastfm-fixes}.md`,
+`spec/lastfm-data.md`, `tests/lastfm-export.test.mjs`, `.cursor/plans/lastfm-variant-dimensions.plan.md`.
+
+---
+
+## 2026-07-06 — Last.fm `merged`: parens never differentiate + language-label folding + rule wizard
+
+**Change.** `normTitle` (merged/titles only) now (a) strips parenthesization entirely, keeping
+the inner WORDS — so `Song (Remix)` == `Song Remix`, `으르렁 (Growl)` == `으르렁 Growl`, and the
+two Speed voice versions (`놀리러 간다 (Voice Version)` / `놀리러 간다 Voice Version`) merge with no
+rule — and (b) folds language/version labels: `ver`/`ver.`→`version`, `eng/kor/jpn/chn/…`→full
+language, and a bare language == `<language> version`, so `(Eng Ver)` == `English Version` ==
+`(English)`. Real variant WORDS (remix, live, instrumental, distinct languages, `(original by …)`)
+stay in the key. `scripts/lastfm-merge-candidates.mjs` now clusters by this normalized key by
+default (new tags `parens`, `label`; `--fuzzy` restores the old all-parens-dropped family view
+with a `naming` tag). Added `scripts/lastfm-add-rule.mjs`, an interactive wizard (buffers stdin
+so it works in a TTY and via pipe) to append artist/title aliases and album overrides. Removed
+the speculative EXO Growl titleAlias (the parens fold now covers `(Growl)` ⇄ `Growl`). Added
+`tests/lastfm-export.test.mjs`.
+
+**Why.** User: "parentheses in the title is never a valid differentiator if the words in the
+parentheses are the same," and cross-platform language labels should collapse. These are
+personal-affinity folds, so they apply to `merged` only — **never `chart`** (the Last.fm replica
+stays raw per-string). The same folds are surfaced by merge-candidates as the "fix these on
+Last.fm" list. Growl album-merge decision left OPEN pending a re-export (Chinese-character title,
+plain `Growl`, EXO-K/EXO-M variants); note EXO-K/EXO-M are language indicators and must not be
+blanket-merged, and all-songs lists artist `EXO` vs the export's `Exo`.
+
+**Refs.** `working tree` · `scripts/lastfm-export.mjs` (`normTitle`/`normalizeVersionLabels`),
+`scripts/lastfm-merge-candidates.mjs`, `scripts/lastfm-add-rule.mjs`, `tests/lastfm-export.test.mjs`,
+`.cursor/plans/lastfm-aggregation.plan.md` (D6).
+
+---
+
+## 2026-07-06 — Last.fm export aggregation tooling + repointed scrobble source
+
+**Change.** Added `scripts/lastfm-export.mjs` (shared parse/normalize/aggregate/rules lib for
+the https://lastfm.ghan.nl/export/ "Recent Tracks" format), `scripts/lastfm-aggregate.mjs`
+(writes `data/ref/lastfm/{tracks-literal,tracks-chart,tracks-merged,track-titles}.csv` +
+`_meta.json`), and `scripts/lastfm-merge-candidates.mjs` (flags variant tracks to merge on
+Last.fm; never auto-merges). Repointed `title-prefix-scan.mjs` (`SONG_CSV_FILES`) and
+`title-candidate-score.mjs` off the stale `all-scrobbles.csv` onto `lastfm/track-titles.csv`;
+`lfm-curses-rank.mjs` now imports the shared lib. Custom `data/ref/lastfm/merge-rules.json`
+(artistAliases / titleAliases / album-keyed overrides) restores album/naming distinctions
+Last.fm loses; applied to `merged`/`titles`, never `chart`.
+
+**Aggregation rules.** Four layers: `literal` (artist,track,album exact), `chart` (Last.fm
+replica: album-merged, title case-insensitive, artist case-SENSITIVE, symbol/CJK titles
+INCLUDED), `merged` (fold explicit/clean + feat, keep remix/version/live/`(original by …)`,
+apply rules, symbols included), `titles` (title,artist). **Accents never stripped**; titles
+case-insensitive, artists case-sensitive (LISA ≠ LiSa). Fuzzy accent/case folding is used
+only for merge-candidate flagging, never to merge.
+
+**Why.** `all-scrobbles.csv` was a stale partial export. The raw export validated at 15,958
+unique (artist,track) ≈ Last.fm's reported 15,957, and the regenerated `chart` reproduces the
+live top-50 exactly (ranks, counts, and tie-breaks). Earlier "Last.fm drops symbol/CJK titles"
+claim was doubly wrong (bad aggregation + no evidence): user confirmed 놀리러 간다 (Speed) sits
+at #313 on the site, so Last.fm INCLUDES symbol titles and numbers through them; `chart` now
+includes them. Tie-break confirmed: count desc, artist asc, title asc (case-insensitive).
+
+**Refs.** `working tree` · `scripts/lastfm-export.mjs`, `scripts/lastfm-aggregate.mjs`,
+`scripts/lastfm-merge-candidates.mjs`, `data/ref/lastfm/`, `.cursor/plans/lastfm-aggregation.plan.md`.
+
+---
+
 ## 2026-07-01 — Title-chain engagement score module
 
 **Change.** Extracted story-5/6 candidate ranking into `scripts/title-candidate-score.mjs`

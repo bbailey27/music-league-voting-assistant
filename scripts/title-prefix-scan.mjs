@@ -4,7 +4,8 @@
 // Usage: node scripts/title-prefix-scan.mjs <prefix> [<prefix> ...] [--out <path>]
 //
 // Loads data/ref/fav-songs.csv, chill-minor-rock-etc-search.csv, all-songs-no-inst.csv,
-// and all-scrobbles.csv (col0 = title, col1 = artist). Dedups by normalized title.
+// and lastfm/track-titles.csv (col0 = title, col1 = artist). Dedups by normalized title.
+// Regenerate track-titles.csv with: node scripts/lastfm-aggregate.mjs
 // Each prefix becomes a start-anchored regex (see prefixRegex). Writes the grouped
 // report to --out or stdout; prints a count summary to stderr when --out is a file.
 
@@ -12,14 +13,24 @@ import fs from "node:fs";
 import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { matchFlag } from "./cli-args.mjs";
+// NOTE: lastfm-export.mjs imports parseCsv from here. resolveTable is only used inside
+// functions (never at module top level), so the circular import is safe.
+import { resolveTable } from "./lastfm-export.mjs";
 
-/** Standard song CSVs: title = col0, artist = col1 in every file. */
-export const SONG_CSV_FILES = [
+/** Hand-maintained song CSVs (title = col0, artist = col1). */
+const REF_CSV_FILES = [
   "data/ref/fav-songs.csv",
   "data/ref/chill-minor-rock-etc-search.csv",
   "data/ref/all-songs-no-inst.csv",
-  "data/ref/all-scrobbles.csv",
 ];
+
+/** The Last.fm title table is chosen by the table-map ("title" profile by default). */
+export function songCsvFiles(opts = {}) {
+  return [...REF_CSV_FILES, resolveTable("title-prefix-scan", { fallback: "title", ...opts })];
+}
+
+/** Standard song CSVs: title = col0, artist = col1 in every file. */
+export const SONG_CSV_FILES = [...REF_CSV_FILES, "data/ref/lastfm/track-titles.csv"];
 
 export function norm(s) {
   return (s || "")
@@ -163,28 +174,25 @@ export function runScan({ prefixes, groups, keys, outPath, files = SONG_CSV_FILE
 }
 
 function parseArgs(argv) {
-  const args = { prefixes: [], out: null };
+  const args = { prefixes: [], out: null, table: undefined, tableMap: undefined };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    const outNext = matchFlag(argv, i, "out", (v) => {
-      args.out = v;
-    });
-    if (outNext != null) {
-      i = outNext;
-      continue;
-    }
+    let n;
+    if ((n = matchFlag(argv, i, "out", (v) => { args.out = v; })) != null) { i = n; continue; }
+    if ((n = matchFlag(argv, i, "table", (v) => { args.table = v; })) != null) { i = n; continue; }
+    if ((n = matchFlag(argv, i, "table-map", (v) => { args.tableMap = v; })) != null) { i = n; continue; }
     if (!a.startsWith("--")) args.prefixes.push(a);
   }
   return args;
 }
 
 function main() {
-  const { prefixes, out } = parseArgs(process.argv.slice(2));
+  const { prefixes, out, table, tableMap } = parseArgs(process.argv.slice(2));
   if (!prefixes.length) {
-    console.error("Usage: node scripts/title-prefix-scan.mjs <prefix> [<prefix> ...] [--out <path>]");
+    console.error("Usage: node scripts/title-prefix-scan.mjs <prefix> [<prefix> ...] [--out <path>] [--table <profile|csv>] [--table-map <path>]");
     process.exit(1);
   }
-  runScan({ prefixes, outPath: out ?? null });
+  runScan({ prefixes, outPath: out ?? null, files: songCsvFiles({ table, tableMap }) });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

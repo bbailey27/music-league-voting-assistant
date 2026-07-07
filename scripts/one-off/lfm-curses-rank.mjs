@@ -2,64 +2,74 @@
 // One-off: rank candidate songs for the "lfm-curses" round by top-tracks position.
 //
 // The round asks for the user's TOP-PLAYED song that features a curse word. The
-// authoritative "top tracks" ordering is play count from data/ref/all-scrobbles.csv
-// (col0 title, col1 artist, col4 scrobble count). Last.fm ranks per artist+title,
-// so we aggregate scrobbles per (title, artist) and assign a global rank.
+// authoritative "top tracks" ordering is the raw scrobble-log export in
+// data/ref/Recent Tracks Mochiphoria.csv (one row per play; artist=col2,
+// track=col6). We aggregate plays per track and assign a global rank that
+// reproduces Last.fm's chart (see hasSortKey + byRank for the site quirks).
 //
 // Usage:
 //   node scripts/one-off/lfm-curses-rank.mjs                 # print top 60 overall
 //   node scripts/one-off/lfm-curses-rank.mjs --top 100
 //   node scripts/one-off/lfm-curses-rank.mjs --find "Title" ["Title|Artist" ...]
+//   node scripts/one-off/lfm-curses-rank.mjs --artist "Name" [...]  # list an artist's tracks
 //   node scripts/one-off/lfm-curses-rank.mjs --candidates    # score the built-in list
+//
+// Add --merge to any mode to sum version variants (remix/clean/explicit/JP/…)
+// into one row per song (total affinity) instead of Last.fm's per-track chart.
 
-import { parseCsv, norm } from "../title-prefix-scan.mjs";
+import { norm } from "../title-prefix-scan.mjs";
+import {
+  DEFAULT_EXPORT, readScrobbles, aggregate, ranked as rankEntries, hasSortKey,
+  keyChart, keyMerged, loadRules, buildRuleIndex,
+} from "../lastfm-export.mjs";
 
-const SCROBBLES = "data/ref/all-scrobbles.csv";
+// Raw scrobble log export: one row per play. The ranking/aggregation logic lives in
+// lastfm-export.mjs (shared with lastfm-aggregate.mjs) so this stays a thin wrapper.
+const SCROBBLES = DEFAULT_EXPORT;
 
-/** Build ranked list of {title, artist, count, rank} aggregated per (title, artist). */
-function buildRanking() {
-  const byKey = new Map();
-  for (const row of parseCsv(SCROBBLES)) {
-    const title = (row[0] || "").trim();
-    const artist = (row[1] || "").trim();
-    const count = parseInt(row[4], 10) || 0;
-    if (!title) continue;
-    const key = `${norm(title)}\u0000${norm(artist)}`;
-    const prev = byKey.get(key);
-    if (prev) {
-      prev.count += count;
-    } else {
-      byKey.set(key, { title, artist, count });
-    }
-  }
-  const ranked = [...byKey.values()].sort((a, b) => b.count - a.count);
-  ranked.forEach((r, i) => { r.rank = i + 1; });
-  return ranked;
+/**
+ * Build ranked list of {title, artist, count, rank}.
+ *
+ * Two keying modes (see lastfm-export.mjs):
+ *  - faithful (default): Last.fm chart replica — every distinct (artist, track) string
+ *    ranks on its own; symbol/CJK titles are INCLUDED (Last.fm keeps them, e.g.
+ *    놀리러 간다 / Speed is #313 on the site).
+ *  - merged (`{ merge: true }`): fold explicit/clean + feat and apply merge-rules,
+ *    summing version variants into one row (total affinity).
+ */
+function buildRanking({ merge = false } = {}) {
+  const rows = readScrobbles(SCROBBLES);
+  const byKey = merge
+    ? aggregate(rows, keyMerged(buildRuleIndex(loadRules())))
+    : aggregate(rows, keyChart);
+  return rankEntries(byKey).map((e) => ({
+    title: e.track, artist: e.artist, count: e.count, rank: e.rank, variantCount: e.variantCount,
+  }));
 }
 
 /** Also aggregate by title alone (sum across artists) for loose lookups. */
 function buildTitleRanking() {
   const byTitle = new Map();
-  for (const row of parseCsv(SCROBBLES)) {
-    const title = (row[0] || "").trim();
-    const artist = (row[1] || "").trim();
-    const count = parseInt(row[4], 10) || 0;
-    if (!title) continue;
+  for (const { track: title, artist } of readScrobbles(SCROBBLES)) {
+    if (!hasSortKey(title)) continue;
     const key = norm(title);
+    if (!key) continue;
     const prev = byTitle.get(key);
     if (prev) {
-      prev.count += count;
+      prev.count += 1;
       if (artist) prev.artists.add(artist);
     } else {
-      byTitle.set(key, { title, artists: new Set(artist ? [artist] : []), count });
+      byTitle.set(key, { title, artists: new Set(artist ? [artist] : []), count: 1 });
     }
   }
-  const ranked = [...byTitle.values()].sort((a, b) => b.count - a.count);
-  ranked.forEach((r, i) => { r.rank = i + 1; });
-  return ranked;
+  const list = [...byTitle.values()].sort(
+    (a, b) => b.count - a.count || a.title.toLocaleLowerCase().localeCompare(b.title.toLocaleLowerCase()),
+  );
+  list.forEach((r, i) => { r.rank = i + 1; });
+  return list;
 }
 
-const stripParens = (s) => norm(s.replace(/\s*[\(\[].*$/, "").replace(/\s+-\s+.*$/, ""));
+const stripParens = (s) => norm(s.replace(/\s*[([].*$/, "").replace(/\s+-\s+.*$/, ""));
 
 function titleMatch(rowTitle, nt) {
   const rn = norm(rowTitle);
@@ -104,7 +114,7 @@ const CANDIDATES = [
   "Set Me Free|Jimin",
   "Set Me Free Pt.2|Jimin",
   "Daechwita|Agust D",
-  "Savage Love",
+  "Savage Love|Jawsh 685",
   "Mermaid|LE SSERAFIM",
   "Sour Grapes|LE SSERAFIM",
   "FEARLESS|LE SSERAFIM",
@@ -120,7 +130,7 @@ const CANDIDATES = [
   "Girlfriend|(G)I-DLE",
   "Dirty Work|aespa",
   "Face-off|Jimin",
-  "Arson|Jimin",
+  "Arson|j-hope",
   "OOTD|Dreamcatcher",
   "Off Road|ONEWE",
   "Zen|JENNIE",
@@ -128,7 +138,7 @@ const CANDIDATES = [
   "F.T.S.|JENNIE",
   "Filter|BTS",
   "Bite|Mad Tsai",
-  "Hounds of Hell|Mad Tsai",
+  "HOUNDSOFHELL|Mad Tsai",
   "mad's world|Mad Tsai",
   "RATATATA|BABYMETAL",
   "Ooh|BM",
@@ -142,12 +152,12 @@ const CANDIDATES = [
   "BUCK|Jackson Wang",
   "Deja Vu|VOILÀ",
   "BHYT|JUST B",
-  "Gunshot|BM",
+  "Gunshot|KARD",
   "TOPLINE|Stray Kids",
-  "Super Bowl|Stray Kids",
+  "SUPER BOARD|Stray Kids",
   "Enough|ATEEZ",
   "Adrenaline|ATEEZ",
-  "Lover=Loser",
+  "LO$ER=LO♡ER|Tomorrow X Together",
   "Outside|ENHYPEN",
   "Brought the Heat Back|ENHYPEN",
   "Eyes roll",
@@ -155,8 +165,10 @@ const CANDIDATES = [
 
 function main() {
   const argv = process.argv.slice(2);
-  const ranking = buildRanking();
+  const merge = argv.includes("--merge");
+  const ranking = buildRanking({ merge });
   const titleRanking = buildTitleRanking();
+  if (merge) console.error("(--merge: version variants summed per normalized title+artist)\n");
 
   if (argv.includes("--candidates")) {
     for (const q of CANDIDATES) {
@@ -175,9 +187,27 @@ function main() {
     return;
   }
 
+  const artistIdx = argv.indexOf("--artist");
+  if (artistIdx !== -1) {
+    for (const q of argv.slice(artistIdx + 1).filter((a) => !a.startsWith("--"))) {
+      const na = norm(q);
+      const rows = ranking
+        .filter((r) => {
+          const ra = norm(r.artist);
+          return ra && na && (ra.includes(na) || na.includes(ra));
+        })
+        .sort((a, b) => a.rank - b.rank);
+      console.log(`\n== artist ~ "${q}" (${rows.length} tracks) ==`);
+      for (const r of rows) {
+        console.log(`  rank ${String(r.rank).padStart(5)}  ${r.count}x  ${r.title} — ${r.artist}`);
+      }
+    }
+    return;
+  }
+
   const findIdx = argv.indexOf("--find");
   if (findIdx !== -1) {
-    for (const q of argv.slice(findIdx + 1)) {
+    for (const q of argv.slice(findIdx + 1).filter((a) => !a.startsWith("--"))) {
       const { matches, titleAgg } = find(q, ranking, titleRanking);
       console.log(`\n== ${q} ==`);
       for (const m of matches.slice(0, 6)) {
@@ -190,8 +220,9 @@ function main() {
   }
 
   const topIdx = argv.indexOf("--top");
-  const n = topIdx !== -1 ? parseInt(argv[topIdx + 1], 10) : 60;
-  console.log(`# Top ${n} tracks by scrobble count (${ranking.length} unique artist-titles)\n`);
+  const n = (topIdx !== -1 && parseInt(argv[topIdx + 1], 10)) || 60;
+  const label = merge ? "songs (variants merged)" : "tracks";
+  console.log(`# Top ${n} ${label} by scrobble count (${ranking.length} unique ${merge ? "songs" : "artist-titles"})\n`);
   for (const r of ranking.slice(0, n)) {
     console.log(`${String(r.rank).padStart(4)}  ${r.count.toString().padStart(4)}x  ${r.title} — ${r.artist}`);
   }

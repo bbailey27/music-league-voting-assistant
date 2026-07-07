@@ -7,7 +7,7 @@
 //
 // Weights (same as story-5/6 sort-candidates):
 //   +10  in all-songs-no-inst.csv (Pandora thumb-up baseline)
-//   +2   per scrobble (all-scrobbles.csv col 4, summed by title)
+//   +2   per scrobble (lastfm/track-titles.csv col 2, summed by title)
 //   +5   per favorite playlist (all-songs col 21)
 //   +1   per ranking-game point (all-songs col 24)
 //   +2   per "my playlist" count (all-songs col 32)
@@ -15,8 +15,9 @@
 //
 // Guidance: .cursor/skills/title-chain/SKILL.md → "Engagement score"
 
-import fs from "node:fs";
 import { parseCsv, norm } from "./title-prefix-scan.mjs";
+import { resolveTable } from "./lastfm-export.mjs";
+import { matchFlag } from "./cli-args.mjs";
 
 export const ENGAGEMENT_WEIGHTS = {
   inAllSongs: 10,
@@ -28,7 +29,10 @@ export const ENGAGEMENT_WEIGHTS = {
 };
 
 const ALL_SONGS = "data/ref/all-songs-no-inst.csv";
-const SCROBBLES = "data/ref/all-scrobbles.csv";
+// Pre-aggregated Last.fm play counts (title, artist, scrobbles). Which CSV is chosen by the
+// table-map ("title" profile by default → stripped titles, best for cross-artist matching).
+// Regenerate the tables with: node scripts/lastfm-aggregate.mjs
+const scrobblesTable = (opts = {}) => resolveTable("title-candidate-score", { fallback: "title", ...opts });
 
 export function stripParens(s) {
   return s.replace(/\s*\(.*$/, "").replace(/\s+-\s+.*$/, "").trim();
@@ -55,7 +59,7 @@ function setScore(map, key, data) {
 /** Build normalized-title → raw engagement fields from ref CSVs. */
 export function buildTitleEngagementIndex({
   allSongsPath = ALL_SONGS,
-  scrobblesPath = SCROBBLES,
+  scrobblesPath = scrobblesTable(),
 } = {}) {
   const scores = new Map();
 
@@ -78,7 +82,7 @@ export function buildTitleEngagementIndex({
     const title = (row[0] || "").trim();
     const key = norm(title);
     if (!key) continue;
-    const data = { scrobbles: parseInt(row[4], 10) || 0 };
+    const data = { scrobbles: parseInt(row[2], 10) || 0 };
     setScore(scores, key, data);
     setScore(scores, norm(stripParens(title)), data);
   }
@@ -118,13 +122,22 @@ export function scoreTitles(titles, index = buildTitleEngagementIndex()) {
 
 const isMain = process.argv[1]?.endsWith("title-candidate-score.mjs");
 if (isMain) {
-  const json = process.argv.includes("--json");
-  const titles = process.argv.slice(2).filter((a) => a !== "--json");
+  const argv = process.argv.slice(2);
+  const json = argv.includes("--json");
+  let table, tableMap;
+  const titles = [];
+  for (let i = 0; i < argv.length; i++) {
+    let n;
+    if (argv[i] === "--json") continue;
+    if ((n = matchFlag(argv, i, "table", (v) => { table = v; })) != null) { i = n; continue; }
+    if ((n = matchFlag(argv, i, "table-map", (v) => { tableMap = v; })) != null) { i = n; continue; }
+    titles.push(argv[i]);
+  }
   if (!titles.length || titles.includes("--help") || titles.includes("-h")) {
-    console.error(`Usage: node scripts/title-candidate-score.mjs [--json] "Title" ...`);
+    console.error(`Usage: node scripts/title-candidate-score.mjs [--json] [--table <profile|csv>] [--table-map <path>] "Title" ...`);
     process.exit(titles.length ? 0 : 1);
   }
-  const index = buildTitleEngagementIndex();
+  const index = buildTitleEngagementIndex({ scrobblesPath: scrobblesTable({ table, tableMap }) });
   const rows = scoreTitles(titles, index).sort((a, b) => b.total - a.total);
   if (json) {
     console.log(JSON.stringify(rows, null, 2));
