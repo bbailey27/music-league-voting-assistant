@@ -45,7 +45,7 @@ code). Instrumentals with real plays are surfaced as fixes since they're usually
 **Refs.** `working tree` · `scripts/lastfm-export.mjs`, `scripts/lastfm-aggregate.mjs`,
 `scripts/lastfm-merge-candidates.mjs`, `scripts/lastfm-add-rule.mjs`, `scripts/title-prefix-scan.mjs`,
 `scripts/title-candidate-score.mjs`, `data/ref/lastfm/{merge-rules,table-map}.json`, `data/ref/lastfm/{README,lastfm-fixes}.md`,
-`spec/lastfm-data.md`, `tests/lastfm-export.test.mjs`, `.cursor/plans/lastfm-variant-dimensions.plan.md`.
+`spec/lastfm-data.md`, `tests/lastfm-export.test.mjs`.
 
 ---
 
@@ -73,8 +73,7 @@ plain `Growl`, EXO-K/EXO-M variants); note EXO-K/EXO-M are language indicators a
 blanket-merged, and all-songs lists artist `EXO` vs the export's `Exo`.
 
 **Refs.** `working tree` · `scripts/lastfm-export.mjs` (`normTitle`/`normalizeVersionLabels`),
-`scripts/lastfm-merge-candidates.mjs`, `scripts/lastfm-add-rule.mjs`, `tests/lastfm-export.test.mjs`,
-`.cursor/plans/lastfm-aggregation.plan.md` (D6).
+`scripts/lastfm-merge-candidates.mjs`, `scripts/lastfm-add-rule.mjs`, `tests/lastfm-export.test.mjs`.
 
 ---
 
@@ -105,7 +104,7 @@ at #313 on the site, so Last.fm INCLUDES symbol titles and numbers through them;
 includes them. Tie-break confirmed: count desc, artist asc, title asc (case-insensitive).
 
 **Refs.** `working tree` · `scripts/lastfm-export.mjs`, `scripts/lastfm-aggregate.mjs`,
-`scripts/lastfm-merge-candidates.mjs`, `data/ref/lastfm/`, `.cursor/plans/lastfm-aggregation.plan.md`.
+`scripts/lastfm-merge-candidates.mjs`, `data/ref/lastfm/`, `spec/lastfm-data.md`.
 
 ---
 

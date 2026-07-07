@@ -6,11 +6,18 @@ alwaysApply: true
 
 # Never grep the song CSVs directly
 
-The files in `data/ref/` (`all-scrobbles.csv`, `all-songs-no-inst.csv`,
-`fav-songs.csv`, `chill-minor-rock-etc-search.csv`) contain many columns
-beyond the title. Running `grep` / `rg` on them produces noisy, misleading
-results because the search term can match album names, artist names, playlist
-names, or other metadata — not just titles.
+The song CSVs the scan scripts load (`data/ref/fav-songs.csv`,
+`data/ref/chill-minor-rock-etc-search.csv`, `data/ref/all-songs-no-inst.csv`,
+and `data/ref/lastfm/track-titles.csv`) contain many columns beyond the title.
+Running `grep` / `rg` on them produces noisy, misleading results because the
+search term can match album names, artist names, playlist names, or other
+metadata — not just titles. (The Last.fm title table is picked via
+`table-map.json` / `--table`; regenerate it with `node scripts/lastfm-aggregate.mjs`.)
+
+The same applies to the other generated Last.fm tables in `data/ref/lastfm/`
+(`tracks-variants.csv`, `tracks-affinity.csv`, `tracks-versions.csv`,
+`tracks-pandora.csv`, `tracks-chart.csv`, `tracks-literal.csv`, `artists.csv`) —
+query them with the Last.fm scripts, not raw `grep`.
 
 Always use the dedicated scan scripts instead:
 

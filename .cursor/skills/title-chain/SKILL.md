@@ -23,15 +23,15 @@ _end_ of the sentence as much as the words you add.
 
 ## Inputs
 
-| Thing                             | Location                                                                                                                                                 |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Sentence so far + the scene/story | from the user                                                                                                                                            |
-| Title pool (largest first)        | `data/ref/all-scrobbles.csv` (col0 title), `all-songs-no-inst.csv`, `chill-minor-rock-etc-search.csv`, `fav-songs.csv` (all col0 = title, col1 = artist) |
-| Prefix scan tool                  | `scripts/title-prefix-scan.mjs` (reusable CLI)                                                                                                           |
-| Complement checker (structural)   | `scripts/title-complement-check.mjs` — `--slot copular` today; add slots in-file (see below)                                                             |
-| Engagement score                  | `scripts/title-candidate-score.mjs` — weighted scrobbles + Pandora fields; `sort-candidates.mjs` for bullet lists                                        |
-| Story-5 word bank                 | `scripts/one-off/story-5-prefix-scan.mjs`                                                                                                                |
-| Per-round writeup                 | `data/analysis/<round>/candidates.md`                                                                                                                    |
+| Thing                             | Location                                                                                                                                                                                                                                                                                         |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Sentence so far + the scene/story | from the user                                                                                                                                                                                                                                                                                    |
+| Title pool (largest first)        | `data/ref/lastfm/track-titles.csv` (col0 = stripped title, col1 = artist), `all-songs-no-inst.csv`, `chill-minor-rock-etc-search.csv`, `fav-songs.csv` (all col0 = title, col1 = artist). The Last.fm table is chosen via `table-map.json`; regenerate with `node scripts/lastfm-aggregate.mjs`. |
+| Prefix scan tool                  | `scripts/title-prefix-scan.mjs` (reusable CLI)                                                                                                                                                                                                                                                   |
+| Complement checker (structural)   | `scripts/title-complement-check.mjs` — `--slot copular` today; add slots in-file (see below)                                                                                                                                                                                                     |
+| Engagement score                  | `scripts/title-candidate-score.mjs` — weighted scrobbles + Pandora fields; `sort-candidates.mjs` for bullet lists                                                                                                                                                                                |
+| Story-5 word bank                 | `scripts/one-off/story-5-prefix-scan.mjs`                                                                                                                                                                                                                                                        |
+| Per-round writeup                 | `data/analysis/<round>/candidates.md`                                                                                                                                                                                                                                                            |
 
 `song-topic-summaries.csv` is about **meaning** — irrelevant here.
 
@@ -122,14 +122,14 @@ node scripts/title-candidate-score.mjs --json "One Day"
 
 **Formula** (`ENGAGEMENT_WEIGHTS` in the script — change there, not in prose):
 
-| Source                         | Field                             |     Weight |
-| ------------------------------ | --------------------------------- | ---------: |
-| `all-songs-no-inst.csv`        | title present (Pandora thumb-up)  |        +10 |
-| `all-scrobbles.csv` col 4      | scrobble count (summed per title) |         ×2 |
-| `all-songs-no-inst.csv` col 21 | favorite playlist count           |         ×5 |
-| col 24                         | ranking-game points               |         ×1 |
-| col 32                         | my playlist count                 |         ×2 |
-| col 20                         | artist rating (% )                | +1 per 10% |
+| Source                          | Field                                                   |     Weight |
+| ------------------------------- | ------------------------------------------------------- | ---------: |
+| `all-songs-no-inst.csv`         | title present (Pandora thumb-up)                        |        +10 |
+| `lastfm/track-titles.csv` col 2 | scrobble count (per stripped title, via `resolveTable`) |         ×2 |
+| `all-songs-no-inst.csv` col 21  | favorite playlist count                                 |         ×5 |
+| col 24                          | ranking-game points                                     |         ×1 |
+| col 32                          | my playlist count                                       |         ×2 |
+| col 20                          | artist rating (% )                                      | +1 per 10% |
 
 Lookup normalizes titles and also tries a parenthetical-stripped form so candidates like
 _That Feeling_ match longer CSV rows.
