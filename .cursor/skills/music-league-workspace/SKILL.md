@@ -12,13 +12,13 @@ Deterministic Node scripts turn a saved Music League round into ranked tables an
 
 ## What this repo does
 
-| Stage        | Who / script              | Output                                            |
-| ------------ | ------------------------- | ------------------------------------------------- |
-| Parse        | `parse-round.mjs`         | `data/analysis/<round>/music.md` + `music.json`   |
-| Fit research | Agent / LLM               | `data/analysis/<round>/fit.json`                  |
-| Merge        | `merge-scores.mjs`        | `data/analysis/<round>/scores.json`               |
-| Pick         | `pick-round.mjs`          | `pick` on JSON + `data/analysis/picks.jsonl`      |
-| Render       | `render-*-html.mjs`       | `music.html`, `scores.html`, or `fit.html`        |
+| Stage        | Who / script        | Output                                          |
+| ------------ | ------------------- | ----------------------------------------------- |
+| Parse        | `parse-round.mjs`   | `data/analysis/<round>/music.md` + `music.json` |
+| Fit research | Agent / LLM         | `data/analysis/<round>/fit.json`                |
+| Merge        | `merge-scores.mjs`  | `data/analysis/<round>/scores.json`             |
+| Pick         | `pick-round.mjs`    | `pick` on JSON + `data/analysis/picks.jsonl`    |
+| Render       | `render-*-html.mjs` | `music.html`, `scores.html`, or `fit.html`      |
 
 **Music-only path:**
 
@@ -48,18 +48,21 @@ Round inputs/outputs live in the private `data/` submodule; path constants are c
 
 ## Key scripts
 
-| Script                | Role                                                                        |
-| --------------------- | --------------------------------------------------------------------------- |
-| `ml.mjs`              | Dispatcher: fuzzy names, `run`/`status`/`help`, next-step inference         |
-| `parse-round.mjs`     | HTML or text → `music.*` (parse stage only)                                 |
-| `merge-scores.mjs`    | `music.json` + `fit.json` → `scores.json` (no HTML)                         |
-| `pick-round.mjs`      | JSON-only pick + `picks.jsonl` (no HTML)                                     |
-| `paths.mjs`           | Shared analysis path helpers + artifact naming                              |
-| `maintain-rounds.mjs` | Date-slug undated rounds + archive stale ones (`ml tidy`; auto on `run`)    |
-| `score-core.mjs`      | Re-export barrel for `scripts/score/*`                                      |
-| `render-fit-html.mjs` | Fit or scores JSON → self-contained HTML cards + vote-transfer table        |
-| `render-final-html.mjs` | Music JSON → music.html (pure read)                                       |
-| `one-off/`            | Round-specific drivers (e.g. kpop-solo-versions.mjs) — not main pipeline    |
+| Script                       | Role                                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------- |
+| `ml.mjs`                     | Dispatcher: fuzzy names, `run`/`status`/`help`, next-step inference          |
+| `parse-round.mjs`            | HTML or text → `music.*` (parse stage only)                                  |
+| `merge-scores.mjs`           | `music.json` + `fit.json` → `scores.json` (no HTML)                          |
+| `pick-round.mjs`             | JSON-only pick + `picks.jsonl` (no HTML)                                     |
+| `paths.mjs`                  | Shared analysis path helpers + artifact naming                               |
+| `maintain-rounds.mjs`        | Date-slug undated rounds + archive stale ones (`ml tidy`; auto on `run`)     |
+| `score-core.mjs`             | Re-export barrel for `scripts/score/*`                                       |
+| `render-fit-html.mjs`        | Fit or scores JSON → self-contained HTML cards + vote-transfer table         |
+| `render-final-html.mjs`      | Music JSON → music.html (pure read)                                          |
+| `title-prefix-scan.mjs`      | Story-chain: anchor title-prefix searches across ref CSVs                    |
+| `title-complement-check.mjs` | Story-chain: structural complement tags by `--slot` (default `copular`)      |
+| `title-candidate-score.mjs`  | Story-chain: weighted engagement score (scrobbles + Pandora playlist fields) |
+| `one-off/`                   | Round-specific drivers (e.g. kpop-solo-versions.mjs) — not main pipeline     |
 
 ## Common commands
 
@@ -102,13 +105,14 @@ If `.cursor/rules/` disagrees with `spec/`, follow **spec/**.
 
 Load these when the task matches (they are explicit-only):
 
-| Skill                     | When                                                |
-| ------------------------- | --------------------------------------------------- |
-| **parse-scores-pipeline** | Parsing rounds, text vs HTML, verification          |
-| **submission-song-search**| Finding songs to SUBMIT for a themed round (mine fav-songs.csv / discographies) |
-| **round-fit-research**    | Thematic/lyric rounds, writing `fit.json`           |
-| **point-allocation**      | Rebalancing votes, profiles, one-off scripts        |
-| **round-artifacts**       | Naming rounds, capturing inputs, pipeline checklist |
+| Skill                      | When                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------- |
+| **parse-scores-pipeline**  | Parsing rounds, text vs HTML, verification                                      |
+| **submission-song-search** | Finding songs to SUBMIT for a themed round (mine fav-songs.csv / discographies) |
+| **title-chain**            | Story/sentence-chain rounds — prefix scans + `title-complement-check.mjs`       |
+| **round-fit-research**     | Thematic/lyric rounds, writing `fit.json`                                       |
+| **point-allocation**       | Rebalancing votes, profiles, one-off scripts                                    |
+| **round-artifacts**        | Naming rounds, capturing inputs, pipeline checklist                             |
 
 ## Agent constraints
 

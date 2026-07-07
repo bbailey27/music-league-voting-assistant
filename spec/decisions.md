@@ -11,6 +11,35 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-01 — Title-chain engagement score module
+
+**Change.** Extracted story-5/6 candidate ranking into `scripts/title-candidate-score.mjs`
+(weighted scrobbles + `all-songs-no-inst.csv` playlist/ranking fields). `sort-candidates.mjs`
+imports it. Documented in `.cursor/skills/title-chain/SKILL.md`; story-7 finalists use
+**Engagement** column instead of raw scrobble count.
+
+**Why.** Raw scrobbles alone under-rank library titles the user thumbs up but rarely scrobbles
+(_My Girl_, _Nothing Short of a Miracle_ baseline +10 from all-songs presence).
+
+**Refs.** `working tree` · `scripts/title-candidate-score.mjs`, `.cursor/skills/title-chain/SKILL.md`.
+
+---
+
+## 2026-07-01 — Title-chain structural complement checker
+
+**Change.** Added `scripts/title-complement-check.mjs` with `--slot copular` for story-7
+(_…all i wanted was [title]_). Tags: `ok-np`, `ok-inf`, `ok-fragment`, `bad-clause`, etc.
+Slot name is in `--slot`, not the filename (`classifyComplement`, `classifyCopularComplement`).
+New slots register in `CLASSIFIERS`. Updated `.cursor/skills/title-chain/SKILL.md`.
+
+**Why.** Agent “vibe” grammar checks misclassified valid NPs (_This Love_) and rejected
+relative-clause NPs (_All the Things She Said_). Mechanical rules match what the user
+validates: complement type after the fixed prefix, not whether the sentence ends.
+
+**Refs.** `working tree` · `scripts/title-complement-check.mjs`, `.cursor/skills/title-chain/SKILL.md`.
+
+---
+
 ## 2026-06-30 — Combined tier equality by fit trust (manual vs LLM)
 
 **Change.** Two combined sub-modes via `profile.fitTrust`:
