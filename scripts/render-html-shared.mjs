@@ -255,20 +255,27 @@ export function pickHtml(pick, songs = [], ownSongs = [], profile = null) {
   const chosen = pick.options[ci];
   if (!chosen) return '';
 
+  // The pick table shows the APPLIED ballot (post-pin/reflow), read off the live
+  // songs — not `chosen.perSong`, which is the frozen pre-tweak option distribution.
+  // With pins, the two diverge (the `Manual tweaks` line explains the diff); the
+  // untouched option columns still live in the "Options considered" table below.
   const tableRows = expandTradeoffRows(chosen.perSong, songs, ownSongs, profile);
   const combinedRows = tableRows
     .map((row) => {
       const excluded = row.excluded || isExcludedFromAllocation(row.song, profile);
-      const votes = excluded ? '—' : formatScore(chosen.perSong[row.ri]?.votes ?? 0);
-      const rowClass = excluded ? ' class="excluded"' : row.ri != null && chosen.perSong[row.ri]?.votes > 0 ? ' class="has-votes"' : '';
+      const up = ballotUp(row.song);
+      const down = ballotDown(row.song);
+      const hasVote = !excluded && (up > 0 || down > 0);
+      const votes = excluded ? '—' : down > 0 ? `-${formatScore(down)}` : formatScore(up);
+      const rowClass = excluded ? ' class="excluded"' : hasVote ? ' class="has-votes"' : '';
       return `<tr${rowClass}><td class="num muted">${esc(row.rawOrderIndex)}</td><td>${esc(
           row.title
         )}</td><td class="num">${tradeoffScoreHtml(row, chosen.perSong, profile)}</td><td class="num votes${
-          !excluded && chosen.perSong[row.ri]?.votes > 0 ? ' on' : ''
+          hasVote ? ' on' : ''
         }">${votes}</td></tr>`;
     })
     .join('\n');
-  const total = chosen.perSong.reduce((a, s) => a + (s.votes || 0), 0);
+  const total = (songs || []).reduce((a, s) => a + ballotUp(s), 0);
 
   const reason = pick.reason
     ? `<p class="reason"><span class="label">Why</span> ${esc(pick.reason)}</p>`
@@ -354,28 +361,30 @@ export function buildComboBallot(tradeoffs, songs = [], ownSongs = [], pick = nu
     return m;
   };
 
-  const pickOptions = pick?.options?.filter((o) => Array.isArray(o.perSong) && o.perSong.length) || [];
+  // Once a pick is recorded the ballot is DECIDED: collapse to the single applied
+  // allocation (live finalVotes/draftVotes), not the A/B/C option columns. The
+  // multi-column menu is only useful BEFORE a pick — so you can transcribe a column
+  // straight into Music League without running the pick command first.
+  const hasPick = !!(
+    pick &&
+    (pick.chosen != null || pick.chosenIndex != null || (Array.isArray(pick.options) && pick.options.length))
+  );
 
-  // Up axis: tier-structure options if present, else frozen pick menu, else live allocation.
+  // Up axis: after a pick, the live applied ballot; before, the tier-structure
+  // options if present, else the live allocation.
   const upOptions =
-    upTr && Array.isArray(upTr.options) && upTr.options.length
+    !hasPick && upTr && Array.isArray(upTr.options) && upTr.options.length
       ? upTr.options.map((o, i) => ({
           code: OPTION_LETTERS[i],
           selector: `--option ${OPTION_LETTERS[i]}`,
           votes: mapVotes(o.perSong),
         }))
-      : pickOptions.length
-        ? pickOptions.map((o, i) => ({
-            code: o.letter || OPTION_LETTERS[i],
-            selector: `--option ${o.letter || OPTION_LETTERS[i]}`,
-            votes: mapVotes(o.perSong),
-          }))
-        : [{ code: null, selector: null, votes: defaultMap(ballotUp) }];
+      : [{ code: null, selector: null, votes: defaultMap(ballotUp) }];
 
-  // Down axis: down-structure shapes if present, else the single live down shape,
-  // else none at all (up-only columns).
+  // Down axis: after a pick, the single live down shape; before, the down-structure
+  // shapes if present, else the single live down shape, else none (up-only columns).
   let downOptions;
-  if (downTr && Array.isArray(downTr.options) && downTr.options.length) {
+  if (!hasPick && downTr && Array.isArray(downTr.options) && downTr.options.length) {
     downOptions = downTr.options.map((o) => ({
       code: downShapeShort(o.downShape),
       selector: `--down-shape ${o.downShape}`,
@@ -459,6 +468,10 @@ export function comboBallotHtml(tradeoffs, songs = [], ownSongs = [], pick = nul
   if (!combos.length || !rows.length) return '';
   if (!combos.some((c) => c.totals.up > 0 || c.totals.down > 0)) return '';
   const anyConflict = combos.some((c) => c.totals.conflicts > 0);
+  const hasPick = !!(
+    pick &&
+    (pick.chosen != null || pick.chosenIndex != null || (Array.isArray(pick.options) && pick.options.length))
+  );
 
   const headCols = combos
     .map((c) => {
@@ -507,9 +520,13 @@ export function comboBallotHtml(tradeoffs, songs = [], ownSongs = [], pick = nul
     ? '<p class="muted cf-note"><b>!</b> = this up option upvotes a song the down shape also downvotes, so the two disagree for that combo — resolve by hand (or pin the downvote). Totals show each axis\u2019s intended budget.</p>'
     : '';
 
+  const intro = hasPick
+    ? 'Your applied ballot (upvotes +, downvotes \u2212) in Music League submission order — transcribe straight down.'
+    : 'Each column is one complete ballot (upvotes +, downvotes \u2212) in Music League submission order — pick a column and transcribe straight down, no need to choose first.';
+
   return `<section class="ballot">
   <h2>Ballot (raw order)</h2>
-  <p class="muted">Each column is one complete ballot (upvotes +, downvotes \u2212) in Music League submission order — pick a column and transcribe straight down, no need to choose first.</p>
+  <p class="muted">${intro}</p>
   <div class="ballot-scroll">
   <table>
     <thead><tr><th class="num">#</th><th>Title</th><th>Artist</th>${headCols}</tr></thead>
@@ -519,7 +536,7 @@ ${body}
     <tfoot><tr><td></td><td>Total ▲ / ▼</td><td></td>${foot}</tr></tfoot>
   </table>
   </div>
-  <ul class="legend">${legend}</ul>
+  ${hasPick ? '' : `<ul class="legend">${legend}</ul>`}
   ${conflictNote}
 </section>`;
 }

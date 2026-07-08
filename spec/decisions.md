@@ -11,6 +11,62 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-08 — HTML report shows the APPLIED ballot after a pick, not the frozen options
+
+**Change.** Two render fixes in `render-html-shared.mjs` (used by `music.html` and the
+fit report), both making the post-pick page reflect the allocation actually applied
+(pins/reflow included), read off the live songs via `ballotUp`/`ballotDown`
+(`finalVotes ?? draftVotes`):
+
+1. **`pickHtml` "Your pick" table** now reads each song's vote from the live song
+   instead of `chosen.perSong[...].votes`, and totals the live bank. The collapsed
+   "Options considered" table still shows the untouched A/B/C distributions; the
+   "Manual tweaks" line still explains the diff.
+2. **`buildComboBallot` / `comboBallotHtml` "Ballot (raw order)"** now collapses to the
+   single applied column once a `pick` is recorded (`hasPick`), ignoring the
+   persisted `tier-structure` / `down-structure` option columns. The multi-column
+   combo ballot is shown only **before** a pick (so you can transcribe a column
+   without running the pick command). Copy switches to "Your applied ballot…" and the
+   per-option legend is dropped when picked.
+
+Regression tests in `tests/render-html.test.mjs` and `tests/pipeline-stages.test.mjs`.
+
+**Why.** With `--pin`, the recorded option's `perSong` is the **pre-tweak** curve
+(aaa-cars option A = `4/4/3/3/3/2/1/0`), while the applied ballot after pin/reflow is
+`5/3/3/3/2/2/2/0`. The card list already used `finalVotes`, so the page contradicted
+itself — cards showed 5/3/2… but the pick table and the raw-order ballot both showed
+the frozen 4/4/3…. The applied allocation is the authoritative ballot, so every
+post-pick view must reflect it; the option menu is a pre-decision aid only.
+
+**Overruled.** The prior behavior where `buildComboBallot` kept showing `pick.options`
+as multiple ballot columns "when tradeoffs are resolved" (former
+`pipeline-stages.test.mjs` case) — the owner clarified the multi-option ballot is for
+BEFORE picking only. **Refs:** working tree.
+
+## 2026-07-07 — `--fit-words` gate words auto-activate the gate
+
+**Change.** `applyManualFitScoring` (parse) now sets `profile.gate` when comments
+carry `pass`/`maybe`/`fail` words and no explicit `--gate` / `--cutoff` was given:
+`passFailMaybe` if any `maybe` is present, else binary `passFail`. It propagates to
+`merge` / `pick` via the stored profile (`buildGate(args) ?? stored.gate`). An
+explicit gate is never overridden; numeric-only manual fit (no gate words) still
+gates nothing. Docs: `spec/score-parsing.md`, `spec/scoring-comments.md`,
+`spec/point-allocation.md` (gate profile), `cli-help.mjs` `--fit-words`.
+
+**Why.** A parsed per-song `gate` was **inert** without `profile.gate` — `gateClass`
+short-circuits every song to `pass` when the profile has no gate. So `just parse
+--fit-words` on a pass/maybe/fail round parsed the gate words but ranked purely by
+combined (= music with no fit numbers), putting an 80-music `maybe` at the top of a
+pass field (reported on `2026-07-06-kpop-controversial`). Requiring a separate
+`--gate passFailMaybe` was a non-obvious second step; auto-wiring mirrors the existing
+auto-default of `rankBy` → `combined` for manual fit.
+
+**Refs.** `working tree` · `scripts/parse-round.mjs` (`applyManualFitScoring`),
+`tests/score.test.mjs`, `spec/score-parsing.md`, `spec/scoring-comments.md`,
+`spec/point-allocation.md`.
+
+---
+
 ## 2026-07-07 — Last.fm variant dimensions (language/remix/live/instrumental as columns) + grouping profiles
 
 **Change.** Reworked the Last.fm layer so version info is parsed into COLUMNS instead of the

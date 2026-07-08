@@ -89,7 +89,10 @@ test('pick preserves all tier-structure options in buildPickRecord', () => {
   assert.notEqual(pick.options[1].shape, pick.options[0].shape);
 });
 
-test('buildComboBallot falls back to pick.options when tradeoffs are resolved', () => {
+test('buildComboBallot collapses to the applied ballot once a pick is recorded', () => {
+  // A recorded pick means the ballot is decided — show the single applied allocation
+  // (live finalVotes), not the A/B/C option columns. The multi-column menu is only
+  // for BEFORE a pick.
   const songs = [
     { rawOrderIndex: 0, title: 'A', finalVotes: 3 },
     { rawOrderIndex: 1, title: 'B', finalVotes: 0 },
@@ -113,9 +116,9 @@ test('buildComboBallot falls back to pick.options when tradeoffs are resolved', 
     ],
   };
   const { combos } = buildComboBallot([], songs, [], pick);
-  assert.equal(combos.length, 2);
-  assert.equal(combos[0].members[0].code, 'A');
-  assert.equal(combos[1].members[0].code, 'B');
+  assert.equal(combos.length, 1, 'single applied column after a pick');
+  assert.equal(combos[0].perIndex.get(0), 3, 'applied finalVotes for A');
+  assert.equal(combos[0].perIndex.get(1), 0, 'applied finalVotes for B');
 });
 
 test('pick-round.mjs does not read round HTML', async () => {
