@@ -1,0 +1,192 @@
+{
+  "round": {
+    "title": "Music League | Sample League | Under the stars",
+    "league": "Sample League",
+    "prompt": "Under the stars",
+    "description": "Songs that mention the night sky, moon, or stars. Instrumentals count if the title fits."
+  },
+  "mode": "objective",
+  "budget": {
+    "upvoteBankSize": 6,
+    "maxUpvotesPerSong": 3,
+    "downvotesEnabled": false,
+    "downvoteBankSize": null,
+    "maxDownvotesPerSong": null
+  },
+  "profile": {
+    "shape": "auto",
+    "rankBy": "music"
+  },
+  "pick": {
+    "chosen": "A",
+    "chosenIndex": 0,
+    "tierCount": 3,
+    "shape": "3×1 / 2×1 / 1×1",
+    "reason": "regression",
+    "pickedAt": "SNAPSHOT",
+    "tweaks": [],
+    "options": [
+      {
+        "letter": "A",
+        "tierCount": 3,
+        "bucketCount": 3,
+        "shape": "3×1 / 2×1 / 1×1",
+        "isChosen": true,
+        "perSong": [
+          {
+            "rawOrderIndex": 0,
+            "title": "Starlight",
+            "score": 78,
+            "votes": 3
+          },
+          {
+            "rawOrderIndex": 1,
+            "title": "City Glow",
+            "score": 72,
+            "votes": 2
+          },
+          {
+            "rawOrderIndex": 2,
+            "title": "Midnight Bus",
+            "score": 65,
+            "votes": 1
+          }
+        ]
+      },
+      {
+        "letter": "B",
+        "tierCount": 1,
+        "bucketCount": 1,
+        "shape": "2×3",
+        "isChosen": false,
+        "perSong": [
+          {
+            "rawOrderIndex": 0,
+            "title": "Starlight",
+            "score": 78,
+            "votes": 2
+          },
+          {
+            "rawOrderIndex": 1,
+            "title": "City Glow",
+            "score": 72,
+            "votes": 2
+          },
+          {
+            "rawOrderIndex": 2,
+            "title": "Midnight Bus",
+            "score": 65,
+            "votes": 2
+          }
+        ]
+      }
+    ]
+  },
+  "totals": {
+    "totalSongs": 4,
+    "ownSkipped": 1,
+    "allocated": 6,
+    "downAllocated": 0
+  },
+  "ownSongs": [
+    {
+      "rawOrderIndex": 3,
+      "title": "My Submission",
+      "artist": "Me",
+      "isOwn": true
+    }
+  ],
+  "tradeoffs": [],
+  "songs": [
+    {
+      "rawOrderIndex": 0,
+      "title": "Starlight",
+      "artist": "Nova Ray",
+      "album": "Night Drive",
+      "userAllocatedVotes": 0,
+      "userComment": "78 strong fit",
+      "submitterComment": "",
+      "spotifyUri": "spotify:track:STAR1",
+      "score": 78,
+      "plus": false,
+      "minus": false,
+      "uncertain": false,
+      "plusUncertain": false,
+      "minusUncertain": false,
+      "playlistAdd": false,
+      "playlistUncertain": false,
+      "isDisqualified": false,
+      "needsUserInput": false,
+      "needsReview": false,
+      "needsResearch": false,
+      "reviewReason": "",
+      "fitScore": null,
+      "fitTier": null,
+      "gate": null,
+      "fitSource": null,
+      "combinedScore": null,
+      "finalVotes": 3,
+      "finalDownvotes": 0
+    },
+    {
+      "rawOrderIndex": 1,
+      "title": "City Glow",
+      "artist": "The Avenues",
+      "album": "",
+      "userAllocatedVotes": 0,
+      "userComment": "72",
+      "submitterComment": "",
+      "spotifyUri": "spotify:track:CITY1",
+      "score": 72,
+      "plus": false,
+      "minus": false,
+      "uncertain": false,
+      "plusUncertain": false,
+      "minusUncertain": false,
+      "playlistAdd": false,
+      "playlistUncertain": false,
+      "isDisqualified": false,
+      "needsUserInput": false,
+      "needsReview": false,
+      "needsResearch": false,
+      "reviewReason": "",
+      "fitScore": null,
+      "fitTier": null,
+      "gate": null,
+      "fitSource": null,
+      "combinedScore": null,
+      "finalVotes": 2,
+      "finalDownvotes": 0
+    },
+    {
+      "rawOrderIndex": 2,
+      "title": "Midnight Bus",
+      "artist": "Lane Four",
+      "album": "",
+      "userAllocatedVotes": 0,
+      "userComment": "65 fit moderate",
+      "submitterComment": "",
+      "spotifyUri": "spotify:track:BUS1",
+      "score": 65,
+      "plus": false,
+      "minus": false,
+      "uncertain": false,
+      "plusUncertain": false,
+      "minusUncertain": false,
+      "playlistAdd": false,
+      "playlistUncertain": false,
+      "isDisqualified": false,
+      "needsUserInput": false,
+      "needsReview": false,
+      "needsResearch": false,
+      "reviewReason": "",
+      "fitScore": null,
+      "fitTier": null,
+      "gate": null,
+      "fitSource": null,
+      "combinedScore": null,
+      "finalVotes": 1,
+      "finalDownvotes": 0
+    }
+  ]
+}

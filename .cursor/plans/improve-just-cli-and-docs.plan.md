@@ -6,10 +6,10 @@ isProject: false
 todos:
   - id: ml-dispatcher-tests
     content: tests/ml.test.mjs — dispatch + stage errors ("parse first")
-    status: pending
+    status: completed
   - id: e2e-fixture
     content: End-to-end fixture parse → pick → final (beyond pipeline-stages.test.mjs invariants)
-    status: pending
+    status: completed
 ---
 
 # Improve just commands and user instructions
@@ -18,7 +18,11 @@ todos:
 three-stage workflow, justfile doc comments, status pick row + next steps, workspace
 skill. See `spec/decisions.md`.
 
-**Remaining:** Phase 3 tests below. **Sequence:** Wave 2 of [remaining-work-master.plan.md](remaining-work-master.plan.md).
+**Phase 3 shipped** (2026-07-08): `tests/ml.test.mjs` (dispatch + stage errors +
+deprecated-flag redirects) and `tests/pipeline-e2e.test.mjs` (parse→pick→final). Landed with
+Wave A of [hands-off-orchestrator.plan.md](hands-off-orchestrator.plan.md). See
+`spec/decisions.md`. Nothing open — this plan can be deleted once the orchestrator effort
+finishes.
 
 ## Target workflow (shipped — reference for tests)
 

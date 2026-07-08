@@ -7,7 +7,9 @@ import { basename, extname, join } from 'node:path';
 // Private round inputs, analysis outputs, and reference data live in the
 // `music-league-data` git submodule mounted at data/ (kept out of the public
 // repo). See spec/analysis-artifacts.md and README "Private data" section.
-export const DATA_DIR = 'data';
+// `ML_DATA_DIR` overrides the root (tests + the regression harness point it at a
+// throwaway workspace so real rounds are never touched); defaults to `data`.
+export const DATA_DIR = process.env.ML_DATA_DIR || 'data';
 export const ROUNDS_DIR = join(DATA_DIR, 'rounds');
 export const ANALYSIS_DIR = join(DATA_DIR, 'analysis');
 export const REF_DIR = join(DATA_DIR, 'ref');

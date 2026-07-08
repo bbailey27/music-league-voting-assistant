@@ -26,7 +26,14 @@ isProject: false
 - `tests/score.test.mjs`: token parsing (`755`→75.5, `7`→70.0, `73-`, `74 soft punk`, `10/10` ignored); disqualified vs empty vs `play`; allocation sums to budget, respects cap, excludes own/disqualified.
 - `tests/regressions/006.md`: prose expectations over the committed sample round.
 
-### Output snapshot regression test (not built yet)
+### Output snapshot regression test ✅ shipped 2026-07-08
+
+Built as `scripts/regression-snapshot.mjs` + `just test-regression` + committed baseline under
+`tests/fixtures/sample-round/snapshot/`, covered by `tests/regression-snapshot.test.mjs`
+(fails `npm test` on drift). `--update` regenerates the baseline. `paths.mjs` gained an
+`ML_DATA_DIR` override so the pipeline runs against a throwaway workspace. See
+`spec/decisions.md` (2026-07-08) and [hands-off-orchestrator.plan.md](hands-off-orchestrator.plan.md)
+Wave A. The original description is kept below for context.
 
 **What this is:** a **regression test based on diffs**, not a separate product feature.
 Before a risky refactor, run the full pipeline (parse → merge where applicable → render)

@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Under the stars — draft votes</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1a1c20;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+  --card: #fbfbfc;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14161a; --fg: #e6e8ec; --muted: #9aa1ab; --line: #2a2e35; --card: #1b1e24; }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 1.5rem 1rem 4rem;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.wrap { max-width: 900px; margin: 0 auto; }
+h2 { font-size: 1.05rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 2rem 0 .75rem; }
+.muted { color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: .35rem; }
+.chip {
+  --chip-hue: 220;
+  display: inline-block; padding: .1rem .5rem; border-radius: 999px; font-size: .8rem;
+  background: hsl(var(--chip-hue) 60% 50% / .14); color: hsl(var(--chip-hue) 55% 38%);
+  border: 1px solid hsl(var(--chip-hue) 60% 50% / .25);
+}
+@media (prefers-color-scheme: dark) { .chip { color: hsl(var(--chip-hue) 70% 72%); } }
+
+table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+th, td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.tier {
+  --tier-hue: 220;
+  display: inline-block; padding: .1rem .5rem; border-radius: 6px; font-weight: 700; font-size: .78rem;
+  text-transform: uppercase; letter-spacing: .03em;
+  background: hsl(var(--tier-hue) 60% 50% / .16); color: hsl(var(--tier-hue) 55% 36%);
+}
+@media (prefers-color-scheme: dark) { .tier { color: hsl(var(--tier-hue) 70% 70%); } }
+
+.card {
+  --tier-hue: 220;
+  display: grid; grid-template-columns: 9.5rem 1fr; gap: 1rem;
+  padding: 1rem; margin: .75rem 0; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--card); border-left: 4px solid hsl(var(--tier-hue) 60% 50% / .7);
+}
+.identity { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
+.identity .rank { font-variant-numeric: tabular-nums; color: var(--muted); font-size: .8rem; font-weight: 600; }
+.identity .title { font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.identity .artist { color: var(--muted); font-size: .9rem; overflow-wrap: anywhere; }
+
+.body { min-width: 0; }
+.card-head { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; margin-bottom: .5rem; }
+.themes { display: flex; flex-wrap: wrap; gap: .3rem; }
+.rationale { margin: .25rem 0 .5rem; }
+.flags { display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: .5rem; }
+.flag {
+  display: inline-block; padding: .1rem .45rem; border-radius: 6px; font-size: .75rem;
+  background: hsl(40 90% 50% / .16); color: hsl(35 85% 35%); border: 1px solid hsl(40 90% 50% / .3);
+}
+.flag.dq { background: hsl(0 80% 50% / .14); color: hsl(0 70% 42%); border-color: hsl(0 80% 50% / .3); }
+@media (prefers-color-scheme: dark) { .flag { color: hsl(42 90% 70%); } .flag.dq { color: hsl(0 80% 72%); } }
+.meta { display: flex; flex-wrap: wrap; gap: .75rem; color: var(--muted); font-size: .82rem; }
+
+.ballot-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.ballot table { font-size: .85rem; }
+.ballot th.c, .ballot td.c { white-space: nowrap; }
+.ballot td.c { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.ballot td.c.up { color: hsl(145 60% 38%); }
+.ballot td.c.down { color: hsl(0 65% 45%); }
+.ballot td.c.conflict { color: hsl(35 90% 42%); font-weight: 800; }
+.ballot td.c.zero { color: var(--muted); font-weight: 400; }
+.ballot tr.own td { color: var(--muted); font-style: italic; }
+.ballot tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: none; white-space: nowrap; }
+.ballot tfoot .cf { color: hsl(35 90% 42%); }
+.ballot .legend { margin: .6rem 0 0; padding-left: 1.1rem; font-size: .82rem; color: var(--muted); }
+.ballot .legend code { font-size: .82rem; }
+.ballot .cf-note { font-size: .82rem; margin: .5rem 0 0; }
+@media (prefers-color-scheme: dark) {
+  .ballot td.c.up { color: hsl(145 60% 62%); }
+  .ballot td.c.down { color: hsl(0 70% 68%); }
+  .ballot td.c.conflict, .ballot tfoot .cf { color: hsl(40 90% 65%); }
+}
+
+.tradeoffs .tradeoff { margin: 0 0 1.25rem; }
+.tradeoffs .q { font-weight: 600; margin: 0 0 .5rem; }
+.tradeoffs table.compare { font-size: .88rem; }
+.tradeoffs table.compare th.opt, .tradeoffs table.compare td.opt { width: 3rem; }
+.tradeoffs table.compare td.opt { color: var(--muted); }
+.tradeoffs table.compare td.opt.on { color: var(--fg); font-weight: 700; }
+.tradeoffs table.compare .opt.default { background: hsl(145 60% 50% / .1); }
+.tradeoffs table.compare .opt.chosen { background: hsl(265 70% 55% / .16); }
+.tradeoffs table.compare th.opt.chosen { color: hsl(265 60% 45%); font-weight: 800; }
+@media (prefers-color-scheme: dark) { .tradeoffs table.compare th.opt.chosen { color: hsl(265 80% 78%); } }
+.pick .reason, .pick .tweaks { margin: .25rem 0; font-size: .92rem; }
+.pick .reason .label, .pick .tweaks .label { text-transform: uppercase; letter-spacing: .04em; font-size: .7rem; font-weight: 700; color: var(--muted); margin-right: .4rem; }
+.pick table.compare td.votes.on { font-weight: 700; color: hsl(265 60% 45%); }
+@media (prefers-color-scheme: dark) { .pick table.compare td.votes.on { color: hsl(265 80% 78%); } }
+.considered { margin-top: 1rem; }
+.considered summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
+.considered[open] summary { margin-bottom: .5rem; }
+.tradeoffs table.compare tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: none; }
+.tradeoffs .sub { margin: .9rem 0 .3rem; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; }
+.tradeoffs table.compare tr.own td { color: var(--muted); font-style: italic; }
+.tradeoffs .legend { margin: .6rem 0 0; padding-left: 1.1rem; font-size: .85rem; color: var(--muted); }
+.tradeoffs .legend code { font-size: .82rem; }
+
+@media (max-width: 560px) {
+  .card { grid-template-columns: 1fr; gap: .5rem; }
+  .identity { flex-direction: row; align-items: baseline; flex-wrap: wrap; gap: .4rem; }
+}
+
+h1 { font-size: 1.5rem; margin: 0 0 .5rem; }
+.lead { font-size: 1.05rem; line-height: 1.45; margin: .5rem 0 1rem; }
+
+.facts { display: flex; flex-wrap: wrap; gap: .4rem; margin: .25rem 0 .5rem; }
+.fact { font-size: .82rem; color: var(--muted); padding: .15rem .55rem; border: 1px solid var(--line); border-radius: 999px; }
+.fact b { color: var(--fg); font-variant-numeric: tabular-nums; }
+.fact.warn { color: hsl(35 85% 38%); border-color: hsl(40 90% 50% / .4); }
+@media (prefers-color-scheme: dark) { .fact.warn { color: hsl(42 90% 70%); } }
+.counts { font-size: .85rem; margin: .25rem 0 0; }
+
+.score {
+  font-weight: 700; font-variant-numeric: tabular-nums; font-size: .8rem;
+  padding: .1rem .45rem; border-radius: 6px; border: 1px solid var(--line); color: var(--muted);
+}
+.score .mods { color: var(--fg); font-weight: 800; margin-left: .15rem; }
+.score.your { color: var(--fg); background: hsl(var(--tier-hue) 60% 50% / .06); border-color: var(--line); }
+.score.fit { color: var(--muted); }
+.score.combined { color: var(--fg); background: hsl(var(--tier-hue) 60% 50% / .14); border-color: hsl(var(--tier-hue) 60% 50% / .3); }
+.score.votes { color: var(--muted); }
+.score.votes.has-votes { color: #fff; background: hsl(var(--vote-hue, 270) 70% 60%); border-color: hsl(var(--vote-hue, 270) 70% 60%); }
+.score.votes.has-down { color: #fff; background: hsl(0 65% 48%); border-color: hsl(0 65% 48%); }
+@media (prefers-color-scheme: dark) {
+  .score.votes.has-votes { color: #0d0f12; background: hsl(var(--vote-hue, 270) 70% 60%); border-color: hsl(var(--vote-hue, 270) 70% 60%); }
+  .score.votes.has-down { color: #0d0f12; background: hsl(0 70% 68%); border-color: hsl(0 70% 68%); }
+}
+
+.themes { margin: .25rem 0 .5rem; }
+.comment { margin: .25rem 0 .5rem; }
+.comment .label, .rationale .label { text-transform: uppercase; letter-spacing: .04em; font-size: .7rem; font-weight: 700; color: var(--muted); margin-right: .35rem; }
+
+.tradeoffs .q { font-weight: 600; }
+.tradeoffs li.tradeoff { margin: .4rem 0; }
+.tradeoffs li.tradeoff ul { margin: .25rem 0 0; }
+.list li { margin: .25rem 0; }
+</style>
+</head>
+<body>
+<main class="wrap">
+<header class="report-head">
+  <h1>Under the stars <span class="muted">— Sample League</span> <span class="muted">— draft votes</span></h1>
+  <p class="lead">Songs that mention the night sky, moon, or stars. Instrumentals count if the title fits.</p>
+  <div class="facts"><span class="fact">mode <b>objective</b></span><span class="fact">budget <b>6</b> up · max 3/song · downvotes off</span><span class="fact">allocated <b>6 / 6</b> up</span></div>
+  <p class="counts muted">3 songs · 3 scored · 0 disqualified · 0 need a score · 0 need review</p>
+</header>
+<section class="candidates">
+  <h2>Songs (by votes)</h2>
+  <article class="card" style="--tier-hue:220">
+  <div class="identity">
+    <span class="rank">#0</span>
+    <span class="title">Starlight</span>
+    <span class="artist">Nova Ray</span>
+  </div>
+  <div class="body">
+    <div class="card-head"><span class="score your" title="your music score">your 78</span><span class="score votes has-votes" style="--vote-hue:270" title="draft upvotes">3 ▲</span></div>
+    
+    <p class="comment"><span class="label">your comment</span> 78 strong fit</p>
+    
+    
+    
+  </div>
+</article>
+<article class="card" style="--tier-hue:220">
+  <div class="identity">
+    <span class="rank">#1</span>
+    <span class="title">City Glow</span>
+    <span class="artist">The Avenues</span>
+  </div>
+  <div class="body">
+    <div class="card-head"><span class="score your" title="your music score">your 72</span><span class="score votes has-votes" style="--vote-hue:220" title="draft upvotes">2 ▲</span></div>
+    
+    <p class="comment"><span class="label">your comment</span> 72</p>
+    
+    
+    
+  </div>
+</article>
+<article class="card" style="--tier-hue:220">
+  <div class="identity">
+    <span class="rank">#2</span>
+    <span class="title">Midnight Bus</span>
+    <span class="artist">Lane Four</span>
+  </div>
+  <div class="body">
+    <div class="card-head"><span class="score your" title="your music score">your 65</span><span class="score votes has-votes" style="--vote-hue:145" title="draft upvotes">1 ▲</span></div>
+    
+    <p class="comment"><span class="label">your comment</span> 65 fit moderate</p>
+    
+    
+    
+  </div>
+</article>
+</section>
+
+<section class="pick tradeoffs">
+  <h2>Your pick — Option A <span class="muted">(3 tiers, 3×1 / 2×1 / 1×1)</span></h2>
+  <p class="reason"><span class="label">Why</span> regression</p>
+  <table class="compare">
+    <thead><tr><th class="num">#</th><th>Song</th><th class="num">Score</th><th class="num">Votes</th></tr></thead>
+    <tbody>
+<tr class="has-votes"><td class="num muted">0</td><td>Starlight</td><td class="num">78</td><td class="num votes on">3</td></tr>
+<tr class="has-votes"><td class="num muted">1</td><td>City Glow</td><td class="num">72</td><td class="num votes on">2</td></tr>
+<tr class="has-votes"><td class="num muted">2</td><td>Midnight Bus</td><td class="num">65</td><td class="num votes on">1</td></tr>
+    </tbody>
+    <tfoot><tr><td></td><td>Total</td><td></td><td class="num">6</td></tr></tfoot>
+  </table>
+  <details class="considered">
+  <summary>Options considered (A / B)</summary>
+  <div class="tradeoff">
+  
+  <p class="sub muted">By combined score</p>
+  <table class="compare">
+    <thead><tr><th class="num">#</th><th>Song</th><th class="num">Score</th><th class="num opt chosen">A</th><th class="num opt">B</th></tr></thead>
+    <tbody>
+<tr><td class="num muted">0</td><td>Starlight</td><td class="num">78</td><td class="num opt chosen on">3</td><td class="num opt on">2</td></tr>
+<tr><td class="num muted">1</td><td>City Glow</td><td class="num">72</td><td class="num opt chosen on">2</td><td class="num opt on">2</td></tr>
+<tr><td class="num muted">2</td><td>Midnight Bus</td><td class="num">65</td><td class="num opt chosen on">1</td><td class="num opt on">2</td></tr>
+    </tbody>
+    <tfoot><tr><td></td><td></td><td>Total</td><td class="num opt chosen">6</td><td class="num opt">6</td></tr></tfoot>
+  </table>
+  <ul class="legend"><li><b>A</b> <span class="muted">(your pick)</span> — 3 tiers, <code>3×1 / 2×1 / 1×1</code>, <code>--option A</code></li><li><b>B</b> — 1 tier, <code>2×3</code>, <code>--option B</code></li></ul>
+</div>
+</details>
+</section>
+
+
+
+<section class="ballot">
+  <h2>Ballot (raw order)</h2>
+  <p class="muted">Your applied ballot (upvotes +, downvotes −) in Music League submission order — transcribe straight down.</p>
+  <div class="ballot-scroll">
+  <table>
+    <thead><tr><th class="num">#</th><th>Title</th><th>Artist</th><th class="num c" title="default">▲</th></tr></thead>
+    <tbody>
+<tr><td class="num muted">0</td><td>Starlight</td><td class="muted">Nova Ray</td><td class="c up">+3</td></tr>
+<tr><td class="num muted">1</td><td>City Glow</td><td class="muted">The Avenues</td><td class="c up">+2</td></tr>
+<tr><td class="num muted">2</td><td>Midnight Bus</td><td class="muted">Lane Four</td><td class="c up">+1</td></tr>
+<tr class="own"><td class="num muted">3</td><td>My Submission</td><td class="muted">Me</td><td class="c zero">—</td></tr>
+    </tbody>
+    <tfoot><tr><td></td><td>Total ▲ / ▼</td><td></td><td class="num c">6</td></tr></tfoot>
+  </table>
+  </div>
+  
+  
+</section></main>
+</body>
+</html>

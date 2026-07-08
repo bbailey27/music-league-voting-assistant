@@ -11,6 +11,32 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-08 — Output snapshot regression harness + `ML_DATA_DIR` test override
+
+**Change.** Added `scripts/regression-snapshot.mjs` (+ `just test-regression`): it runs the
+full deterministic pipeline (parse → pick → final) on the committed `sample-round` fixture in
+a throwaway workspace, then diffs the generated `music.md` / `music.json` / `music.html` and
+the `score-core.mjs` public export list against a committed baseline under
+`tests/fixtures/sample-round/snapshot/`. `pickedAt` is normalized to a sentinel; a dated
+fixture id (`2020-01-01-sample-round`) keeps parse's date-slugging a no-op so the analysis dir
+is stable. `--update` regenerates the baseline. Covered by `tests/regression-snapshot.test.mjs`,
+so drift fails `npm test`. Also added `tests/ml.test.mjs` (dispatcher routing + stage errors +
+deprecated-flag redirects) and `tests/pipeline-e2e.test.mjs` (parse→pick→final artifacts).
+To make the pipeline testable in isolation, `paths.mjs` now honors `ML_DATA_DIR` (defaults to
+`data`) so tests point at a temp data root while `scripts/` + `node_modules` still resolve from
+the repo root.
+
+**Why.** The score-core module split (renderer dedup, Phase 2) and other refactors need a
+diff-based catch-net beyond unit tests — behavior drift in vote tables / JSON shape wasn't
+caught otherwise. This is Wave 2 of `remaining-work-master`, the prerequisite gate for the
+score-core Phases 2–4. See `.cursor/plans/hands-off-orchestrator.plan.md`.
+
+**Refs.** `working tree` — `scripts/regression-snapshot.mjs`, `scripts/paths.mjs`,
+`tests/{ml,pipeline-e2e,regression-snapshot}.test.mjs`, `tests/fixtures/sample-round/snapshot/`,
+`justfile`.
+
+---
+
 ## 2026-07-08 — HTML report shows the APPLIED ballot after a pick, not the frozen options
 
 **Change.** Two render fixes in `render-html-shared.mjs` (used by `music.html` and the

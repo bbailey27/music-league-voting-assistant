@@ -88,11 +88,11 @@ catch net beyond unit tests.
 | E2e fixture | parse → pick → final on sample round |
 | `tests/extract.test.mjs` | HTML → counts, own-skip (if not already present) |
 
-**Gate:**
+**Gate:** ✅ met 2026-07-08 (see [hands-off-orchestrator](hands-off-orchestrator.plan.md) Wave A)
 
-- [ ] One command reproduces snapshot diff workflow
-- [ ] `ml pick` without `music.json` fails with actionable message (tested)
-- [ ] `npm test` green
+- [x] One command reproduces snapshot diff workflow — `just test-regression`
+- [x] `ml pick` without `music.json` fails with actionable message (tested) — `tests/ml.test.mjs`
+- [x] `npm test` green (211)
 
 ---
 
@@ -181,8 +181,8 @@ Wave 4 until Wave 2 snapshot test exists**.
 ## Verification checklist (master done)
 
 - [x] `--fit-words` default-off; peel-first parse grammar
-- [ ] Output snapshot regression test repeatable
-- [ ] `tests/ml.test.mjs` + e2e fixture green
+- [x] Output snapshot regression test repeatable — `just test-regression` (2026-07-08)
+- [x] `tests/ml.test.mjs` + e2e fixture green (2026-07-08)
 - [ ] Core specs (`round-input-parsing`, `score-parsing`, `point-allocation`) current
 - [ ] `npm test` && `just lint` green
 - [ ] Partial child plans deleted or marked done; open items only in `future-plans`
@@ -195,8 +195,8 @@ Wave 4 until Wave 2 snapshot test exists**.
 | --- | --- | --- |
 | — | remaining-work-master | in_progress |
 | 1 | preserve-manual-fit-scores | **shipped** (plan deleted) |
-| 2 | followup-5-specs-and-tests | partial (test slice) |
-| 2 | improve-just-cli-and-docs | partial (Phase 3) |
+| 2 | followup-5-specs-and-tests | snapshot slice **shipped** 2026-07-08; spec slice open |
+| 2 | improve-just-cli-and-docs | Phase 3 **shipped** 2026-07-08 |
 | 3 | followup-5-specs-and-tests | partial (spec slice) |
 | 4 | split-score-core-into-modules | partial (Phases 2–4) |
 | 5 | future-plans items 5–6 | backlog |

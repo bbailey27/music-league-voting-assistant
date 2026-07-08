@@ -45,6 +45,11 @@ tidy *flags:
 config *args:
     node scripts/ml.mjs config {{args}}
 
+# Diff pipeline output for the sample fixture against the committed baseline
+# (add `-- --update` to regenerate the baseline after an intended change)
+test-regression *args:
+    node scripts/regression-snapshot.mjs {{args}}
+
 # Lint JS (eslint) + Markdown (markdownlint) without changing files
 lint:
     npm run --silent lint
