@@ -6,7 +6,7 @@ isProject: false
 todos:
   - id: phase-2-renderer-dedup
     content: Extract shared HTML renderer helpers; re-run output snapshot regression diff
-    status: pending
+    status: completed
   - id: phase-3-split-tests
     content: Split tests/score.test.mjs into comment/allocate/merge test files
     status: pending
@@ -73,24 +73,20 @@ Importers still use `./score-core.mjs` only — no importer churn.
 
 ---
 
-## Phase 2 — de-duplicate the HTML renderers
+## Phase 2 — de-duplicate the HTML renderers ✅ shipped 2026-07-08
 
-[scripts/render-fit-html.mjs](scripts/render-fit-html.mjs) and
-[scripts/render-final-html.mjs](scripts/render-final-html.mjs) both define local
-`renderHead` functions and duplicate sorting logic.
+Most of the intended dedup already shipped with `render-html-shared.mjs` (shared
+`esc`/`chip`/`tierHue`/styles; both renderers import `formatScore` from the barrel and
+never redefine it). This pass removed the remaining duplication:
 
-1. Extract `scripts/render/html.mjs` with shared escaping/chip/tier-hue/style helpers
-   beyond what already lives in `render-html-shared.mjs`.
-2. Have both renderers import `formatScore` / `fitTierForScore` from the scoring
-   barrel instead of redefining.
-3. Re-run the **output snapshot regression diff** — regenerated artifacts must match
-   the baseline (see Phase 0 below).
+- Added `reportTitleLine(round, fallback)` + `leadHtml(round)` to `render-html-shared.mjs`;
+  both `renderHead`s now call them instead of repeating the prompt/league/title and
+  description-lead templates.
+- Added a shared `byRawOrder` comparator; both renderers' sort tiebreaks use it.
 
-**Verification:**
-
-- `npm test` — same pass count
-- `diff -r /tmp/ml-before data/analysis` — no differences (capture baseline first
-  if `/tmp/ml-before` is stale)
+Verified via `just test-regression` (music.html byte-identical to baseline) + `npm test`
+(211, unchanged) + eslint clean. `fitTierForScore` is not used by the renderers, so no
+change there.
 
 ---
 

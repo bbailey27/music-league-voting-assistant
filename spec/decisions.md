@@ -11,6 +11,24 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-08 — Renderer dedup (score-core split Phase 2): shared head + comparator helpers
+
+**Change.** `render-html-shared.mjs` gained `reportTitleLine(round, fallback)`,
+`leadHtml(round)`, and a `byRawOrder` comparator. `render-fit-html.mjs` and
+`render-final-html.mjs` now import them instead of each defining the identical
+prompt/league/title-line template, the `<p class="lead">` description block, and the
+`(a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0)` sort tiebreak inline.
+
+**Why.** Finishing the score-core module split (Phase 2). The bulk of the renderer dedup
+already shipped as `render-html-shared.mjs`; this removed the last duplicated head/sort
+logic. Pure extraction — output is byte-identical (confirmed by the new regression
+snapshot: music.html unchanged; `npm test` 211 unchanged).
+
+**Refs.** `working tree` — `scripts/render-html-shared.mjs`, `scripts/render-fit-html.mjs`,
+`scripts/render-final-html.mjs`; `.cursor/plans/split-score-core-into-modules.plan.md`.
+
+---
+
 ## 2026-07-08 — Output snapshot regression harness + `ML_DATA_DIR` test override
 
 **Change.** Added `scripts/regression-snapshot.mjs` (+ `just test-regression`): it runs the

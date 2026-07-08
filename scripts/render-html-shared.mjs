@@ -108,6 +108,26 @@ export function chip(text, hue) {
   return `<span class="chip"${style}>${esc(text)}</span>`;
 }
 
+// Stable tiebreak used by every song ordering (keeps equal-key songs in the
+// order they were submitted, so listings don't reshuffle run to run).
+export const byRawOrder = (a, b) => (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0);
+
+// The report <h1> inner text: the prompt (with an optional " — league" suffix),
+// falling back to the round title or a per-report default. Shared by both the
+// fit and final report heads.
+export function reportTitleLine(round, fallback) {
+  const r = round || {};
+  return r.prompt
+    ? `${esc(r.prompt)}${r.league ? ` <span class="muted">— ${esc(r.league)}</span>` : ''}`
+    : esc(r.title || fallback);
+}
+
+// The round description lead paragraph, or empty string when absent.
+export function leadHtml(round) {
+  const d = (round || {}).description;
+  return d ? `<p class="lead">${esc(d)}</p>` : '';
+}
+
 // Shared card sub-sections used by both fit and final renderers.
 
 // Theme keyword chips. Returns the joined chip spans, or `emptyFallback` when absent.

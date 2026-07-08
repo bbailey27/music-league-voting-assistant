@@ -10,7 +10,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { basename, dirname, join, extname } from 'node:path';
 import { formatScore } from './score-core.mjs';
 import { matchFlag, takePositional } from './cli-args.mjs';
-import { esc, tierHue, chip, tradeoffsHtml, pickHtml, comboBallotHtml, RENDER_FIT_STYLE, scoreRangeFromSongs, scoreHeatAttrs, buildVoteTierMap, voteTierAttrs, cardIdentityHtml, cardMetaHtml, themeChipsHtml, rationaleHtml, buildHtmlDocument } from './render-html-shared.mjs';
+import { esc, tierHue, chip, tradeoffsHtml, pickHtml, comboBallotHtml, RENDER_FIT_STYLE, scoreRangeFromSongs, scoreHeatAttrs, buildVoteTierMap, voteTierAttrs, cardIdentityHtml, cardMetaHtml, themeChipsHtml, rationaleHtml, buildHtmlDocument, reportTitleLine, leadHtml, byRawOrder } from './render-html-shared.mjs';
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -46,13 +46,10 @@ function renderHead(data) {
   const r = data.round || {};
   const keywords = Array.isArray(data.themeKeywords) ? data.themeKeywords : [];
   const kwChips = keywords.map((k) => chip(k)).join('');
-  const titleLine = r.prompt
-    ? `${esc(r.prompt)}${r.league ? ` <span class="muted">— ${esc(r.league)}</span>` : ''}`
-    : esc(r.title || 'Fit report');
 
   return `<header class="report-head">
-  <h1>${titleLine}</h1>
-  ${r.description ? `<p class="lead">${esc(r.description)}</p>` : ''}
+  <h1>${reportTitleLine(r, 'Fit report')}</h1>
+  ${leadHtml(r)}
   ${kwChips ? `<div class="chips">${kwChips}</div>` : ''}
   ${data.method ? `<details class="method"><summary>Method</summary><p>${esc(data.method)}</p></details>` : ''}
 </header>`;
@@ -175,7 +172,7 @@ function renderCard(s, combineLabel, weights, ranges, voteTierMap) {
 function renderCandidates(data, order) {
   const songs = Array.isArray(data.songs) ? data.songs.slice() : [];
   if (order === 'raw') {
-    songs.sort((a, b) => (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0));
+    songs.sort(byRawOrder);
   } else if (order === 'combined') {
     // Combined first, then music as the explicit secondary axis (so equal-combined
     // songs read high-to-low on the real music score, not by raw submission order),
@@ -184,7 +181,7 @@ function renderCandidates(data, order) {
       (a, b) =>
         (b.combinedScore ?? b.fitScore ?? 0) - (a.combinedScore ?? a.fitScore ?? 0) ||
         (b.musicScore ?? -Infinity) - (a.musicScore ?? -Infinity) ||
-        (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0)
+        byRawOrder(a, b)
     );
   } else if (order === 'music') {
     // Music-score order: best for gate rounds where fit is an unweighted pass and
@@ -194,12 +191,10 @@ function renderCandidates(data, order) {
       (a, b) =>
         (b.musicScore ?? -Infinity) - (a.musicScore ?? -Infinity) ||
         (b.draftVotes ?? 0) - (a.draftVotes ?? 0) ||
-        (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0)
+        byRawOrder(a, b)
     );
   } else {
-    songs.sort(
-      (a, b) => (b.fitScore ?? 0) - (a.fitScore ?? 0) || (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0)
-    );
+    songs.sort((a, b) => (b.fitScore ?? 0) - (a.fitScore ?? 0) || byRawOrder(a, b));
   }
   const heading =
     order === 'raw'

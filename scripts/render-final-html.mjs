@@ -15,7 +15,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { basename, dirname, join, extname } from 'node:path';
 import { formatScore, flagsOf, formatVoteAllocation } from './score-core.mjs';
 import { matchFlag, takePositional } from './cli-args.mjs';
-import { esc, tierHue, tradeoffsHtml, pickHtml, comboBallotHtml, NEUTRAL_HUE, RENDER_FINAL_STYLE, buildVoteTierMap, voteTierAttrs, cardIdentityHtml, cardMetaHtml, themeChipsHtml, rationaleHtml, buildHtmlDocument } from './render-html-shared.mjs';
+import { esc, tierHue, tradeoffsHtml, pickHtml, comboBallotHtml, NEUTRAL_HUE, RENDER_FINAL_STYLE, buildVoteTierMap, voteTierAttrs, cardIdentityHtml, cardMetaHtml, themeChipsHtml, rationaleHtml, buildHtmlDocument, reportTitleLine, leadHtml, byRawOrder } from './render-html-shared.mjs';
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -93,11 +93,11 @@ function sortSongs(songs, order) {
   const rank = (s) => (s.combinedScore != null ? s.combinedScore : s.score ?? -Infinity);
   const list = songs.slice();
   if (order === 'raw') {
-    list.sort((a, b) => (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0));
+    list.sort(byRawOrder);
   } else if (order === 'score') {
-    list.sort((a, b) => rank(b) - rank(a) || v(b) - v(a) || (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0));
+    list.sort((a, b) => rank(b) - rank(a) || v(b) - v(a) || byRawOrder(a, b));
   } else {
-    list.sort((a, b) => v(b) - v(a) || rank(b) - rank(a) || (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0));
+    list.sort((a, b) => v(b) - v(a) || rank(b) - rank(a) || byRawOrder(a, b));
   }
   return list;
 }
@@ -108,9 +108,7 @@ function sortSongs(songs, order) {
 function renderHead(model) {
   const r = model.round;
   const b = model.budget;
-  const titleLine = r.prompt
-    ? `${esc(r.prompt)}${r.league ? ` <span class="muted">— ${esc(r.league)}</span>` : ''}`
-    : esc(r.title || 'Draft votes');
+  const titleLine = reportTitleLine(r, 'Draft votes');
 
   const songs = model.songs;
   const scored = songs.filter((s) => s.score != null);
@@ -145,7 +143,7 @@ function renderHead(model) {
 
   return `<header class="report-head">
   <h1>${titleLine} <span class="muted">— draft votes</span></h1>
-  ${r.description ? `<p class="lead">${esc(r.description)}</p>` : ''}
+  ${leadHtml(r)}
   <div class="facts">${facts.join('')}</div>
   <p class="counts muted">${songs.length} songs · ${scored.length} scored · ${disqualified.length} disqualified · ${needsInput.length} need a score · ${needsReview.length} need review</p>
 </header>`;
