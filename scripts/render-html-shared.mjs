@@ -1,6 +1,6 @@
 // Shared HTML rendering helpers and stylesheet fragments for fit/final reports.
 
-import { formatScore } from './score-core.mjs';
+import { formatScore, OPTION_LETTERS } from './score-core.mjs';
 import { downShapeShort } from './cli-commands.mjs';
 import { expandTradeoffRows, isExcludedFromAllocation } from './tradeoff-rows.mjs';
 
@@ -178,8 +178,6 @@ ${body}</main>
 </html>
 `;
 }
-
-const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 // A distribution tradeoff (`tier-structure` upvotes A/B/C, or `down-structure`
 // downvote shapes) rendered as a single song×option comparison table in

@@ -487,7 +487,7 @@ const DOWN_SHAPE_LABEL = {
 // => the whole bank on the single worst/invalid song), `flat` (even 1-each spread
 // across the worst songs), or `curved` (the graduated bell — default). `relative`
 // upvote mode keeps its proportional down pass unless a downShape is pinned.
-function normalizeDownShape(v) {
+export function normalizeDownShape(v) {
   if (v == null) return null;
   const s = String(v).toLowerCase().trim();
   if (s === 'concentrated' || s === 'concentrate' || s === 'worst') return 'concentrated';

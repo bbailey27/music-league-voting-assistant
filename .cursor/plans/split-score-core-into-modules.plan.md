@@ -12,7 +12,7 @@ todos:
     status: pending
   - id: phase-4-dedup-helpers
     content: Export normalizeDownShape + OPTION_LETTERS from score modules; delegate parse-round
-    status: pending
+    status: completed
 ---
 
 # Split score-core into modules
@@ -104,14 +104,18 @@ remained the reference net during the move.
 
 ---
 
-## Phase 4 — de-duplicate helpers
+## Phase 4 — de-duplicate helpers ✅ shipped 2026-07-08
 
-1. Export `normalizeDownShape` from `scripts/score/allocate.mjs`; have
-   `parseDownShape` in `parse/cli-flags.mjs` delegate (keep throw-on-invalid in parse).
-2. Export `OPTION_LETTERS` from `scripts/score/render.mjs`; import in
-   `render-html-shared.mjs` and `parse/cli-print.mjs` (or wherever still duplicated).
+1. Exported `normalizeDownShape` from `scripts/score/allocate.mjs` (added to the barrel);
+   `parseDownShape` in `parse/cli-flags.mjs` now delegates to it, keeping its
+   throw-on-invalid behavior.
+2. Exported `OPTION_LETTERS` from `scripts/score/render.mjs` (added to the barrel);
+   `render-html-shared.mjs` imports it, and `round/pick.mjs` aliases its local
+   `TRADEOFF_OPTION_LETTERS = OPTION_LETTERS`. Single source now — the only remaining
+   literal is the `render.mjs` definition.
 
-Small targeted cleanup; run only after Phase 1 confirmed green.
+Verified: `just test-regression` clean (barrel export-list baseline updated for the two
+new exports), `npm test` 211 (unchanged), no new eslint errors.
 
 ---
 

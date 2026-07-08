@@ -11,6 +11,28 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-08 — Helper dedup (score-core split Phase 4): `normalizeDownShape` + `OPTION_LETTERS`
+
+**Change.** `normalizeDownShape` is now exported from `scripts/score/allocate.mjs` (and the
+`score-core.mjs` barrel); `parseDownShape` in `scripts/parse/cli-flags.mjs` delegates to it
+instead of carrying a second copy of the alias table, keeping its throw-on-invalid contract.
+`OPTION_LETTERS` is now exported from `scripts/score/render.mjs` (and the barrel);
+`render-html-shared.mjs` imports it and `scripts/round/pick.mjs` aliases it
+(`TRADEOFF_OPTION_LETTERS = OPTION_LETTERS`). The `['A'…'F']` literal now exists in exactly
+one place.
+
+**Why.** Finishing the score-core split (Phase 4). Two independent copies of the down-shape
+alias map (one returning `null`, one throwing) and three copies of the option-letter array
+were drift risks. Pure refactor — output byte-identical (regression snapshot clean; the only
+baseline change was the barrel export-list adding `normalizeDownShape` + `OPTION_LETTERS`).
+`npm test` 211, unchanged; no new eslint errors.
+
+**Refs.** `working tree` — `scripts/score/allocate.mjs`, `scripts/score/render.mjs`,
+`scripts/score-core.mjs`, `scripts/parse/cli-flags.mjs`, `scripts/render-html-shared.mjs`,
+`scripts/round/pick.mjs`; `.cursor/plans/split-score-core-into-modules.plan.md` (Phase 4).
+
+---
+
 ## 2026-07-08 — Renderer dedup (score-core split Phase 2): shared head + comparator helpers
 
 **Change.** `render-html-shared.mjs` gained `reportTitleLine(round, fallback)`,
@@ -24,7 +46,7 @@ already shipped as `render-html-shared.mjs`; this removed the last duplicated he
 logic. Pure extraction — output is byte-identical (confirmed by the new regression
 snapshot: music.html unchanged; `npm test` 211 unchanged).
 
-**Refs.** `working tree` — `scripts/render-html-shared.mjs`, `scripts/render-fit-html.mjs`,
+**Refs.** `c253abb` — `scripts/render-html-shared.mjs`, `scripts/render-fit-html.mjs`,
 `scripts/render-final-html.mjs`; `.cursor/plans/split-score-core-into-modules.plan.md`.
 
 ---

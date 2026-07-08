@@ -1,6 +1,7 @@
 FIT_TIER_ORDER
 FIT_TIER_SCORES
 MANUAL_FIT_WEIGHTS
+OPTION_LETTERS
 allocate
 buildJsonPayload
 buildMarkdown
@@ -19,6 +20,7 @@ formatVoteAllocation
 mergeFit
 mergeFitJson
 normalizeCombined
+normalizeDownShape
 rankValue
 rankedSort
 resolveFitTrust

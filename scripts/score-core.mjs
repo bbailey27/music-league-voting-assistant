@@ -10,6 +10,7 @@ export {
   enrichProfileWithBudget,
   allocate,
   ckmeans1dWeighted,
+  normalizeDownShape,
 } from './score/allocate.mjs';
 export { combinedScore, normalizeCombined, mergeFit, flagMusicLifts, resolveFitTrust } from './score/merge.mjs';
 export {
@@ -20,4 +21,5 @@ export {
   rankedSort,
   buildMarkdown,
   buildJsonPayload,
+  OPTION_LETTERS,
 } from './score/render.mjs';

@@ -144,16 +144,21 @@ for any contract clarification).
 Phases 2–4. Master-plan **Wave 4**. **Prerequisite: Wave A green** (snapshot diff clean
 before and after each phase).
 
-| Phase | Work | Verify |
-| --- | --- | --- |
-| 2 | Extract shared HTML renderer helpers from `render-fit-html.mjs` / `render-final-html.mjs`; import `formatScore` / `fitTierForScore` from the barrel | snapshot diff clean |
-| 3 | Split `tests/score.test.mjs` → `comment` / `allocate` / `merge` test files | `npm test` same total |
-| 4 | Export `normalizeDownShape` from `allocate.mjs` (delegate `parseDownShape`); export `OPTION_LETTERS` from `render.mjs` (import in `render-html-shared.mjs`, parse) | `npm test` same count |
+| Phase | Work | Verify | Status |
+| --- | --- | --- | --- |
+| 2 | Extract shared HTML renderer helpers from `render-fit-html.mjs` / `render-final-html.mjs`; import `formatScore` / `fitTierForScore` from the barrel | snapshot diff clean | ✅ shipped `c253abb` |
+| 3 | Split `tests/score.test.mjs` → `comment` / `allocate` / `merge` test files | `npm test` same total | pending |
+| 4 | Export `normalizeDownShape` from `allocate.mjs` (delegate `parseDownShape`); export `OPTION_LETTERS` from `render.mjs` (import in `render-html-shared.mjs`, `round/pick.mjs`) | `npm test` same count | ✅ shipped 2026-07-08 |
 
 Constraint: keep `scripts/score/*` free of `node:*` imports (browser-importable). Importers
 keep using `./score-core.mjs`.
 
-**Gate (per phase):** `npm test` same count; snapshot diff clean; `just lint` clean.
+**Gate (per phase):** `npm test` same count; snapshot diff clean; **no _new_ eslint errors**.
+Note: `just lint` currently has 12 **pre-existing** errors from other committed work
+(`release-year-gate.mjs` no-undef for `fetch`/`Buffer`/`setTimeout` — the in-flight
+release-date track — plus a handful of unused-var warnings in `cli-commands.mjs`,
+`ml.mjs`, `allocate.mjs`, `ml-config.test.mjs`). Phases 2 and 4 added none; full
+`just lint` clean is blocked on the release-date file and left for the user.
 
 **Commit:** one per phase; `spec/decisions.md` entry per phase that lands.
 

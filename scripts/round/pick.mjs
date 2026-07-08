@@ -2,11 +2,11 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { buildPickRecord } from '../score-core.mjs';
+import { buildPickRecord, OPTION_LETTERS } from '../score-core.mjs';
 import { pickUsageError } from '../cli-commands.mjs';
 import { scoresPaths } from '../paths.mjs';
 
-const TRADEOFF_OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+const TRADEOFF_OPTION_LETTERS = OPTION_LETTERS;
 
 function resolveOptionIndex(spec, count) {
   if (!count) return null;

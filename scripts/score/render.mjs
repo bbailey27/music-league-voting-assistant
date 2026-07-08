@@ -161,7 +161,7 @@ function renderTable(L, headers, aligns, rows, indent = '') {
 // (in combined/rank order) are rows, options are columns (A = default), and each
 // cell is the votes that option gives the song. This reads as a direct
 // "what changes between options" diff instead of three separate per-option blocks.
-const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+export const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 function tradeoffScoreCell(row, perSongRef, profile = null) {
   if (row.excluded || isExcludedFromAllocation(row.song, profile)) return '-';

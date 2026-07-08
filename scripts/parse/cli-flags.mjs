@@ -1,5 +1,7 @@
 // Pure CLI flag validators for parse / merge / pick stages.
 
+import { normalizeDownShape } from '../score/allocate.mjs';
+
 export function parsePins(specs) {
   const list = (Array.isArray(specs) ? specs : [specs]).filter(Boolean);
   if (!list.length) return undefined;
@@ -93,12 +95,11 @@ export function parseFavoriteBand(spec) {
 
 export function parseDownShape(spec) {
   if (spec == null || spec === '') return undefined;
-  const s = String(spec).toLowerCase().trim();
-  const canon = { concentrated: 'concentrated', concentrate: 'concentrated', worst: 'concentrated', flat: 'flat', even: 'flat', curved: 'curved', curve: 'curved', bell: 'curved' };
-  if (!canon[s]) {
+  const canon = normalizeDownShape(spec);
+  if (!canon) {
     throw new Error(`Invalid --down-shape "${spec}" (use concentrated, flat, or curved)`);
   }
-  return canon[s];
+  return canon;
 }
 
 export function parseWeights(spec) {
