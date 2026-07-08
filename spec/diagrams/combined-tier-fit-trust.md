@@ -9,7 +9,10 @@ flowchart TD
   parse[parse with manual fit]
   merge[merge with fit.json]
   parse --> detectManual{fitSource manual?}
-  detectManual -->|yes| normManual[normalizeCombined fitTrust=manual]
+  detectManual -->|yes| autoGate{"gate words + no --gate?"}
+  autoGate -->|yes| setGate["profile.gate = passFailMaybe / passFail"]
+  autoGate -->|no| normManual
+  setGate --> normManual[normalizeCombined fitTrust=manual]
   detectManual -->|no| normLLM[normalizeCombined fitTrust=llm]
   merge --> normLLM
   normManual --> tierManual["tierKey = raw combined bucket"]

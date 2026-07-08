@@ -292,7 +292,12 @@ a specific field calls for it.
     [decision log](decisions.md) for the rationale.
   - Tiebreak chain always ends: higher score, then modifier rank
     (`play ≥ + > plain > -`), then title.
-- **`gate`** — a hard boundary; below it a song earns 0 regardless of the other axis:
+- **`gate`** — a hard boundary; below it a song earns 0 regardless of the other axis.
+  Set explicitly via `--gate` / `--cutoff`, or **auto-activated** on parse: when
+  `--fit-words` extracts any `pass`/`maybe`/`fail` word and no explicit gate was
+  given, `applyManualFitScoring` sets `passFailMaybe` (any maybe) or `passFail` (only
+  pass/fail). A parsed per-song `gate` is otherwise inert — `gateClass` treats every
+  song as a pass — so this keeps a high-music `maybe`/`fail` from ranking at the top.
   - `{ type: 'cutoff', axis: 'fit'|'music', min }` — graded cutoff.
   - `{ type: 'passFail' }` — binary; `fail` → 0, allocate among passes.
   - `{ type: 'passFailMaybe', leniency }` — three-state. `fail` → 0. **Passes are

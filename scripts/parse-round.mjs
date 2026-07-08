@@ -60,6 +60,18 @@ export function applyManualFitScoring(profile, songs, { explicitRank = null, wei
   );
   if (!hasManualFit) return null;
 
+  // Auto-activate the gate when comments carry gate words but the caller didn't set
+  // an explicit --gate / --cutoff. A parsed per-song `gate` is inert unless
+  // `profile.gate` turns the gate machinery on (gateClass short-circuits to 'pass'
+  // otherwise), so without this a high-music "maybe"/"fail" would rank at the top.
+  // `passFailMaybe` when any maybe is present, else binary `passFail`.
+  if (!profile.gate) {
+    const gates = new Set(songs.map((s) => s.gate).filter(Boolean));
+    if (gates.size) {
+      profile.gate = { type: gates.has('maybe') ? 'passFailMaybe' : 'passFail' };
+    }
+  }
+
   const combineWeights = weights ?? MANUAL_FIT_WEIGHTS;
   profile.weights = combineWeights;
   profile.fitTrust = 'manual';

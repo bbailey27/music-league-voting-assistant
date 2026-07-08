@@ -152,6 +152,12 @@ off-theme 80             → music 80, gate fail
 maybe great song 75      → music 75, gate maybe
 ```
 
+Gate words **auto-activate the gate**: when `--fit-words` finds any gate word and you
+didn't pass an explicit `--gate` / `--cutoff`, the round is allocated with
+`passFailMaybe` (any `maybe` present) or `passFail` (only pass/fail). So passes rank
+above maybes, and fails earn nothing — you don't need to add `--gate` yourself. An
+explicit `--gate` still wins.
+
 ---
 
 ## Fit shorthand (always on)

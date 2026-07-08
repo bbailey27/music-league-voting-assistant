@@ -88,6 +88,14 @@ There is no fit-only notation; music is always the first number you write.
   scoring line. Tier synonyms: `excellent | strong | solid | moderate | weak` (+ synonyms).
   Gate: `pass` / `maybe` / `fail` (`fail > maybe > pass`). Tier + `negative` is ignored.
   Without `--fit-words`, tier/gate vocabulary in comments is ignored (no over-matching).
+  **Gate words auto-activate the gate.** A parsed per-song `gate` is inert unless the
+  allocation profile turns the gate on (`gateClass` treats every song as a pass
+  otherwise), so when `--fit-words` extracts any gate word and the caller didn't set
+  an explicit `--gate` / `--cutoff`, `applyManualFitScoring` sets `profile.gate` to
+  **`passFailMaybe`** (any `maybe` present) or **`passFail`** (only pass/fail). This is
+  the same auto-wiring that defaults `rankBy` to `combined` for manual fit, and it
+  propagates to `merge` / `pick` via the stored profile. An explicit `--gate` /
+  `--cutoff` is never overridden.
 
 ### Other
 

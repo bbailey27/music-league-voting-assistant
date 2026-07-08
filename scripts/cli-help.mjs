@@ -140,7 +140,9 @@ Flags:
   --no-json                Skip writing music.json (markdown only).
   --lenient                Tolerate Live Text / pasted round text input.
   --fit-words              Parse tier/gate words and a second number on the scoring
-                          line as fit (see spec/scoring-comments.md).
+                          line as fit (see spec/scoring-comments.md). Gate words
+                          (pass/maybe/fail) auto-activate the gate — passFailMaybe
+                          if any maybe, else passFail — unless you pass --gate.
 
 Deprecated (warns — use merge + pick instead):
   --fit, --option, --reason

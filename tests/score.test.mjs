@@ -151,6 +151,76 @@ test('applyManualFitScoring: no-op without manual fit', () => {
   assert.equal(songs[0].combinedScore, undefined);
 });
 
+test('applyManualFitScoring: auto-activates passFailMaybe when a maybe gate word is present', () => {
+  const songs = [
+    { rawOrderIndex: 0, title: 'a', score: 80, gate: 'maybe', fitSource: 'manual' },
+    { rawOrderIndex: 1, title: 'b', score: 77, gate: 'pass', fitSource: 'manual' },
+    { rawOrderIndex: 2, title: 'c', score: 73, gate: 'pass', fitSource: 'manual' },
+  ];
+  const profile = {};
+  applyManualFitScoring(profile, songs, {});
+  assert.deepEqual(profile.gate, { type: 'passFailMaybe' }, 'a maybe present -> three-state gate');
+  assert.equal(profile.rankBy, 'combined');
+});
+
+test('applyManualFitScoring: auto-activates binary passFail when no maybe present', () => {
+  const songs = [
+    { rawOrderIndex: 0, title: 'a', score: 80, gate: 'pass', fitSource: 'manual' },
+    { rawOrderIndex: 1, title: 'b', score: 77, gate: 'fail', fitSource: 'manual' },
+  ];
+  const profile = {};
+  applyManualFitScoring(profile, songs, {});
+  assert.deepEqual(profile.gate, { type: 'passFail' }, 'only pass/fail -> binary gate');
+});
+
+test('applyManualFitScoring: respects an explicit --gate over auto-activation', () => {
+  const songs = [
+    { rawOrderIndex: 0, title: 'a', score: 80, gate: 'maybe', fitSource: 'manual' },
+    { rawOrderIndex: 1, title: 'b', score: 77, gate: 'pass', fitSource: 'manual' },
+  ];
+  const profile = { gate: { type: 'passFail' } };
+  applyManualFitScoring(profile, songs, {});
+  assert.deepEqual(profile.gate, { type: 'passFail' }, 'explicit gate is not overwritten');
+});
+
+test('applyManualFitScoring: no gate when manual fit is numbers only (no gate words)', () => {
+  const songs = [
+    { rawOrderIndex: 0, title: 'a', score: 76, fitScore: 95, fitSource: 'manual' },
+    { rawOrderIndex: 1, title: 'b', score: 70, fitScore: 70, fitSource: 'manual' },
+  ];
+  const profile = {};
+  applyManualFitScoring(profile, songs, {});
+  assert.equal(profile.gate, undefined, 'numeric-only manual fit does not gate');
+});
+
+test('auto-gated maybe never outranks a pass end-to-end (repro: 80 maybe over pass field)', () => {
+  // The reported bug: --fit-words parsed gates but nothing activated them, so an
+  // 80-music "maybe" sat at the top of a pass field. With auto-activation the maybe
+  // is capped below every funded pass.
+  const songs = [
+    { rawOrderIndex: 0, title: 'boompala', score: 80, gate: 'maybe', fitSource: 'manual' },
+    { rawOrderIndex: 1, title: 'bad', score: 75, gate: 'maybe', fitSource: 'manual' },
+    { rawOrderIndex: 2, title: 'stranger', score: 77, gate: 'pass', fitSource: 'manual' },
+    { rawOrderIndex: 3, title: 'ping', score: 76.5, gate: 'pass', fitSource: 'manual' },
+    { rawOrderIndex: 4, title: 'jopping', score: 76, gate: 'pass', fitSource: 'manual' },
+    { rawOrderIndex: 5, title: 'meme', score: 74.5, gate: 'pass', fitSource: 'manual' },
+    { rawOrderIndex: 6, title: 'shanghai', score: 74, gate: 'pass', fitSource: 'manual' },
+    { rawOrderIndex: 7, title: 'weon', score: 73, gate: 'pass', fitSource: 'manual' },
+    { rawOrderIndex: 8, title: 'cherry', score: 72, gate: 'pass', fitSource: 'manual' },
+    { rawOrderIndex: 9, title: 'gnarly', score: 65, gate: 'pass', fitSource: 'manual' },
+  ];
+  const profile = { shape: 'auto' };
+  applyManualFitScoring(profile, songs, {});
+  assert.deepEqual(profile.gate, { type: 'passFailMaybe' });
+  allocate(songs, 15, 10, profile);
+  assert.equal(sum(songs), 15);
+  const passVotes = songs.filter((s) => s.gate === 'pass').map((s) => s.finalVotes);
+  const maybeVotes = songs.filter((s) => s.gate === 'maybe').map((s) => s.finalVotes);
+  const minFundedPass = Math.min(...passVotes.filter((v) => v > 0));
+  assert.ok(Math.max(...maybeVotes) <= minFundedPass, 'no maybe outranks a funded pass');
+  assert.ok(songs[0].finalVotes <= minFundedPass, 'the 80 "maybe" is not lifted above passes');
+});
+
 test('buildJsonPayload persists needsResearch per song', () => {
   // A thematic round flags music-known/fit-unknown songs for the research loop;
   // that flag must survive the write to music.json so agents can filter on it.
