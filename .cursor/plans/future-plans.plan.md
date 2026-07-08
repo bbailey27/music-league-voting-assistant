@@ -16,6 +16,8 @@ isProject: false
 | [followup-5-specs-and-tests.plan.md](followup-5-specs-and-tests.plan.md)       | Full spec sync, output snapshot regression test (diff-based), regression prose, extract tests |
 | [split-score-core-into-modules.plan.md](split-score-core-into-modules.plan.md) | Phases 2–4: renderer dedup, split tests, helper dedup — full steps in plan                    |
 | [improve-just-cli-and-docs.plan.md](improve-just-cli-and-docs.plan.md)         | Phase 3: `tests/ml.test.mjs`, e2e fixture — full spec in plan                                 |
+| [release-date-enrichment.plan.md](release-date-enrichment.plan.md)             | Round year-gate shipped; open: fetch providers, CSV enrichment, deluxe schema/spec            |
+| [release-date-airtable-sync.plan.md](release-date-airtable-sync.plan.md)       | Push release dates to Airtable + scrobble→Airtable reconciliation (access method TBD)          |
 
 ## Optional polish (no dedicated plan file)
 
@@ -74,6 +76,9 @@ Output snapshot regression test (diff-based): see
     Needs to work alongside regular pins too. aaa-cars was effectively 2 single high and low pins + 2 3-song groups.
     I wanted to see what possibilities kept my highs and lows AND kept the groups together.
     Rather than specifying a _number_ of tiers and getting odd tier-boundary choices, specify which songs make up a tier.
+14. Start writing airtable scripts: Get data like links, release year, and theme summary from here into my airtable listings as well. Maybe add a tags field with a re-classify script instead of all the separarate rough formulas for checkboxes. Solidify scraping scripts or API connections to gather than data. Write merge scripts to get scrobbles into the same view as pandora songs and continue merging and splitting titles/versions/albums and artists properly. If it's too much to import supporting data from here (and those K-Pop databases I found) then maybe export to a raw file, run scripts to merge details without storing them as separate tables (keep the CSVs don't add them raw to airtable), then re-upload with a merge script in Airtable as well if needed.
+15. Just run could also have a detail flag to output current state. I started on the agent window so it ran parse already and I don't want to mess up the flags. But just run (to see what comes next) only said picka distribution. It didn't show me the distributions to pick from.
+16. Improve ballot output some mroe. On CLI I'd like to se votes right next to combined. mod should be next to the score it modifies. Currently not next to the music score. But also what if music and fit scores both were numeric with mods? would they share 1 mod column? is one silently dropped?
 
 ## Debug this output
 
