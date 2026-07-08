@@ -96,6 +96,12 @@ function songsFromMusicPayload(data) {
   return (data.songs || []).map((s) => ({ ...s }));
 }
 
+function slimProfile(profile) {
+  const { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand, fitTrust } =
+    profile;
+  return { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand, fitTrust };
+}
+
 function buildProfile(args, stored, budget) {
   const gate = buildGate(args) ?? stored?.gate;
   const weights = parseWeights(args.weights) ?? stored?.weights;
