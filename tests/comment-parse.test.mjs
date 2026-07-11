@@ -99,6 +99,25 @@ test('comment parse: peel-first + remainder fit (fitWords on)', () => {
   assert.equal(bonusNl.fitTier, 'strong');
 });
 
+test('comment parse: earliest tier word wins, not highest tier', () => {
+  const opts = { fitWords: true };
+
+  // "weak" is written first as the grade; "great" later is prose, not the tier.
+  const weak = parse("755. weak fit. great if it said 'her' but 'you' just confuses things", opts);
+  assert.equal(weak.score, 75.5);
+  assert.equal(weak.fitTier, 'weak');
+  assert.equal(weak.fitScore, 35);
+
+  // Position beats tier rank in both directions.
+  assert.equal(parse('75. weak but great production', opts).fitTier, 'weak');
+  assert.equal(parse('75. great, though a weak add-on', opts).fitTier, 'strong');
+
+  // "<tier> negative" mirrors the tier across the scale (a fit that bad).
+  assert.equal(parse('75. strong negative', opts).fitTier, 'weak');
+  assert.equal(parse('75. excellent negative', opts).fitTier, 'nope');
+  assert.equal(parse('75. solid negative', opts).fitTier, 'moderate');
+});
+
 test('comment parse: two-number remainder ignored when fitWords off', () => {
   const pair = parse('75 80');
   assert.equal(pair.score, 75);

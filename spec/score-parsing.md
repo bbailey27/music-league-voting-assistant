@@ -86,7 +86,11 @@ There is no fit-only notation; music is always the first number you write.
   music number (e.g. `76 fit bonus` → strong / 85). Not valid without a music score.
 - **Tier / gate words:** only when `--fit-words` is passed; scanned on the full
   scoring line. Tier synonyms: `excellent | strong | solid | moderate | weak` (+ synonyms).
-  Gate: `pass` / `maybe` / `fail` (`fail > maybe > pass`). Tier + `negative` is ignored.
+  The **earliest** tier word on the line wins, not the highest tier — write the grade first
+  (`weak fit`) and a later prose tier word (`great if it said 'her'`) is ignored.
+  Gate: `pass` / `maybe` / `fail` (`fail > maybe > pass`). A tier word followed by
+  `negative` (e.g. `strong negative`) is **mirrored** across the scale (that fit, but bad):
+  excellent↔nope, strong↔weak, solid↔moderate.
   Without `--fit-words`, tier/gate vocabulary in comments is ignored (no over-matching).
   **Gate words auto-activate the gate.** A parsed per-song `gate` is inert unless the
   allocation profile turns the gate on (`gateClass` treats every song as a pass

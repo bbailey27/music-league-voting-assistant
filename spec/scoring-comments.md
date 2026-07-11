@@ -110,8 +110,10 @@ after `+`, `-`, or `play` → that modifier is uncertain (not the score).
 
 ## Fit tier words (`--fit-words`)
 
-Tier words on **line 1** map to a numeric fit score used for combined ranking. First
-match wins. `strong negative` (tier word + `negative` right after) is ignored.
+Tier words on **line 1** map to a numeric fit score used for combined ranking. The
+**earliest** tier word wins (write the grade first; a later prose tier word is ignored).
+A tier word + `negative` right after (e.g. `strong negative`) means a fit that bad —
+the tier is **mirrored** across the scale: excellent↔nope, strong↔weak, solid↔moderate.
 
 | Tier          | Fit score | Words recognized                                         |
 | ------------- | --------- | -------------------------------------------------------- |

@@ -11,6 +11,32 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-10 — Manual fit tier: earliest tier word on the line wins
+
+**Change.** `parseFitSignals` (`scripts/score/comment.mjs`) no longer picks the manual fit
+tier by iterating tier synonyms in best-to-worst priority and taking the first tier whose
+synonym appears anywhere on the scoring line. Tier vocabulary is now one combined
+named-group regex (`FIT_TIER_RE`, built from `FIT_TIER_WORDS`); `pickTier` scans the line
+once with `matchAll`, takes the **earliest** match, and maps its named group back to a tier.
+A match immediately followed by `negative` (e.g. `strong negative`) is **mirrored** across
+the graded scale (excellent↔nope, strong↔weak, solid↔moderate) — that fit, but bad. This
+replaces the old `tierNegated` rule that dropped the tier entirely.
+
+**Why.** `755. weak fit. great if it said 'her'…` scored as **strong** (85) because `great`
+(strong tier) was checked before `weak` regardless of position. The owner types the grade
+first, so position must beat tier rank; a later prose tier word is incidental. Owner
+preferred a single scan-then-map over the earlier `<tier> fit` adjacency heuristic (doesn't
+care about fit-adjacency, always writes the score first). After the fix that song parses
+`weak` (35), dropping it from the top upvote slot in `2026-07-07-story-8`. Owner also
+overruled the old "`strong negative` is ignored" rule: `strong negative` is a strongly
+*bad* fit, so the tier is mirrored (→ `weak`) rather than dropped. `node --test` 212 pass;
+added comment-parse cases locking earliest-wins (both directions) and the `negative` mirror.
+
+**Refs.** `working tree` — `scripts/score/comment.mjs`, `tests/comment-parse.test.mjs`,
+`spec/score-parsing.md` (Fit channels → Tier / gate words).
+
+---
+
 ## 2026-07-08 — Helper dedup (score-core split Phase 4): `normalizeDownShape` + `OPTION_LETTERS`
 
 **Change.** `normalizeDownShape` is now exported from `scripts/score/allocate.mjs` (and the

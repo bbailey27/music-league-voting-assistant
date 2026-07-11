@@ -1,6 +1,6 @@
 // Scoring: derive signals from the USER comment only.
 
-import { FIT_TIER_SCORES, fitTierForScore } from './fit-signal.mjs';
+import { FIT_TIER_SCORES, FIT_TIER_ORDER, fitTierForScore } from './fit-signal.mjs';
 
 const SCORE_NUM = /(\d{1,3})(\.\d)?([+\-?=]*)/;
 
@@ -9,18 +9,27 @@ const FIT_SHORTHAND = [
   ['strong', /\bfit\s+bonus\b/i],
 ];
 
-const FIT_TIER_SYNONYMS = [
-  ['excellent', /\b(excellent|perfect|ideal|on the nose|spot[- ]?on)\b/i],
-  ['strong', /\b(strong|great)\b/i],
-  ['solid', /\b(solid|good|clearly|on[- ]?theme)\b/i],
-  ['moderate', /\b(moderate|okay|ok|loose|partial)\b/i],
-  ['weak', /\b(weak|single keyword|tenuous|barely)\b/i],
-];
+// Tier synonyms as one alternation per tier; the scanner finds the earliest
+// match anywhere on the line, then maps it back to its tier (below).
+const FIT_TIER_WORDS = {
+  excellent: 'excellent|perfect|ideal|on the nose|spot[- ]?on',
+  strong: 'strong|great',
+  solid: 'solid|good|clearly|on[- ]?theme',
+  moderate: 'moderate|okay|ok|fine|loose|partial',
+  weak: 'weak|single keyword|tenuous|barely|kinda|bad|meh',
+};
+
+const FIT_TIER_RE = new RegExp(
+  Object.entries(FIT_TIER_WORDS)
+    .map(([tier, alts]) => `\\b(?<${tier}>${alts})\\b`)
+    .join('|'),
+  'gi',
+);
 
 const GATE_WORDS = [
-  ['fail', /\b(fail|fails|off[- ]?theme|invalid)\b/i],
+  ['fail', /\b(fail|fails|off[- ]?theme|invalid|no|nope)\b/i],
   ['maybe', /\b(maybe|questionable|borderline|iffy|stretch)\b/i],
-  ['pass', /\b(pass|passes|qualifies|valid|fits|on[- ]?theme)\b/i],
+  ['pass', /\b(pass|passes|qualifies|valid|good|fine|okay|ok|fits|on[- ]?theme)\b/i],
 ];
 
 export function scoreComment(rawComment, mode, opts = {}) {
@@ -180,13 +189,11 @@ function parseFitSignals(scoringLine, remainder, { fitWords }) {
   }
 
   if (fitWords) {
-    if (out.fitScore == null && !tierNegated(scoringLine)) {
-      for (const [tier, re] of FIT_TIER_SYNONYMS) {
-        if (re.test(scoringLine)) {
-          out.fitTier = tier;
-          out.fitScore = FIT_TIER_SCORES[tier];
-          break;
-        }
+    if (out.fitScore == null) {
+      const tier = pickTier(scoringLine);
+      if (tier) {
+        out.fitTier = tier;
+        out.fitScore = FIT_TIER_SCORES[tier];
       }
     }
     out.gate = matchGate(scoringLine);
@@ -196,13 +203,23 @@ function parseFitSignals(scoringLine, remainder, { fitWords }) {
   return out;
 }
 
-function tierNegated(text) {
-  return FIT_TIER_SYNONYMS.some(([, re]) => {
-    const m = text.match(re);
-    if (!m) return false;
-    const after = text.slice(m.index + m[0].length);
-    return /^\s*negative\b/i.test(after);
-  });
+// The owner writes the grade first, so the earliest tier word on the line wins
+// (a later prose "great" never overrides an earlier "weak"). A tier word followed
+// by "negative" (e.g. "strong negative") means a fit that bad — mirror the tier
+// across the scale: excellent↔nope, strong↔weak, solid↔moderate.
+function pickTier(text) {
+  for (const m of text.matchAll(FIT_TIER_RE)) {
+    const tier = Object.keys(m.groups).find((t) => m.groups[t] != null);
+    const negated = /^\s*negative\b/i.test(text.slice(m.index + m[0].length));
+    return negated ? mirrorTier(tier) : tier;
+  }
+  return null;
+}
+
+// Reflect a tier across the graded scale (excellent↔nope, strong↔weak, solid↔moderate).
+function mirrorTier(tier) {
+  const i = FIT_TIER_ORDER.indexOf(tier);
+  return i < 0 ? tier : FIT_TIER_ORDER[FIT_TIER_ORDER.length - 1 - i];
 }
 
 function matchGate(text) {
