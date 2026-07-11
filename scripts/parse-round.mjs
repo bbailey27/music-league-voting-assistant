@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Deterministic Music League round parser + draft vote allocator.
-// Usage: node scripts/parse-round.mjs <round.html|round.txt> [--mode objective|subjective] [--no-json] [--lenient] [--fit-words]
+// Usage: node scripts/parse-round.mjs <round.html|round.txt> [--mode objective|subjective] [--no-json] [--lenient] [--fit [tier|gate]]
 //
 // HTML and text inputs both emit the same canonical song list, then share the
 // scorer/allocator/reporter in score-core.mjs. Scoring reads the USER comment
@@ -16,6 +16,7 @@ import {
   buildJsonPayload,
   enrichProfileWithBudget,
   normalizeCombined,
+  applyNumericFitAutoDetect,
   MANUAL_FIT_WEIGHTS,
 } from './score-core.mjs';
 import { parseRoundText } from './parse-text.mjs';
@@ -34,7 +35,7 @@ import {
   buildGate,
 } from './parse/cli-flags.mjs';
 import { printPickCli } from './parse/cli-print.mjs';
-import { warnMissingScoresCli } from './parse/cli-warn.mjs';
+import { warnMissingScoresCli, warnMissingFitScoresCli } from './parse/cli-warn.mjs';
 import { parseRoundHtml, slimProfile } from './parse/pipeline.mjs';
 import { reconcileOptionPins, resolveOptionPick } from './round/pick.mjs';
 
@@ -88,7 +89,7 @@ function parseArgs(argv) {
     lenient: false,
     shape: 'auto',
     downShape: null,
-    fit: null,
+    fitMode: null,
     rank: null,
     gate: null,
     cutoff: null,
@@ -99,12 +100,24 @@ function parseArgs(argv) {
     favoriteBand: null,
     option: null,
     reason: null,
-    fitWords: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
+    // `--fit` scans tier words; `--fit gate` scans gate words (only the literal
+    // `tier`/`gate` is consumed as the value, so a following round name is safe).
+    // `--fit-words` is the legacy spelling of `--fit`.
     if (a === '--fit-words') {
-      args.fitWords = true;
+      args.fitMode = 'tier';
+      continue;
+    }
+    if (a === '--fit') {
+      const next = argv[i + 1];
+      if (next === 'tier' || next === 'gate') {
+        args.fitMode = next;
+        i++;
+      } else {
+        args.fitMode = 'tier';
+      }
       continue;
     }
     if (a === '--no-json') {
@@ -128,9 +141,6 @@ function parseArgs(argv) {
       }],
       ['down-shape', (v) => {
         args.downShape = v;
-      }],
-      ['fit', (v) => {
-        args.fit = v;
       }],
       ['rank', (v) => {
         args.rank = v;
@@ -186,7 +196,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.file) {
     console.error(
-      'Usage: node scripts/parse-round.mjs <round.html|round.txt> [--mode objective|subjective] [--no-json] [--lenient] [--fit-words] [--shape ...] [--down-shape concentrated|flat|curved] [--tier-count <n>] [--bucket-count <n>] [--favorite-band <min>|--no-favorite-band] [--pin <i>:<v>]'
+      'Usage: node scripts/parse-round.mjs <round.html|round.txt> [--mode objective|subjective] [--no-json] [--lenient] [--fit [tier|gate]] [--shape ...] [--down-shape concentrated|flat|curved] [--tier-count <n>] [--bucket-count <n>] [--favorite-band <min>|--no-favorite-band] [--pin <i>:<v>]'
     );
     process.exit(1);
   }
@@ -199,7 +209,11 @@ async function main() {
 
   const raw = await readFile(args.file, 'utf8');
   const ext = extname(args.file).toLowerCase();
-  const parseOpts = { lenient: args.lenient, fitWords: args.fitWords };
+  const parseOpts = {
+    lenient: args.lenient,
+    tierWords: args.fitMode === 'tier',
+    gateWords: args.fitMode === 'gate',
+  };
   const parsed =
     ext === '.txt'
       ? parseRoundText(raw, args.mode, parseOpts)
@@ -211,6 +225,9 @@ async function main() {
     );
     process.exit(1);
   }
+
+  // Round-wide: if most scored songs wrote a 2nd number, treat it as fit (no flag).
+  applyNumericFitAutoDetect(parsed.songs);
 
   const gate = buildGate(args);
   const weights = parseWeights(args.weights);
@@ -240,10 +257,6 @@ async function main() {
 
   const roundId = roundIdFromInput(args.file);
 
-  if (args.fit) {
-    console.error(`Deprecated: --fit on parse. Use: just merge ${roundId}`);
-    process.exit(1);
-  }
   if (args.option != null) {
     const reasonHint = args.reason ? ` --reason "${args.reason}"` : '';
     console.error(`Deprecated: --option on parse. Use: just pick ${roundId} ${args.option}${reasonHint}`);
@@ -274,6 +287,7 @@ async function main() {
   }
 
   warnMissingScoresCli(parsed.songs);
+  warnMissingFitScoresCli(parsed.songs);
 
   printPickCli(tradeoffs, roundId, parsed.songs, parsed.ownSongs, parsed.budget, slim);
 }

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { scoreComment } from '../scripts/score-core.mjs';
+import { scoreComment, applyNumericFitAutoDetect } from '../scripts/score-core.mjs';
 
-function parse(comment, { fitWords = false, mode = 'subjective' } = {}) {
-  return scoreComment(comment, mode, { fitWords });
+function parse(comment, { mode = 'subjective', ...opts } = {}) {
+  return scoreComment(comment, mode, opts);
 }
 
 test('comment parse: peel-first music (fitWords off)', () => {
@@ -122,4 +122,58 @@ test('comment parse: two-number remainder ignored when fitWords off', () => {
   const pair = parse('75 80');
   assert.equal(pair.score, 75);
   assert.equal(pair.fitScore, null);
+});
+
+test('comment parse: --fit tier scans tier words only, --fit gate scans gate only', () => {
+  // tier mode: tier word resolves, gate word is ignored.
+  const tier = parse('75 strong, pass', { tierWords: true });
+  assert.equal(tier.fitTier, 'strong');
+  assert.equal(tier.gate, null);
+
+  // gate mode: gate word resolves, tier word is ignored.
+  const gate = parse('75 strong, pass', { gateWords: true });
+  assert.equal(gate.gate, 'pass');
+  assert.equal(gate.fitTier, null);
+});
+
+test('comment parse: a bare 2nd number is always surfaced as fitNumberCandidate', () => {
+  // No flag: candidate exposed, but not committed to fitScore.
+  const bare = parse('75. 80');
+  assert.equal(bare.score, 75);
+  assert.equal(bare.fitScore, null);
+  assert.equal(bare.fitNumberCandidate, 80);
+
+  // No 2nd number: candidate null.
+  assert.equal(parse('75. strong fit').fitNumberCandidate, null);
+});
+
+test('applyNumericFitAutoDetect: activates when ≥75% of scored songs have a 2nd number', () => {
+  const songs = [
+    parse('75. 80'),
+    parse('72. 90'),
+    parse('70. 60'),
+    parse('73. moderate fit'), // no 2nd number → flagged
+  ].map((s, i) => ({ ...s, rawOrderIndex: i, title: `s${i}` }));
+
+  const res = applyNumericFitAutoDetect(songs);
+  assert.equal(res.active, true);
+  assert.equal(res.applied, 3);
+  assert.equal(songs[0].fitScore, 80);
+  assert.equal(songs[0].fitSource, 'manual');
+  assert.equal(songs[3].needsFitScore, true);
+  assert.equal(songs[3].fitScore, null);
+});
+
+test('applyNumericFitAutoDetect: stays off below threshold (a lone 2nd number is not fit)', () => {
+  const songs = [
+    parse('75. 80'),
+    parse('72. moderate fit'),
+    parse('70'),
+    parse('73'),
+  ].map((s, i) => ({ ...s, rawOrderIndex: i, title: `s${i}` }));
+
+  const res = applyNumericFitAutoDetect(songs);
+  assert.equal(res.active, false);
+  assert.equal(songs[0].fitScore, null);
+  assert.ok(!songs.some((s) => s.needsFitScore));
 });

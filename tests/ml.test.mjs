@@ -79,12 +79,12 @@ test('merge before parse routes to merge-scores and says to parse first', async 
   }
 });
 
-test('deprecated --fit on parse redirects to just merge', async () => {
+test('--fit on parse scans tier words instead of erroring', async () => {
   const { dataDir, env } = await makeWorkspace();
   try {
-    const { code, out } = await ml(env, 'parse', ROUND, '--fit', 'auto');
-    assert.equal(code, 1);
-    assert.match(out, new RegExp(`Deprecated: --fit on parse\\. Use: just merge ${ROUND}`));
+    const { code, out } = await ml(env, 'parse', ROUND, '--fit');
+    assert.equal(code, 0);
+    assert.doesNotMatch(out, /Deprecated: --fit/);
   } finally {
     await rm(dirname(dataDir), { recursive: true, force: true });
   }

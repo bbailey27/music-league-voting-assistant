@@ -477,6 +477,7 @@ export function buildJsonPayload({
       needsUserInput: s.needsUserInput,
       needsReview: s.needsReview,
       needsResearch: s.needsResearch ?? false,
+      needsFitScore: s.needsFitScore ?? false,
       reviewReason: s.reviewReason,
       fitScore: s.fitScore ?? null,
       fitTier: s.fitTier ?? null,

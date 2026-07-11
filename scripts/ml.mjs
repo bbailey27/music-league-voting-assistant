@@ -4,7 +4,7 @@
 // paths or remember which script wants which file.
 //
 // Usage:
-//   node scripts/ml.mjs parse  <name> [--mode objective|subjective] [--no-json] [--fit-words]
+//   node scripts/ml.mjs parse  <name> [--mode objective|subjective] [--no-json] [--fit [tier|gate]]
 //   node scripts/ml.mjs fit    <name> [--out <path>] [--order fit|combined|raw]
 //   node scripts/ml.mjs scores <name> [--out <path>] [--order fit|combined|raw]
 //   node scripts/ml.mjs final  <name> [--out <path>] [--order votes|score|raw]
@@ -221,6 +221,7 @@ function pipelineState(name) {
   }
 
   let missingScores = 0;
+  let missingFit = 0;
   let hasPick = false;
   let pickSummary = null;
   const readPick = (jsonPath) => {
@@ -228,6 +229,7 @@ function pipelineState(name) {
       const data = JSON.parse(readFileSync(jsonPath, 'utf8'));
       if (Array.isArray(data.songs)) {
         missingScores = data.songs.filter((s) => s.needsUserInput).length;
+        missingFit = data.songs.filter((s) => s.needsFitScore).length;
       }
       if (data.pick) {
         hasPick = true;
@@ -264,6 +266,7 @@ function pipelineState(name) {
     hasScoresHtml,
     scoresHtmlFresh,
     missingScores,
+    missingFit,
     hasPick,
     pickSummary,
   };
@@ -334,6 +337,12 @@ function warnMissingScores(st) {
     const s = st.missingScores === 1 ? '' : 's';
     console.log(
       `  ⚠ ${st.missingScores} song${s} missing a score — re-export after the page autosaves + reloads`
+    );
+  }
+  if (st.missingFit > 0) {
+    const s = st.missingFit === 1 ? '' : 's';
+    console.log(
+      `  ⚠ ${st.missingFit} song${s} missing a fit score — add a 2nd number (e.g. \`75. 80\`) and re-parse`
     );
   }
 }
@@ -556,7 +565,10 @@ function cmdStatusAll() {
       checkbox(st.hasScoresJson) +
       checkbox(st.hasPick) +
       checkbox(st.hasScoresHtml, st.hasScoresHtml && !st.scoresHtmlFresh);
-    const warn = st.missingScores > 0 ? `  ⚠ ${st.missingScores} missing score(s)` : '';
+    const warnParts = [];
+    if (st.missingScores > 0) warnParts.push(`${st.missingScores} missing score(s)`);
+    if (st.missingFit > 0) warnParts.push(`${st.missingFit} missing fit`);
+    const warn = warnParts.length ? `  ⚠ ${warnParts.join(', ')}` : '';
     console.log(`${marks}  ${name}  → ${step.label}${warn}`);
   }
 }

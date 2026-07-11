@@ -139,46 +139,46 @@ Full prose for each flag: `just help flags` or `just help <cmd>`. Summary:
 **Allocation / profile** (parse, merge, pick — explore on parse/merge; pick replays then
 records your letter):
 
-| Flag | Values | Effect |
-| ---- | ------ | ------ |
-| `--rank` | `combined` \| `fit` \| `music` | Ranking axis for tiers and tradeoff tables. Default: `combined` on merge and thematic pick; `music` on music-only parse/pick; parse auto-switches to `combined` when comments carry manual fit scores. |
-| `--weights` | `<fit>:<music>` e.g. `3:2` | Blend ratio for combined ranking (normalized to sum 1). Default when omitted: **7:3** on merge/thematic pick; **5:5** on parse with manual fit in comments. |
-| `--gate` | `passFail` \| `passFailMaybe` | Thematic pass/maybe/fail gate model. |
-| `--cutoff` | `<axis>:<min>` e.g. `fit:70` | Numeric cutoff gate on fit or music instead of word gate. |
-| `--shape` | `auto` \| `bell` \| `balanced` \| `top-heavy` \| `compressed` \| `relative` | Upvote curve preset (`auto` = default). |
-| `--down-shape` | `concentrated` \| `flat` \| `curved` | Downvote curve when downs are enabled. Pick also accepts positional `cv` / `fl` / `cc`. |
-| `--tier-count` | positive integer | Force exactly *n* distinct upvote point tiers. |
-| `--bucket-count` | positive integer | Force *n* funded score-cluster tiers. |
-| `--pin` | `<index>:<votes>` | Pin a song's votes (`9:2` up, `6:-2` down). Comma-separate multiples. See `just help pin`. |
-| `--favorite-band` | score e.g. `80` | Merge raw music scores ≥ floor into one shared top tier. |
-| `--no-favorite-band` | — | Disable favorite-band merge. |
+| Flag                 | Values                                                                      | Effect                                                                                                                                                                                                 |
+| -------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--rank`             | `combined` \| `fit` \| `music`                                              | Ranking axis for tiers and tradeoff tables. Default: `combined` on merge and thematic pick; `music` on music-only parse/pick; parse auto-switches to `combined` when comments carry manual fit scores. |
+| `--weights`          | `<fit>:<music>` e.g. `3:2`                                                  | Blend ratio for combined ranking (normalized to sum 1). Default when omitted: **7:3** on merge/thematic pick; **5:5** on parse with manual fit in comments.                                            |
+| `--gate`             | `passFail` \| `passFailMaybe`                                               | Thematic pass/maybe/fail gate model.                                                                                                                                                                   |
+| `--cutoff`           | `<axis>:<min>` e.g. `fit:70`                                                | Numeric cutoff gate on fit or music instead of word gate.                                                                                                                                              |
+| `--shape`            | `auto` \| `bell` \| `balanced` \| `top-heavy` \| `compressed` \| `relative` | Upvote curve preset (`auto` = default).                                                                                                                                                                |
+| `--down-shape`       | `concentrated` \| `flat` \| `curved`                                        | Downvote curve when downs are enabled. Pick also accepts positional `cv` / `fl` / `cc`.                                                                                                                |
+| `--tier-count`       | positive integer                                                            | Force exactly _n_ distinct upvote point tiers.                                                                                                                                                         |
+| `--bucket-count`     | positive integer                                                            | Force _n_ funded score-cluster tiers.                                                                                                                                                                  |
+| `--pin`              | `<index>:<votes>`                                                           | Pin a song's votes (`9:2` up, `6:-2` down). Comma-separate multiples. See `just help pin`.                                                                                                             |
+| `--favorite-band`    | score e.g. `80`                                                             | Merge raw music scores ≥ floor into one shared top tier.                                                                                                                                               |
+| `--no-favorite-band` | —                                                                           | Disable favorite-band merge.                                                                                                                                                                           |
 
 **Parse only:**
 
-| Flag | Values | Effect |
-| ---- | ------ | ------ |
-| `--mode` | `objective` \| `subjective` | Blank comments: needsUserInput vs needsReview. |
-| `--no-json` | — | Skip `music.json`. |
-| `--lenient` | — | Tolerate Live Text / pasted round text. |
-| `--fit-words` | — | Parse tier/gate words + second number on scoring line as fit. |
+| Flag                 | Values                      | Effect                                                                                                                                 |
+| -------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `--mode`             | `objective` \| `subjective` | Blank comments: needsUserInput vs needsReview.                                                                                         |
+| `--no-json`          | —                           | Skip `music.json`.                                                                                                                     |
+| `--lenient`          | —                           | Tolerate Live Text / pasted round text.                                                                                                |
+| `--fit [tier\|gate]` | —                           | Scan tier words (default) or gate words. A bare 2nd number as fit is auto-detected round-wide (no flag). `--fit-words` = `--fit tier`. |
 
-Deprecated on parse (warns): `--fit`, `--option`, `--reason` — use `just merge` and
+Deprecated on parse (warns): `--option`, `--reason` — use `just merge` and
 `just pick` instead.
 
 **Pick only:**
 
-| Flag | Values | Effect |
-| ---- | ------ | ------ |
-| `--reason` | quoted string | Rationale stored in the pick record. |
-| `--scores` | — | Write pick to `scores.json` (default when `fit.json` exists). |
-| `--dry-run` | — | Resolve and print pick without writing files. |
-| `<A\|B\|C> [cv\|fl\|cc]` | positional | Option letter; optional down-shape shorthand when downs enabled. |
+| Flag                     | Values        | Effect                                                           |
+| ------------------------ | ------------- | ---------------------------------------------------------------- |
+| `--reason`               | quoted string | Rationale stored in the pick record.                             |
+| `--scores`               | —             | Write pick to `scores.json` (default when `fit.json` exists).    |
+| `--dry-run`              | —             | Resolve and print pick without writing files.                    |
+| `<A\|B\|C> [cv\|fl\|cc]` | positional    | Option letter; optional down-shape shorthand when downs enabled. |
 
 **Render** (`just fit`, `just scores`, `just final`):
 
-| Flag | Values | Effect |
-| ---- | ------ | ------ |
-| `--out` | path | Output HTML path. |
+| Flag      | Values    | Effect                              |
+| --------- | --------- | ----------------------------------- |
+| `--out`   | path      | Output HTML path.                   |
 | `--order` | see below | Card sort order in the HTML report. |
 
 `--order` values by command:
@@ -189,9 +189,9 @@ Deprecated on parse (warns): `--fit`, `--option`, `--reason` — use `just merge
 
 **Other:**
 
-| Command | Flags |
-| ------- | ----- |
-| `just tidy` | `--dry-run` / `-n`, `--no-name`, `--no-archive`, `--age <days>` |
+| Command       | Flags                                                                   |
+| ------------- | ----------------------------------------------------------------------- |
+| `just tidy`   | `--dry-run` / `-n`, `--no-name`, `--no-archive`, `--age <days>`         |
 | `just config` | `comment-width [auto\|<n>\|unset]` — Comment column width in CLI tables |
 
 ## Recording your pick
@@ -251,7 +251,7 @@ From each `div.song`, skipping your own submissions (`mine: true`):
 ## How comments are scored (your comment only)
 
 **Full guide:** [spec/scoring-comments.md](spec/scoring-comments.md) — how to write
-comments (music first, fit on the remainder, tier/gate tables, `--fit-words`).
+comments (music first, fit on the remainder, tier/gate tables, `--fit`).
 
 | You wrote             | Interpreted as                                                                             |
 | --------------------- | ------------------------------------------------------------------------------------------ |
@@ -269,8 +269,8 @@ comments (music first, fit on the remainder, tier/gate tables, `--fit-words`).
 | words only, no number | disqualified (objective) / needs review (subjective)                                       |
 | empty box             | needs a score (you'll be prompted, never invented)                                         |
 
-Use `just parse <round> --fit-words` when comments include tier/gate words or a bare
-second fit number — see [spec/scoring-comments.md](spec/scoring-comments.md).
+Use `just parse <round> --fit` (or `--fit gate`) when comments include tier/gate words;
+a bare second fit number is auto-detected — see [spec/scoring-comments.md](spec/scoring-comments.md).
 
 ## How the draft allocation works
 

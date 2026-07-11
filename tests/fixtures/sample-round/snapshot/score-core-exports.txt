@@ -1,8 +1,10 @@
 FIT_TIER_ORDER
 FIT_TIER_SCORES
 MANUAL_FIT_WEIGHTS
+NUMERIC_FIT_MIN_RATIO
 OPTION_LETTERS
 allocate
+applyNumericFitAutoDetect
 buildJsonPayload
 buildMarkdown
 buildPickRecord

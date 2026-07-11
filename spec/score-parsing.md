@@ -68,42 +68,48 @@ submission tail is never scanned for fit/tier/gate.
 
 There is no fit-only notation; music is always the first number you write.
 
-| Comment           | Music | Fit (from remainder)                            |
-| ----------------- | ----- | ----------------------------------------------- |
-| `75`              | 75    | —                                               |
-| `fit 8` / `8 fit` | 80    | —                                               |
-| `78 music. 8 fit` | 78    | 80 (explicit `8 fit` in remainder)              |
-| `75. 80`          | 75    | 80 (2nd # in remainder; requires `--fit-words`) |
-| `80. fit 75`      | 80    | 75 (2nd # in remainder; requires `--fit-words`) |
-| `76 fit bonus`    | 76    | shorthand → strong / 85                         |
+| Comment           | Music | Fit (from remainder)                       |
+| ----------------- | ----- | ------------------------------------------ |
+| `75`              | 75    | —                                          |
+| `fit 8` / `8 fit` | 80    | —                                          |
+| `78 music. 8 fit` | 78    | 80 (explicit `8 fit` in remainder)         |
+| `75. 80`          | 75    | 80 (bare 2nd # — auto-detected round-wide) |
+| `80. fit 75`      | 80    | 75 (explicit `fit 75`)                     |
+| `76 fit bonus`    | 76    | shorthand → strong / 85                    |
 
 ### Fit channels (remainder unless noted)
 
 - **Explicit fit number:** `N fit` / `fit N` in the remainder — same digit-scaling
-  as music (`8`→80). Not matched when part of a shorthand phrase (`fit bonus`).
-- **Second number:** bare 2nd # in remainder → fitScore when `--fit-words` is on.
+  as music (`8`→80). Not matched when part of a shorthand phrase (`fit bonus`). Always on.
+- **Second number (auto-detected):** a bare 2nd # in the remainder is always surfaced as
+  `fitNumberCandidate`. **No flag.** `applyNumericFitAutoDetect` scans the whole round: when
+  ≥ **75%** (`NUMERIC_FIT_MIN_RATIO`) of scored songs carry a 2nd number, it commits that
+  number as `fitScore` for all of them and flags the stragglers `needsFitScore` (called out
+  like a missing music score). Below the threshold a lone 2nd number is ignored.
 - **Fit shorthand:** controlled multi-word phrases in the **remainder** after the
-  music number (e.g. `76 fit bonus` → strong / 85). Not valid without a music score.
-- **Tier / gate words:** only when `--fit-words` is passed; scanned on the full
-  scoring line. Tier synonyms: `excellent | strong | solid | moderate | weak` (+ synonyms).
-  The **earliest** tier word on the line wins, not the highest tier — write the grade first
-  (`weak fit`) and a later prose tier word (`great if it said 'her'`) is ignored.
-  Gate: `pass` / `maybe` / `fail` (`fail > maybe > pass`). A tier word followed by
-  `negative` (e.g. `strong negative`) is **mirrored** across the scale (that fit, but bad):
+  music number (e.g. `76 fit bonus` → strong / 85). Always on. Not valid without a music score.
+- **Tier words (`--fit`):** scanned on the full scoring line only when `--fit` (or
+  `--fit tier`) is passed. Synonyms: `excellent | strong | solid | moderate | weak`. The
+  **earliest** tier word wins, not the highest tier — write the grade first (`weak fit`) and
+  a later prose tier word (`great if it said 'her'`) is ignored. A tier word followed by
+  `negative` (`strong negative`) is **mirrored** across the scale (that fit, but bad):
   excellent↔nope, strong↔weak, solid↔moderate.
-  Without `--fit-words`, tier/gate vocabulary in comments is ignored (no over-matching).
-  **Gate words auto-activate the gate.** A parsed per-song `gate` is inert unless the
-  allocation profile turns the gate on (`gateClass` treats every song as a pass
-  otherwise), so when `--fit-words` extracts any gate word and the caller didn't set
-  an explicit `--gate` / `--cutoff`, `applyManualFitScoring` sets `profile.gate` to
-  **`passFailMaybe`** (any `maybe` present) or **`passFail`** (only pass/fail). This is
-  the same auto-wiring that defaults `rankBy` to `combined` for manual fit, and it
-  propagates to `merge` / `pick` via the stored profile. An explicit `--gate` /
-  `--cutoff` is never overridden.
+- **Gate words (`--fit gate`):** scanned only when `--fit gate` is passed. `pass` / `maybe`
+  / `fail` (`fail > maybe > pass`). **Gate words auto-activate the gate.** A parsed per-song
+  `gate` is inert unless the allocation profile turns the gate on (`gateClass` treats every
+  song as a pass otherwise), so when a gate word is extracted and the caller didn't set an
+  explicit `--gate` / `--cutoff`, `applyManualFitScoring` sets `profile.gate` to
+  **`passFailMaybe`** (any `maybe` present) or **`passFail`** (only pass/fail) — the same
+  auto-wiring that defaults `rankBy` to `combined`, propagated to `merge` / `pick` via the
+  stored profile. An explicit `--gate` / `--cutoff` is never overridden.
+
+Tier and gate scanning are separate: `--fit` reads tier words, `--fit gate` reads gate words.
+Neither is on by default (no over-matching); numeric fit is the only auto-detected channel.
 
 ### Other
 
 - **Thematic, fit unknown:** a music score with no fit signal marks the song
   `needsResearch` (in thematic mode) so the LLM step fills it.
 - **Precedence:** manual fit wins; the LLM fit JSON fills only fit-silent songs.
-- **CLI:** `just parse <name> --fit-words` / `ml parse <name> --fit-words`.
+- **CLI:** `just parse <name> --fit` (tier) / `just parse <name> --fit gate` (gate).
+  `--fit-words` is a back-compat alias for `--fit tier`.

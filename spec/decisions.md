@@ -11,6 +11,36 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-10 — Split fit flags: `--fit [tier|gate]` + auto-detected numeric fit
+
+**Change.** `--fit-words` (which bundled tier words, gate words, and a bare 2nd number)
+is replaced on `parse` by `--fit` / `--fit gate`. `--fit` (or `--fit tier`) scans tier
+words only; `--fit gate` scans gate words only; only the literal `tier`/`gate` is consumed
+as the flag value so a following round name is safe. `--fit-words` remains a silent alias
+for `--fit tier`. The old deprecated `--fit <fit.json>` merge flag on parse is removed (merge
+lives on `just merge`). `scoreComment` opts are now `{ tierWords, gateWords, numericFit }`
+(legacy `fitWords` still accepted → all three on). A bare 2nd number is always surfaced as
+`fitNumberCandidate`; new `applyNumericFitAutoDetect` commits it round-wide when ≥ 75%
+(`NUMERIC_FIT_MIN_RATIO`) of scored songs carry one, and flags the rest `needsFitScore` —
+surfaced like a missing music score (parse banner `warnMissingFitScoresCli`, `ml status`,
+`music.json`). Tier `<word> negative` mirrors across the scale (see the entry below).
+
+**Why.** Owner found one flag meaning "numeric fit" _and_ "keyword scan" confusing, and tier
+and gate were welded together though a round is either graded or gated. `--fit`/`--gate` as
+plain booleans collide with existing `--fit <path>` / `--gate <type>`, so the owner's
+`--fit [tier|gate]` shape was chosen (unambiguous with the positional round name). Numeric
+fit is auto-detected because "two numbers on every song clearly means I wanted fit scores";
+the 75% threshold tolerates a few stragglers while calling them out (line-156 backlog note:
+a missing fit score deserves the same callout as a missing music score).
+
+**Refs.** `working tree` — `scripts/score/comment.mjs`, `scripts/score-core.mjs`,
+`scripts/parse-round.mjs`, `scripts/parse/cli-warn.mjs`, `scripts/ml.mjs`,
+`scripts/score/render.mjs`, `scripts/cli-help.mjs`, `tests/comment-parse.test.mjs`,
+`tests/ml.test.mjs`, regression baseline; `spec/score-parsing.md`, `spec/scoring-comments.md`,
+`spec/point-allocation.md`, `README.md`.
+
+---
+
 ## 2026-07-10 — Manual fit tier: earliest tier word on the line wins
 
 **Change.** `parseFitSignals` (`scripts/score/comment.mjs`) no longer picks the manual fit
@@ -29,7 +59,7 @@ preferred a single scan-then-map over the earlier `<tier> fit` adjacency heurist
 care about fit-adjacency, always writes the score first). After the fix that song parses
 `weak` (35), dropping it from the top upvote slot in `2026-07-07-story-8`. Owner also
 overruled the old "`strong negative` is ignored" rule: `strong negative` is a strongly
-*bad* fit, so the tier is mirrored (→ `weak`) rather than dropped. `node --test` 212 pass;
+_bad_ fit, so the tier is mirrored (→ `weak`) rather than dropped. `node --test` 212 pass;
 added comment-parse cases locking earliest-wins (both directions) and the `negative` mirror.
 
 **Refs.** `working tree` — `scripts/score/comment.mjs`, `tests/comment-parse.test.mjs`,

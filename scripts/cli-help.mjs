@@ -84,8 +84,8 @@ Commands:
   ml parse | merge | pick | fit | scores | final | run | status | tidy | config | help
 
 <name> is optional after the first explicit use — stored in data/.current-round.
-Omit it to continue the same round (e.g. just parse --fit-words, just run, just merge).
-Name a round explicitly to switch (e.g. just parse tarot --fit-words).
+Omit it to continue the same round (e.g. just parse --fit, just run, just merge).
+Name a round explicitly to switch (e.g. just parse tarot --fit).
 
 Fuzzy match: "tarot" or "2026-06-09".
 Run "just help <cmd>" for flags (parse, merge, pick, final, fit, scores, pin, flags, tidy, config).`,
@@ -139,17 +139,21 @@ Flags:
   ${GATE}
   --no-json                Skip writing music.json (markdown only).
   --lenient                Tolerate Live Text / pasted round text input.
-  --fit-words              Parse tier/gate words and a second number on the scoring
-                          line as fit (see spec/scoring-comments.md). Gate words
-                          (pass/maybe/fail) auto-activate the gate — passFailMaybe
-                          if any maybe, else passFail — unless you pass --gate.
+  --fit [tier|gate]        Scan comment keywords for fit (see spec/scoring-comments.md).
+                          --fit (or --fit tier) reads tier words (excellent…weak);
+                          --fit gate reads gate words (pass/maybe/fail), which
+                          auto-activate the gate — passFailMaybe if any maybe, else
+                          passFail — unless you pass --gate <type>. (--fit-words is
+                          the old spelling of --fit tier.) A 2nd number as fit
+                          (e.g. "75. 80") is auto-detected round-wide — no flag.
 
 Deprecated (warns — use merge + pick instead):
-  --fit, --option, --reason
+  --option, --reason
 
 Example:
   just parse kpop-favorite --shape auto
-  just parse --fit-words              # current round
+  just parse --fit                    # current round, tier words
+  just parse --fit gate               # gate words
   just help pin                       # full --pin reference`,
 
   merge: `just merge [<name>] [flags]
@@ -299,8 +303,9 @@ Parse-only:
   --mode objective|subjective       Scoring mode for blank comments
   --no-json                         Skip music.json
   --lenient                         Tolerant pasted-text parse
-  --fit-words                       Tier/gate words + 2nd number as fit in comments
-  --fit, --option, --reason         Deprecated — use merge + pick
+  --fit [tier|gate]                 Scan tier (default) or gate keywords; 2nd-number
+                                    fit is auto-detected round-wide (no flag)
+  --option, --reason                Deprecated — use merge + pick
 
 Pick-only:
   --reason "…"                      Stored pick rationale

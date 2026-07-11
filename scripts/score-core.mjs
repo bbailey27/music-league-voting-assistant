@@ -3,7 +3,13 @@
 
 export { cell, formatScore } from './score/format.mjs';
 export { FIT_TIER_SCORES, FIT_TIER_ORDER, fitTierForScore, MANUAL_FIT_WEIGHTS } from './score/fit-signal.mjs';
-export { scoreComment, tiebreakRank, formatMusicModifierFlags } from './score/comment.mjs';
+export {
+  scoreComment,
+  tiebreakRank,
+  formatMusicModifierFlags,
+  applyNumericFitAutoDetect,
+  NUMERIC_FIT_MIN_RATIO,
+} from './score/comment.mjs';
 export {
   rankValue,
   estimateCenter,

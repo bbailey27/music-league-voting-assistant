@@ -10,22 +10,27 @@ scores correctly. For digit-scaling edge cases and parser internals, see
 Ideal music-only:     75
 Ideal music + fit:    78 music. 8 fit
 Quick fit bump:       76 fit bonus
-Quick music + tier:   75 strong          (--fit-words)
-Quick music + gate:   75 maybe           (--fit-words)
-Two numbers:          75. 80             (--fit-words)
-With fit tag:         80. fit 75         (--fit-words)
+Two numbers:          75. 80             (fit auto-detected — no flag)
+With fit tag:         80. fit 75
+Quick music + tier:   75 strong          (--fit)
+Quick music + gate:   75 maybe           (--fit gate)
 Keep vote prose:      75 strong\nYour public comment here
 ```
 
-**Parse with fit words enabled** when you use tier/gate vocabulary or a bare second
-number for fit:
+**Numeric fit is auto-detected.** If most songs in the round have a second number
+(`75. 80`), the parser treats it as fit for the whole round — no flag — and calls out
+any song missing its fit number (like a missing music score).
+
+**Pass `--fit` to read tier/gate vocabulary** (words, not numbers):
 
 ```bash
-just parse my-round --fit-words
+just parse my-round --fit         # tier words: excellent…weak
+just parse my-round --fit gate    # gate words: pass / maybe / fail
 ```
 
-Without `--fit-words`, only **explicit** fit numbers in the remainder (`8 fit`) and
-**shorthand** (`fit bonus`) are picked up — prose like `maybe` or `strong` is ignored.
+Without `--fit`, prose like `maybe` or `strong` is ignored (no over-matching); only
+**explicit** fit numbers (`8 fit`), **shorthand** (`fit bonus`), and the auto-detected
+second number are picked up. `--fit-words` is the old spelling of `--fit`.
 
 ---
 
@@ -58,13 +63,13 @@ scanning.
 75 maybe
 ```
 
-| You wrote         | Music | Fit                               |
-| ----------------- | ----- | --------------------------------- |
-| `78 music. 8 fit` | 78    | 80 (numeric fit)                  |
-| `76 fit bonus`    | 76    | strong (shorthand)                |
-| `75. 80`          | 75    | 80 (needs `--fit-words`)          |
-| `80. fit 75`      | 80    | 75 (needs `--fit-words`)          |
-| `75 strong`       | 75    | strong tier (needs `--fit-words`) |
+| You wrote         | Music | Fit                         |
+| ----------------- | ----- | --------------------------- |
+| `78 music. 8 fit` | 78    | 80 (explicit numeric fit)   |
+| `76 fit bonus`    | 76    | strong (shorthand)          |
+| `75. 80`          | 75    | 80 (2nd # — auto-detected)  |
+| `80. fit 75`      | 80    | 75 (explicit `fit 75`)      |
+| `75 strong`       | 75    | strong tier (needs `--fit`) |
 
 These also work — same rule (first number = music):
 
@@ -108,7 +113,7 @@ after `+`, `-`, or `play` → that modifier is uncertain (not the score).
 
 ---
 
-## Fit tier words (`--fit-words`)
+## Fit tier words (`--fit`)
 
 Tier words on **line 1** map to a numeric fit score used for combined ranking. The
 **earliest** tier word wins (write the grade first; a later prose tier word is ignored).
@@ -123,7 +128,7 @@ the tier is **mirrored** across the scale: excellent↔nope, strong↔weak, soli
 | **moderate**  | 52        | moderate, okay, ok, loose, partial                       |
 | **weak**      | 35        | weak, single keyword, tenuous, barely                    |
 
-**Examples** (all require `--fit-words`):
+**Examples** (all require `--fit`):
 
 ```text
 75 excellent
@@ -135,7 +140,7 @@ solid 72
 
 ---
 
-## Gate words (`--fit-words`)
+## Gate words (`--fit gate`)
 
 For pass/maybe/fail rounds. Scanned on line 1. Precedence: **fail > maybe > pass**.
 
@@ -154,7 +159,7 @@ off-theme 80             → music 80, gate fail
 maybe great song 75      → music 75, gate maybe
 ```
 
-Gate words **auto-activate the gate**: when `--fit-words` finds any gate word and you
+Gate words **auto-activate the gate**: when `--fit gate` finds any gate word and you
 didn't pass an explicit `--gate` / `--cutoff`, the round is allocated with
 `passFailMaybe` (any `maybe` present) or `passFail` (only pass/fail). So passes rank
 above maybes, and fails earn nothing — you don't need to add `--gate` yourself. An
@@ -189,7 +194,8 @@ same digit scaling as music (`8` → 80).
 78 music. fit 8          → music 78, fit 80
 ```
 
-With `--fit-words`, a **second number** on line 1 also works (period recommended):
+A bare **second number** on line 1 is auto-detected round-wide (no flag) when most
+songs have one — period recommended:
 
 ```text
 75. 80                   → music 75, fit 80

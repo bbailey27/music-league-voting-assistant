@@ -33,7 +33,16 @@ const GATE_WORDS = [
 ];
 
 export function scoreComment(rawComment, mode, opts = {}) {
+  // `--fit` scans tier words, `--fit gate` scans gate words. A bare 2nd number is
+  // always surfaced as `fitNumberCandidate`; whether it becomes the fitScore here is
+  // controlled by `numericFit` (round-wide auto-detect commits it later — see
+  // applyNumericFitAutoDetect). The legacy `fitWords` bundles all three on.
   const fitWords = opts.fitWords === true;
+  const fitOpts = {
+    tierWords: fitWords || opts.tierWords === true,
+    gateWords: fitWords || opts.gateWords === true,
+    numericFit: fitWords || opts.numericFit === true,
+  };
   const out = {
     score: null,
     plus: false,
@@ -51,6 +60,8 @@ export function scoreComment(rawComment, mode, opts = {}) {
     fitTier: null,
     gate: null,
     fitSource: null,
+    fitNumberCandidate: null,
+    needsFitScore: false,
     needsResearch: false,
   };
 
@@ -87,7 +98,7 @@ export function scoreComment(rawComment, mode, opts = {}) {
     } else if (/\b(invalid|no|nope)\b/i.test(scoringLine)) {
       out.isDisqualified = true;
     } else {
-      const fit = parseFitSignals(scoringLine, '', { fitWords });
+      const fit = parseFitSignals(scoringLine, '', fitOpts);
       if (fit.fitScore != null || fit.gate) {
         applyFit(fit);
       } else if (mode === 'objective') {
@@ -104,11 +115,47 @@ export function scoreComment(rawComment, mode, opts = {}) {
   Object.assign(out, parseAttachedMods(peeled.mods));
   Object.assign(out, parsePlaylistModifier(scoringLine));
 
-  applyFit(parseFitSignals(scoringLine, peeled.remainder, { fitWords }));
+  const fit = parseFitSignals(scoringLine, peeled.remainder, fitOpts);
+  out.fitNumberCandidate = fit.fitNumberCandidate;
+  applyFit(fit);
 
   if (mode === 'thematic' && out.fitScore == null && out.gate == null) out.needsResearch = true;
 
   return out;
+}
+
+// Fraction of scored songs that must carry a bare 2nd number before we assume the
+// round is numeric-fit and start committing those numbers as fit scores.
+export const NUMERIC_FIT_MIN_RATIO = 0.75;
+
+// Round-wide numeric-fit auto-detect: when most scored songs wrote a second number
+// (e.g. `75. 80`), treat it as fit for all of them — no flag needed — and flag the
+// stragglers with `needsFitScore` so a missing fit number is called out like a
+// missing music score. Songs that already resolved a fit (explicit `N fit`, tier
+// word, gate) are left untouched. Mutates `songs`; returns a small summary.
+export function applyNumericFitAutoDetect(songs, ratio = NUMERIC_FIT_MIN_RATIO) {
+  const scored = (songs || []).filter((s) => s && s.score != null);
+  if (!scored.length) return { active: false, applied: 0, missing: [] };
+  const withNumber = scored.filter((s) => s.fitNumberCandidate != null);
+  if (withNumber.length < 2 || withNumber.length / scored.length < ratio) {
+    return { active: false, applied: 0, missing: [] };
+  }
+
+  let applied = 0;
+  const missing = [];
+  for (const s of scored) {
+    if (s.fitScore != null) continue; // already graded (explicit fit / tier / gate)
+    if (s.fitNumberCandidate != null) {
+      s.fitScore = s.fitNumberCandidate;
+      s.fitTier = fitTierForScore(s.fitScore);
+      s.fitSource = 'manual';
+      applied++;
+    } else {
+      s.needsFitScore = true;
+      missing.push(s);
+    }
+  }
+  return { active: true, applied, missing };
 }
 
 // First number on the scoring line is always music; return the rest for fit parsing.
@@ -160,8 +207,8 @@ function parsePlaylistModifier(text) {
   return { playlistAdd: false, playlistUncertain: false };
 }
 
-function parseFitSignals(scoringLine, remainder, { fitWords }) {
-  const out = { fitScore: null, fitTier: null, gate: null };
+function parseFitSignals(scoringLine, remainder, { tierWords, gateWords, numericFit }) {
+  const out = { fitScore: null, fitTier: null, gate: null, fitNumberCandidate: null };
   const rem = remainder || '';
 
   for (const [tier, re] of FIT_SHORTHAND) {
@@ -181,23 +228,22 @@ function parseFitSignals(scoringLine, remainder, { fitWords }) {
     }
   }
 
-  if (out.fitScore == null && fitWords) {
-    const second = rem.match(SCORE_NUM);
-    if (second) {
-      out.fitScore = scaleScoreToken(second[1], second[2]);
-    }
+  // A bare 2nd number is always surfaced (round-wide auto-detect decides whether it
+  // becomes fit); `numericFit` commits it inline for the legacy bundled flag.
+  const second = rem.match(SCORE_NUM);
+  if (second) out.fitNumberCandidate = scaleScoreToken(second[1], second[2]);
+  if (out.fitScore == null && numericFit && out.fitNumberCandidate != null) {
+    out.fitScore = out.fitNumberCandidate;
   }
 
-  if (fitWords) {
-    if (out.fitScore == null) {
-      const tier = pickTier(scoringLine);
-      if (tier) {
-        out.fitTier = tier;
-        out.fitScore = FIT_TIER_SCORES[tier];
-      }
+  if (tierWords && out.fitScore == null) {
+    const tier = pickTier(scoringLine);
+    if (tier) {
+      out.fitTier = tier;
+      out.fitScore = FIT_TIER_SCORES[tier];
     }
-    out.gate = matchGate(scoringLine);
   }
+  if (gateWords) out.gate = matchGate(scoringLine);
 
   if (out.fitScore != null && out.fitTier == null) out.fitTier = fitTierForScore(out.fitScore);
   return out;
