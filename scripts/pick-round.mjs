@@ -26,7 +26,6 @@ import {
   parseBucketCount,
   parseFavoriteBand,
   parseDownShape,
-  parseWeights,
   buildGate,
 } from './parse/cli-flags.mjs';
 import { applyOptionPick, recordPickToTrainingLog } from './round/pick.mjs';
@@ -162,7 +161,9 @@ function hasAnyPins(profile) {
 
 function buildProfile(args, stored, budget, mode) {
   const gate = buildGate(args) ?? stored?.gate;
-  const weights = parseWeights(args.weights) ?? stored?.weights;
+  // pick never re-blends: it ranks off the stored combinedScore. Re-weighting lives
+  // in `just rescore` (see the --weights guard in main).
+  const weights = stored?.weights;
   const pins = parsePins(args.pin.length ? args.pin : undefined);
   const overrides = pins?.overrides ?? stored?.overrides;
   const downOverrides = pins?.downOverrides ?? stored?.downOverrides;
@@ -197,6 +198,13 @@ async function main() {
   if (!args.roundId || args.option == null) {
     console.error(
       'Usage: just pick <round-id> <A|B|C> [cv|fl|cc] [--reason "…"] [--pin …] [--down-shape …] [--scores] [--dry-run]'
+    );
+    process.exit(1);
+  }
+  if (args.weights != null) {
+    console.error(
+      `Deprecated: --weights on pick is inert (pick ranks off the stored combinedScore). ` +
+        `Re-weight with: just rescore ${args.roundId} --weights ${args.weights}`
     );
     process.exit(1);
   }

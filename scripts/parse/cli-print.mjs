@@ -219,8 +219,8 @@ export function printOptionPinComparisonCli(
       diffs.push({
         rawOrderIndex: s.rawOrderIndex,
         title: s.title,
-        from: fmtSignedNet(b.up, b.down),
-        to: fmtSignedNet(fUp, fDown),
+        from: fmtSignedNet(b.up, b.down, '0'),
+        to: fmtSignedNet(fUp, fDown, '0'),
       });
     }
   }

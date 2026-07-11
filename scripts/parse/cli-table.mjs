@@ -82,11 +82,11 @@ export function fmtCliVoteCell(v, { excluded = false, down = false } = {}) {
   return '·';
 }
 
-/** Signed net-vote cell: +up, -down, or · (zero). */
-export function fmtSignedNet(up = 0, down = 0) {
+/** Signed net-vote: +up, -down, or the zero token (· in tables, 0 in prose diffs). */
+export function fmtSignedNet(up = 0, down = 0, zero = '·') {
   if (up > 0) return `+${up}`;
   if (down > 0) return `-${down}`;
-  return '·';
+  return zero;
 }
 
 /** Raw-order ballot cell; signed (+/−) only when the round uses both vote banks. */

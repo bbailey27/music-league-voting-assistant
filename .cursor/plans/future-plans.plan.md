@@ -80,20 +80,22 @@ Output snapshot regression test (diff-based): see
 15. Just run could also have a detail flag to output current state. I started on the agent window so it ran parse already and I don't want to mess up the flags. But just run (to see what comes next) only said picka distribution. It didn't show me the distributions to pick from.
 16. Improve ballot output some mroe. On CLI I'd like to se votes right next to combined. mod should be next to the score it modifies. Currently not next to the music score. But also what if music and fit scores both were numeric with mods? would they share 1 mod column? is one silently dropped?
 17. Decouple fit, gate, weights, etc flags from parse. add ability to use a shortcut like re-run or plain just run to alter combined score and weightings and output separate from the actual raw file parsing. May mean restructuring music vs fit json? output the table again after each alteration. also a command to manually adjust a raw score without editing or re-pasting the HTML. Similar to pin but update the actual music and fit jsons. if no re-parse of the raw using these new commands, it should stick.
+    - **PARTIALLY SHIPPED (A + C):** `just rescore <round> [knobs]` re-weights/re-shapes and
+      re-allocates from JSON (no HTML re-read), re-printing the menu and resetting any pick to
+      draft (`scripts/rescore-round.mjs`; see decisions.md 2026-07-10). **Still open (B, D):**
+      (B) manually adjust a single raw music/fit **score** from the CLI (pin-like write into
+      `music.json`/`fit.json`, sticks with no re-parse); (D) any music-vs-fit JSON restructure
+      if B needs it.
 18. Testing dry-run / scratch-pad. Agents (and the owner) sometimes need to exercise parse/pick/rescore against a real round to verify behavior, but doing so today overwrites the round's `music.json`/`music.md` (and can silently change weights, as happened when a test re-parse dropped 0.7/0.3 → 0.5/0.5). Provide a safe scratch mode — e.g. a `--scratch`/`--sandbox` flag or a temp working copy — that runs the full pipeline and prints the tables/output WITHOUT writing back to the round's real files (or writes to a throwaway path). Goal: never mutate the owner's committed analysis as a side effect of testing.
 
 ## Bugs
 
 Confirmed defects (repro'd on real rounds). Fix independently of the feature backlog above.
 
-1. `**--weights` on `pick` is inert for ranking (`fixWeightOnPicks`).** `pick` ranks off the
-   `combinedScore` already stored in `music.json`, so `just pick … --weights <f>:<m>` does
-   **not** re-rank — it only nudges tie-grouping (`tierKey` recomputes the raw blend). The
-   blend is only (re)computed at `parse` (`applyManualFitScoring` → `normalizeCombined`).
-   Repro (aaa-cars): `pick A --weights 3:7` leaves the 5:5 order intact; you must
-   `just parse … --weights 3:7` first. Fix: either recompute `combinedScore` in `pick` when
-   `--weights` is passed, or **remove `--weights` from `pick` and document that weights are
-   a parse-time knob. (My lean: drop it from `pick`.)
+1. ~~`**--weights` on `pick` is inert for ranking (`fixWeightOnPicks`).~~ **RESOLVED
+   (2026-07-10).** `--weights` was removed from `pick` (it now errors with a pointer to
+   `rescore`); re-weighting lives in `just rescore <round> --weights <f>:<m>`, which re-blends
+   `combinedScore` from the stored `score`/`fitScore` without a re-parse. See decisions.md.
 2. `**pickWithBucketOrTierCount` errors with "0 options". `just pick A
 
 --bucket-count `(and`--tier-count `) fails: forcing a curve suppresses the` tier-structure`tradeoff (guard in`allocateBell`,` if (!profile.tierCount &&

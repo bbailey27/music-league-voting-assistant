@@ -24,20 +24,20 @@ export function warnMissingScoresCli(songs) {
   return missing.length;
 }
 
-// Numeric-fit rounds: songs with a music score but no 2nd number the auto-detect
-// could use. Called out like a missing music score.
+// Fit-graded rounds: songs with a music score but no fit signal (numeric, tier, or
+// gate) while most of the round has one. Called out like a missing music score.
 export function warnMissingFitScoresCli(songs) {
   const missing = (songs || []).filter((s) => s.needsFitScore);
   if (!missing.length) return 0;
   const n = missing.length;
   console.error('');
   console.error('══════════════════════════════════════════════════════════');
-  console.error(`  ⚠  ${n} SONG${n === 1 ? '' : 'S'} MISSING A FIT SCORE — this round scores fit from a 2nd number`);
+  console.error(`  ⚠  ${n} SONG${n === 1 ? '' : 'S'} MISSING A FIT SIGNAL — most of this round is fit-graded`);
   console.error('══════════════════════════════════════════════════════════');
   for (const s of missing) {
     console.error(`  • #${s.rawOrderIndex} ${s.title}${s.artist ? ` — ${s.artist}` : ''}`);
   }
-  console.error('  Add a fit number (e.g. `75. 80`) to each, then re-parse.');
+  console.error('  Add a fit score, tier word, or gate word to each, then re-parse.');
   console.error('');
   return n;
 }

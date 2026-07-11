@@ -120,6 +120,7 @@ through to the underlying scripts. Run `just --list` or `just help` for the over
 | `just parse <name>`          | HTML → `music.json`                       | Yes         |
 | `just merge <name>`          | `music.json` + `fit.json` → `scores.json` | No          |
 | `just pick <name> <A\|B\|C>` | record distribution choice                | No          |
+| `just rescore <name>`        | re-weight/re-allocate from JSON           | No          |
 | `just fit <name>`            | render `fit.html` from `fit.json`         | No          |
 | `just scores <name>`         | render `scores.html` from `scores.json`   | No          |
 | `just final <name>`          | render deliverable HTML                   | No          |
@@ -136,13 +137,13 @@ through to the underlying scripts. Run `just --list` or `just help` for the over
 
 Full prose for each flag: `just help flags` or `just help <cmd>`. Summary:
 
-**Allocation / profile** (parse, merge, pick — explore on parse/merge; pick replays then
-records your letter):
+**Allocation / profile** (parse, merge, pick, rescore — explore on parse/merge; pick
+replays then records your letter; rescore re-blends/re-allocates from JSON):
 
 | Flag                 | Values                                                                      | Effect                                                                                                                                                                                                 |
 | -------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `--rank`             | `combined` \| `fit` \| `music`                                              | Ranking axis for tiers and tradeoff tables. Default: `combined` on merge and thematic pick; `music` on music-only parse/pick; parse auto-switches to `combined` when comments carry manual fit scores. |
-| `--weights`          | `<fit>:<music>` e.g. `3:2`                                                  | Blend ratio for combined ranking (normalized to sum 1). Default when omitted: **7:3** on merge/thematic pick; **5:5** on parse with manual fit in comments.                                            |
+| `--weights`          | `<fit>:<music>` e.g. `3:2`                                                  | Blend ratio for combined ranking (normalized to sum 1). **Not on `pick`** — use `just rescore` to re-weight. Default: **7:3** merge/thematic, **5:5** parse w/ manual fit.                             |
 | `--gate`             | `passFail` \| `passFailMaybe`                                               | Thematic pass/maybe/fail gate model.                                                                                                                                                                   |
 | `--cutoff`           | `<axis>:<min>` e.g. `fit:70`                                                | Numeric cutoff gate on fit or music instead of word gate.                                                                                                                                              |
 | `--shape`            | `auto` \| `bell` \| `balanced` \| `top-heavy` \| `compressed` \| `relative` | Upvote curve preset (`auto` = default).                                                                                                                                                                |
@@ -173,6 +174,11 @@ Deprecated on parse (warns): `--option`, `--reason` — use `just merge` and
 | `--scores`               | —             | Write pick to `scores.json` (default when `fit.json` exists).    |
 | `--dry-run`              | —             | Resolve and print pick without writing files.                    |
 | `<A\|B\|C> [cv\|fl\|cc]` | positional    | Option letter; optional down-shape shorthand when downs enabled. |
+
+**Rescore only** (`just rescore` — re-blend/re-allocate from JSON, resets any pick to
+draft; never reads HTML): takes the shared allocation/profile flags above (`--weights`,
+`--shape`, `--rank`, `--gate`, `--down-shape`, `--tier-count`, `--bucket-count`,
+`--favorite-band`) plus `--dry-run`.
 
 **Render** (`just fit`, `just scores`, `just final`):
 
@@ -205,6 +211,13 @@ Deprecated on parse (warns): `--option`, `--reason` — use `just merge` and
 > 3. `just final <round>` — refresh `music.html`.
 >
 > Stored in `<round>/music.json` (`pick`) and `data/analysis/picks.jsonl` (training log).
+>
+> **I want to change the fit:music weights without re-parsing the HTML.**
+>
+> `just rescore <round> --weights 5:5` re-blends `combinedScore` from the stored
+> `score`/`fitScore`, re-runs the draft menu, and rewrites `music.md`/`music.json`.
+> It resets any committed pick to draft (re-run `just pick`) and never touches
+> `picks.jsonl`. `pick --weights` is inert and now errors with this pointer.
 
 ### Without `just`
 

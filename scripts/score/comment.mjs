@@ -128,34 +128,56 @@ export function scoreComment(rawComment, mode, opts = {}) {
 // round is numeric-fit and start committing those numbers as fit scores.
 export const NUMERIC_FIT_MIN_RATIO = 0.75;
 
+// A song carries a fit signal if any channel resolved: an explicit/numeric fit score,
+// a tier word, or a gate word.
+function hasFitSignal(s) {
+  return s.fitScore != null || s.fitTier != null || s.gate != null;
+}
+
 // Round-wide numeric-fit auto-detect: when most scored songs wrote a second number
-// (e.g. `75. 80`), treat it as fit for all of them — no flag needed — and flag the
-// stragglers with `needsFitScore` so a missing fit number is called out like a
-// missing music score. Songs that already resolved a fit (explicit `N fit`, tier
-// word, gate) are left untouched. Mutates `songs`; returns a small summary.
+// (e.g. `75. 80`), treat it as fit for all of them — no flag needed. Songs that
+// already resolved a fit (explicit `N fit`, tier word, gate) are left untouched.
+// After the numeric commit, a channel-agnostic coverage pass (flagMissingFitSignals)
+// flags any un-graded stragglers with `needsFitScore` so a missing fit signal is
+// called out like a missing music score — this covers tier- and gate-graded rounds
+// too, not just numeric. Mutates `songs`; returns a small summary.
 export function applyNumericFitAutoDetect(songs, ratio = NUMERIC_FIT_MIN_RATIO) {
   const scored = (songs || []).filter((s) => s && s.score != null);
   if (!scored.length) return { active: false, applied: 0, missing: [] };
+
   const withNumber = scored.filter((s) => s.fitNumberCandidate != null);
-  if (withNumber.length < 2 || withNumber.length / scored.length < ratio) {
-    return { active: false, applied: 0, missing: [] };
-  }
+  const numericActive = withNumber.length >= 2 && withNumber.length / scored.length >= ratio;
 
   let applied = 0;
-  const missing = [];
-  for (const s of scored) {
-    if (s.fitScore != null) continue; // already graded (explicit fit / tier / gate)
-    if (s.fitNumberCandidate != null) {
+  if (numericActive) {
+    for (const s of scored) {
+      if (s.fitScore != null) continue; // already graded (explicit fit / tier / gate)
+      if (s.fitNumberCandidate == null) continue;
       s.fitScore = s.fitNumberCandidate;
       s.fitTier = fitTierForScore(s.fitScore);
       s.fitSource = 'manual';
       applied++;
-    } else {
-      s.needsFitScore = true;
-      missing.push(s);
     }
   }
-  return { active: true, applied, missing };
+
+  const missing = flagMissingFitSignals(scored, ratio);
+  return { active: numericActive, applied, missing };
+}
+
+// Channel-agnostic coverage flag: if at least `ratio` of scored songs carry a fit
+// signal (numeric, tier, or gate), flag the ones that don't with `needsFitScore`.
+// Numeric-missing flagging is a special case of this pass. Mutates `songs`; returns
+// the flagged stragglers.
+export function flagMissingFitSignals(scored, ratio = NUMERIC_FIT_MIN_RATIO) {
+  const missing = [];
+  const graded = scored.filter(hasFitSignal);
+  if (graded.length < 2 || graded.length / scored.length < ratio) return missing;
+  for (const s of scored) {
+    if (hasFitSignal(s)) continue;
+    s.needsFitScore = true;
+    missing.push(s);
+  }
+  return missing;
 }
 
 // First number on the scoring line is always music; return the rest for fit parsing.

@@ -342,7 +342,7 @@ function warnMissingScores(st) {
   if (st.missingFit > 0) {
     const s = st.missingFit === 1 ? '' : 's';
     console.log(
-      `  ⚠ ${st.missingFit} song${s} missing a fit score — add a 2nd number (e.g. \`75. 80\`) and re-parse`
+      `  ⚠ ${st.missingFit} song${s} missing a fit signal — add a fit score, tier, or gate word and re-parse`
     );
   }
 }
@@ -366,6 +366,11 @@ function cmdPick(explicitName, option, flags) {
     process.exit(1);
   }
   process.exit(runScript('pick-round.mjs', [base, option, ...flags]));
+}
+
+function cmdRescore(explicitName, flags) {
+  const base = resolveRoundName(explicitName, listAllRoundIds(), 'round');
+  process.exit(runScript('rescore-round.mjs', [base, ...flags]));
 }
 
 function cmdParse(explicitName, flags) {
@@ -635,6 +640,10 @@ function main() {
     case 'pick': {
       const { name, option, flags } = splitPickArgs(rest);
       return cmdPick(name, option, flags);
+    }
+    case 'rescore': {
+      const { name, flags } = splitRoundArgs(rest);
+      return cmdRescore(name, flags);
     }
     case 'fit': {
       const { name, flags } = splitRoundArgs(rest);

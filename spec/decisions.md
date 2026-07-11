@@ -11,6 +11,69 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-10 — `just rescore`: re-weight/re-allocate from JSON, no HTML re-parse
+
+**Change.** New `scripts/rescore-round.mjs` (`just rescore` / `ml rescore <round> [knobs]`)
+re-blends the stored per-song music `score` + `fitScore` into a fresh `combinedScore`
+under new `--weights`/`--shape`/`--gate`/`--down-shape`/`--rank`/tier knobs, re-runs the
+draft menu allocation, and rewrites `music.md`/`music.json` — **without** reading round
+HTML and **without** re-scanning comments for fit/tier/gate words (that stays in `parse`).
+Objective/manual-fit rounds re-blend via `applyManualFitScoring` → `normalizeCombined`;
+thematic rounds (a `fit.json` exists) re-blend via `mergeFitJson`. rescore **resets any
+committed pick to draft** (drops the `pick` block; songs carry the re-allocated draft
+`finalVotes`) and never writes `picks.jsonl`. `--dry-run` reports without writing.
+Correspondingly, `--weights` is removed from `pick` (it was inert for ranking — pick ranks
+off the stored `combinedScore`); passing it now errors with a pointer to `just rescore`.
+
+**Why.** Re-weighting a round previously required `just parse` on the raw HTML, which risks
+silently changing the owner's file (a test re-parse once dropped 0.7/0.3 → 0.5/0.5 and
+re-ranked the field). A separate JSON-sourced verb keeps `parse` (HTML → truth) and `pick`
+(commit a distribution) untouched and closes backlog "Bugs #1" (inert `pick --weights`).
+Scope confirmed with owner as **A + C** of future-plans #17; the manual raw-score edit (B)
+and music/fit JSON restructure (D) remain deferred.
+
+**Refs.** `working tree` — `scripts/rescore-round.mjs`, `scripts/pick-round.mjs`,
+`scripts/ml.mjs`, `justfile`, `scripts/cli-help.mjs`, `tests/rescore-e2e.test.mjs`;
+`spec/point-allocation.md`, `spec/score-parsing.md`, `README.md`.
+
+---
+
+## 2026-07-10 — `needsFitScore` is channel-agnostic (tier/gate, not just numeric)
+
+**Change.** The missing-fit flag now covers **all** fit channels. After the numeric commit,
+`applyNumericFitAutoDetect` (`scripts/score/comment.mjs`) runs a `flagMissingFitSignals`
+pass: a song "has fit" if `fitScore != null || fitTier != null || gate != null`, and when
+≥ `NUMERIC_FIT_MIN_RATIO` (0.75) of scored songs carry a signal, the ones that don't are
+flagged `needsFitScore`. Numeric-missing flagging is now a special case of this general
+pass, so a tier- or gate-graded round with one un-graded straggler gets the same callout
+(`warnMissingFitScoresCli`, `ml status`, `music.json`). Warning copy generalized from "add a
+2nd number" to "add a fit score, tier word, or gate word".
+
+**Why.** `needsFitScore` previously only fired when the round used bare 2nd numbers, so a
+mostly-tier-graded round could hide a song with no fit signal. The owner asked that the flag
+cover tier and gate rounds too ("Does needs fit score cover if I used tier words or gate
+words … It should cover both").
+
+**Refs.** `working tree` — `scripts/score/comment.mjs`, `scripts/score-core.mjs`,
+`scripts/parse/cli-warn.mjs`, `scripts/ml.mjs`, `tests/comment-parse.test.mjs`,
+regression baseline; `spec/score-parsing.md`.
+
+---
+
+## 2026-07-10 — Pin diff prose shows `0`, not `·`, for a zero net
+
+**Change.** In the pick pin-comparison **diff lines** (`#i Title: <from> → <to>`), a zero
+net vote now renders as `0` (`fmtSignedNet(up, down, '0')`) instead of the table's `·`
+placeholder. The shared net-vote **table** keeps `·` for zero.
+
+**Why.** `#0 Take Me Away: · → -1` read oddly in prose; `0 → -1` is clearer. The dot still
+suits the dense table.
+
+**Refs.** `working tree` — `scripts/parse/cli-table.mjs`, `scripts/parse/cli-print.mjs`,
+`tests/cli-print.test.mjs`.
+
+---
+
 ## 2026-07-10 — `--pin i:0` forces a song to zero on both axes
 
 **Change.** A pin of `0` (`--pin 6:0`) now means "no vote of any kind": `parsePins`
@@ -306,7 +369,7 @@ blanket-merged, and all-songs lists artist `EXO` vs the export's `Exo`.
 ## 2026-07-06 — Last.fm export aggregation tooling + repointed scrobble source
 
 **Change.** Added `scripts/lastfm-export.mjs` (shared parse/normalize/aggregate/rules lib for
-the https://lastfm.ghan.nl/export/ "Recent Tracks" format), `scripts/lastfm-aggregate.mjs`
+the <https://lastfm.ghan.nl/export/> "Recent Tracks" format), `scripts/lastfm-aggregate.mjs`
 (writes `data/ref/lastfm/{tracks-literal,tracks-chart,tracks-merged,track-titles}.csv` +
 `_meta.json`), and `scripts/lastfm-merge-candidates.mjs` (flags variant tracks to merge on
 Last.fm; never auto-merges). Repointed `title-prefix-scan.mjs` (`SONG_CSV_FILES`) and

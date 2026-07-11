@@ -177,3 +177,31 @@ test('applyNumericFitAutoDetect: stays off below threshold (a lone 2nd number is
   assert.equal(songs[0].fitScore, null);
   assert.ok(!songs.some((s) => s.needsFitScore));
 });
+
+test('needsFitScore is channel-agnostic: flags an un-graded song in a tier-graded round', () => {
+  const songs = [
+    parse('75. moderate fit', { tierWords: true }),
+    parse('72. strong fit', { tierWords: true }),
+    parse('70. weak fit', { tierWords: true }),
+    parse('73', { tierWords: true }), // no tier word → flagged
+  ].map((s, i) => ({ ...s, rawOrderIndex: i, title: `s${i}` }));
+
+  const res = applyNumericFitAutoDetect(songs);
+  assert.equal(res.active, false); // no numeric commit
+  assert.equal(res.missing.length, 1);
+  assert.equal(songs[3].needsFitScore, true);
+  assert.equal(songs[0].needsFitScore, false);
+});
+
+test('needsFitScore is channel-agnostic: flags an un-graded song in a gate-graded round', () => {
+  const songs = [
+    parse('75. pass', { gateWords: true }),
+    parse('72. pass', { gateWords: true }),
+    parse('70. fail', { gateWords: true }),
+    parse('73', { gateWords: true }), // no gate word → flagged
+  ].map((s, i) => ({ ...s, rawOrderIndex: i, title: `s${i}` }));
+
+  const res = applyNumericFitAutoDetect(songs);
+  assert.equal(res.missing.length, 1);
+  assert.equal(songs[3].needsFitScore, true);
+});

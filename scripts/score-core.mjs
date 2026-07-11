@@ -8,6 +8,7 @@ export {
   tiebreakRank,
   formatMusicModifierFlags,
   applyNumericFitAutoDetect,
+  flagMissingFitSignals,
   NUMERIC_FIT_MIN_RATIO,
 } from './score/comment.mjs';
 export {

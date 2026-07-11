@@ -137,8 +137,8 @@ test('printAppliedAllocationCli renders a shared table for down-only pins', () =
   );
   assert.ok(out.includes('A cv + pin'), 'combo (up + down shape) title');
   assert.doesNotMatch(out, /Pins produced no changes/, 'down change is not "no changes"');
-  assert.ok(out.includes('#2 Pinned Down: · → -1'), 'gained downvote diff');
-  assert.ok(out.includes('#3 Worst: -1 → ·'), 'lost downvote diff');
+  assert.ok(out.includes('#2 Pinned Down: 0 → -1'), 'gained downvote diff (0, not ·)');
+  assert.ok(out.includes('#3 Worst: -1 → 0'), 'lost downvote diff (0, not ·)');
 });
 
 test('actionTradeoffsForCli keeps ties and drops pick tables', () => {

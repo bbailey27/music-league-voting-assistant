@@ -84,8 +84,13 @@ There is no fit-only notation; music is always the first number you write.
 - **Second number (auto-detected):** a bare 2nd # in the remainder is always surfaced as
   `fitNumberCandidate`. **No flag.** `applyNumericFitAutoDetect` scans the whole round: when
   ≥ **75%** (`NUMERIC_FIT_MIN_RATIO`) of scored songs carry a 2nd number, it commits that
-  number as `fitScore` for all of them and flags the stragglers `needsFitScore` (called out
-  like a missing music score). Below the threshold a lone 2nd number is ignored.
+  number as `fitScore` for all of them. Below the threshold a lone 2nd number is ignored.
+- **Missing-fit flag (`needsFitScore`, channel-agnostic):** after the numeric commit, a
+  `flagMissingFitSignals` pass treats a song as fit-graded if it has **any** signal
+  (`fitScore`, `fitTier`, or `gate`). When ≥ **75%** of scored songs are graded, the
+  un-graded stragglers are flagged `needsFitScore` — called out like a missing music score
+  (parse banner, `ml status`, `music.json`). This covers tier- and gate-graded rounds too,
+  not just numeric; numeric-missing flagging is a special case of it.
 - **Fit shorthand:** controlled multi-word phrases in the **remainder** after the
   music number (e.g. `76 fit bonus` → strong / 85). Always on. Not valid without a music score.
 - **Tier words (`--fit`):** scanned on the full scoring line only when `--fit` (or
@@ -104,7 +109,8 @@ There is no fit-only notation; music is always the first number you write.
   stored profile. An explicit `--gate` / `--cutoff` is never overridden.
 
 Tier and gate scanning are separate: `--fit` reads tier words, `--fit gate` reads gate words.
-Neither is on by default (no over-matching); numeric fit is the only auto-detected channel.
+Neither is on by default (no over-matching); numeric fit is the only auto-**committed** channel.
+The `needsFitScore` coverage flag, by contrast, spans all three channels (see above).
 
 ### Other
 

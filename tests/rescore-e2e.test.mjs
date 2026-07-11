@@ -1,0 +1,110 @@
+// End-to-end for `ml rescore`: parse --fit → pick → rescore over the sample
+// fixture in a throwaway ML_DATA_DIR. Asserts rescore re-blends combinedScore from
+// stored score/fitScore under new weights, resets the committed pick to draft, and
+// never reads HTML or writes picks.jsonl.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { mkdtemp, rm, mkdir, copyFile, readFile } from 'node:fs/promises';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
+
+const execFileP = promisify(execFile);
+const here = dirname(fileURLToPath(import.meta.url));
+const root = join(here, '..');
+const mlScript = join(root, 'scripts', 'ml.mjs');
+const fixtureHtml = join(root, 'tests', 'fixtures', 'sample-round', 'sample-round.html');
+const ROUND = '2020-01-01-sample-round';
+
+async function ml(env, ...args) {
+  return execFileP(process.execPath, [mlScript, ...args], { cwd: root, env });
+}
+
+const songByIndex = (data, i) => data.songs.find((s) => s.rawOrderIndex === i);
+
+test('rescore re-blends combinedScore under new weights and resets the pick to draft', async () => {
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-rescore-'));
+  const dataDir = join(tmpRoot, 'data');
+  const env = { ...process.env, ML_DATA_DIR: dataDir };
+  try {
+    await mkdir(join(dataDir, 'rounds'), { recursive: true });
+    await copyFile(fixtureHtml, join(dataDir, 'rounds', `${ROUND}.html`));
+    const analysisDir = join(dataDir, 'analysis', ROUND);
+    const musicJson = join(analysisDir, 'music.json');
+
+    await ml(env, 'parse', ROUND, '--fit');
+    const afterParse = JSON.parse(await readFile(musicJson, 'utf8'));
+    // song-0 "78 strong fit" resolves a strong tier under the manual-fit default blend.
+    assert.equal(songByIndex(afterParse, 0).fitScore, 85);
+    assert.deepEqual(afterParse.combineWeights, { fit: 0.5, music: 0.5 });
+    const combBefore = songByIndex(afterParse, 0).combinedScore;
+
+    await ml(env, 'pick', ROUND, 'A', '--reason', 'e2e');
+    const afterPick = JSON.parse(await readFile(musicJson, 'utf8'));
+    assert.equal(afterPick.pick.chosen, 'A', 'pick recorded');
+
+    await ml(env, 'rescore', ROUND, '--weights', '7:3');
+    const afterRescore = JSON.parse(await readFile(musicJson, 'utf8'));
+    // Re-blended from the stored score/fitScore under the new fit-heavier weights.
+    assert.deepEqual(afterRescore.combineWeights, { fit: 0.7, music: 0.3 });
+    assert.notEqual(
+      songByIndex(afterRescore, 0).combinedScore,
+      combBefore,
+      're-weighting changed the blended combinedScore'
+    );
+    assert.equal(afterRescore.pick, undefined, 'committed pick reset to draft');
+    assert.ok(afterRescore.tradeoffs.length, 'menu tradeoffs are present again');
+
+    // rescore must not touch the training log (pick wrote one row; rescore adds none).
+    const log = await readFile(join(dataDir, 'analysis', 'picks.jsonl'), 'utf8');
+    assert.equal(log.trim().split('\n').length, 1, 'rescore writes no picks.jsonl row');
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('rescore --dry-run does not write and reports the reset', async () => {
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-rescore-dry-'));
+  const dataDir = join(tmpRoot, 'data');
+  const env = { ...process.env, ML_DATA_DIR: dataDir };
+  try {
+    await mkdir(join(dataDir, 'rounds'), { recursive: true });
+    await copyFile(fixtureHtml, join(dataDir, 'rounds', `${ROUND}.html`));
+    const analysisDir = join(dataDir, 'analysis', ROUND);
+
+    await ml(env, 'parse', ROUND, '--fit');
+    const before = await readFile(join(analysisDir, 'music.json'), 'utf8');
+
+    const { stdout } = await ml(env, 'rescore', ROUND, '--weights', '7:3', '--dry-run');
+    assert.match(stdout, /Would rescore/);
+
+    const after = await readFile(join(analysisDir, 'music.json'), 'utf8');
+    assert.equal(before, after, 'dry-run leaves music.json untouched');
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('pick rejects --weights and points to rescore', async () => {
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-pick-weights-'));
+  const dataDir = join(tmpRoot, 'data');
+  const env = { ...process.env, ML_DATA_DIR: dataDir };
+  try {
+    await mkdir(join(dataDir, 'rounds'), { recursive: true });
+    await copyFile(fixtureHtml, join(dataDir, 'rounds', `${ROUND}.html`));
+    await ml(env, 'parse', ROUND, '--fit');
+
+    await assert.rejects(
+      ml(env, 'pick', ROUND, 'A', '--weights', '7:3'),
+      (err) => {
+        assert.match(err.stderr, /Deprecated: --weights on pick is inert/);
+        assert.match(err.stderr, /just rescore/);
+        return true;
+      }
+    );
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});

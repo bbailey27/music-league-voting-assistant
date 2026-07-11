@@ -13,6 +13,10 @@ merge *args:
 pick *args:
     node scripts/ml.mjs pick {{args}}
 
+# Re-weight/re-shape + re-allocate the draft menu from JSON (no HTML re-read; resets any pick)
+rescore *args:
+    node scripts/ml.mjs rescore {{args}}
+
 # Render fit-only JSON → data/analysis/<round>/fit.html (fuzzy name; extra flags pass through)
 fit *args:
     node scripts/ml.mjs fit {{args}}

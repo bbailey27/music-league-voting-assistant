@@ -4,6 +4,7 @@ export const HELP_TOPICS = [
   'parse',
   'merge',
   'pick',
+  'rescore',
   'final',
   'fit',
   'scores',
@@ -50,7 +51,7 @@ const RANK = `  --rank combined|fit|music
 const WEIGHTS = `  --weights <fit>:<music>  Blend ratio for combined ranking, e.g. 3:2 or
                           0.6:0.4 (normalized to sum 1). Stored in profile when
                           set. Defaults when omitted:
-                          • merge / thematic pick — 7:3 (fit:music)
+                          • merge / thematic rounds — 7:3 (fit:music)
                           • parse with manual fit in comments — 5:5 (50:50)`;
 
 const GATE = `  --gate passFail|passFailMaybe
@@ -81,7 +82,9 @@ Thematic:
 Re-parse only when you replace the HTML export. Pick is always a separate step.
 
 Commands:
-  ml parse | merge | pick | fit | scores | final | run | status | tidy | config | help
+  ml parse | merge | pick | rescore | fit | scores | final | run | status | tidy | config | help
+
+Re-weight/re-shape a parsed round from JSON (no HTML re-read): just rescore <name> --weights 5:5.
 
 <name> is optional after the first explicit use — stored in data/.current-round.
 Omit it to continue the same round (e.g. just parse --fit, just run, just merge).
@@ -189,11 +192,13 @@ Positional:
                           concentrated) when the round has downvotes — e.g.
                           just pick tarot A cv.
 
+pick ranks off the stored combinedScore — it does not re-blend. To change the
+fit:music weights (or re-shape from JSON without re-parsing), use just rescore.
+
 Flags:
   --reason "…"             Rationale stored in the pick record.
   ${PIN}
   ${RANK}
-  ${WEIGHTS}
   ${GATE}
   ${SHAPE}
   ${DOWN_SHAPE}
@@ -207,6 +212,29 @@ Example:
   just pick B --pin 11:3,12:3 --reason "lift top pair; shed bottom 1s"
   just pick story-5 A --pin 9:2 --reason "pin Two Evils to 2"
   just help pin                       # full --pin reference`,
+
+  rescore: `just rescore [<name>] [flags]
+
+Re-blend + re-allocate from JSON — never reads HTML, never re-scans comments.
+Recomputes each song's combinedScore from the stored music score + fitScore under
+new weights/knobs, re-runs the draft menu (A/B/C options), and rewrites
+music.md + music.json. Resets any committed pick back to draft (re-run just pick
+to commit again). Does NOT touch picks.jsonl. Omit <name> for the current round.
+
+Flags:
+  ${WEIGHTS}
+  ${RANK}
+  ${GATE}
+  ${SHAPE}
+  ${DOWN_SHAPE}
+  ${TIER_KNOBS}
+  ${FAVORITE_BAND}
+  --dry-run                Report the re-weight target without writing files.
+
+Example:
+  just rescore tarot --weights 5:5    # re-blend 50/50, reset pick to draft
+  just rescore story-8 --weights 7:3  # back to the fit-heavy default
+  just rescore --shape bell           # re-shape the current round's menu`,
 
   final: `just final [<name>] [flags]
 
@@ -287,8 +315,9 @@ Shared allocation / profile flags (see spec/point-allocation.md):
   Flag                    parse   merge   pick    Effect (summary)
   ─────────────────────── ─────── ─────── ─────── ─────────────────────────────
   --rank combined|fit|music   ✓       ✓       ✓     Ranking axis (see help parse/merge)
-  --weights fit:music         ✓       ✓       ✓     Blend ratio; default 7:3 merge/pick,
-                                                    5:5 parse w/ manual fit
+  --weights fit:music         ✓       ✓             Blend ratio; default 7:3 merge,
+                                                    5:5 parse w/ manual fit. NOT on
+                                                    pick (inert) — use just rescore
   --gate passFail|…           ✓       ✓       ✓     Thematic pass/maybe/fail model
   --cutoff axis:min           ✓       ✓       ✓     Numeric fit/music cutoff gate
   --shape preset              ✓       ✓       ✓     Upvote curve (auto, bell, …)
@@ -316,6 +345,10 @@ Pick-only:
 Render (fit / scores / final):
   --out path                        Output HTML path
   --order axis                      Card sort (values vary by command — see help)
+
+Rescore-only (re-blend/re-allocate from JSON; resets pick to draft):
+  just rescore <name> --weights fit:music | --shape | --rank | --gate | --down-shape
+                                    | --tier-count | --bucket-count | --favorite-band | --dry-run
 
 Other commands:
   just tidy     --dry-run | --no-name | --no-archive | --age <days>

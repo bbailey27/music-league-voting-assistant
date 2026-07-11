@@ -289,7 +289,11 @@ a specific field calls for it.
     `{ fit: 0.7, music: 0.3 }` (override with `--weights <fit>:<music>`, normalized
     to sum 1) and now act on **comparable scales**, so a decisive music gap is no
     longer drowned by a wide-but-fuzzy fit gap. See the
-    [decision log](decisions.md) for the rationale.
+    [decision log](decisions.md) for the rationale. To **re-weight an already-parsed
+    round** without re-reading the HTML, use `just rescore <round> --weights <fit>:<music>`
+    (re-blends `combinedScore` from the stored `score`/`fitScore`, re-runs the menu, and
+    resets any committed pick to draft). `pick --weights` is inert — it ranks off the
+    stored `combinedScore` — and now errors with a pointer to `rescore`.
   - Tiebreak chain always ends: higher score, then modifier rank
     (`play ≥ + > plain > -`), then title.
 - **`gate`** — a hard boundary; below it a song earns 0 regardless of the other axis.
