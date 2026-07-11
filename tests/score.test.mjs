@@ -1680,6 +1680,26 @@ test('downvote pin fixes a song\'s downvotes and forces it off the upvote axis',
   for (const s of songs) assert.ok(!(s.finalVotes && s.finalDownvotes), `${s.title} not both up and down`);
 });
 
+test('a :0 pin removes a song from the down pool so the bank flows to the tie partner', () => {
+  // Bottom two tied at 60 (idx 6, 7) sit firmly in the downvote zone (small up bank).
+  // A flat down bank would land a downvote on both; pinning idx 7 to 0 forces it out
+  // of the down pool, so its downvote shifts to the tie partner (idx 6).
+  const songs = mk([90, 85, 80, 75, 70, 65, 60, 60]);
+  allocate(
+    songs,
+    3,
+    3,
+    downProfile({ downvoteBudget: 3, downvoteCap: 2, downShape: 'flat', downOverrides: { 7: 0 }, overrides: { 7: 0 } })
+  );
+  const pinned = songs.find((s) => s.rawOrderIndex === 7);
+  const partner = songs.find((s) => s.rawOrderIndex === 6);
+  assert.equal(pinned.finalDownvotes || 0, 0, ':0 song gets no downvote');
+  assert.equal(pinned.finalVotes || 0, 0, ':0 song gets no upvote');
+  assert.ok((partner.finalDownvotes || 0) > 0, 'tie partner absorbs the freed downvote');
+  assert.equal(sumDown(songs), 3, 'down bank still fully spent on the rest');
+  assert.equal(sum(songs), 3, 'up bank still fully spent');
+});
+
 test('downvote pin is never topped up past its magnitude by spill', () => {
   const songs = mk([90, 85, 80, 75, 70, 65, 60, 55]);
   allocate(
@@ -1753,6 +1773,15 @@ test('parsePins splits negative values into downvote pins', () => {
   });
   // Down-only pins leave overrides undefined.
   assert.deepEqual(parsePins('6:-2'), { overrides: undefined, downOverrides: { 6: 2 } });
+});
+
+test('parsePins routes a :0 pin to zero on both axes', () => {
+  // 0 means "no vote of any kind" — pinned to 0 up AND 0 down (out of both pools).
+  assert.deepEqual(parsePins('6:0'), { overrides: { 6: 0 }, downOverrides: { 6: 0 } });
+  assert.deepEqual(parsePins('0:-1,6:0'), {
+    overrides: { 6: 0 },
+    downOverrides: { 0: 1, 6: 0 },
+  });
 });
 
 test('parsePins returns undefined when nothing is pinned', () => {

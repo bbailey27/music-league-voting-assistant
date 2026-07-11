@@ -11,6 +11,54 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-10 — `--pin i:0` forces a song to zero on both axes
+
+**Change.** A pin of `0` (`--pin 6:0`) now means "no vote of any kind": `parsePins`
+(`scripts/parse/cli-flags.mjs`) routes it to **both** `overrides[i] = 0` and
+`downOverrides[i] = 0`, and `allocateDownvotes` (`scripts/score/allocate.mjs`) treats a
+finite down override `>= 0` (not just `> 0`) as pinned, so a `:0` song is committed at
+zero and excluded from the down pool (its shape downvote flows to the rest of the bank).
+Previously `i:0` fell into the upvote branch as a `0` up-pin, a no-op that left the song's
+shape downvote in place.
+
+**Why.** With two songs tied on combined score, the flat/curved down shape downvotes one
+arbitrarily; the owner needs a way to say "not this one" and push the downvote to the tie
+partner. `:0` is the natural "force zero" pin for that. (Related gap logged in
+`future-plans` Bugs #4: tied scores straddling a vote-tier boundary should also emit a
+tie-split callout.)
+
+**Refs.** `working tree` — `scripts/parse/cli-flags.mjs`, `scripts/score/allocate.mjs`,
+`tests/score.test.mjs`.
+
+---
+
+## 2026-07-10 — Pin comparison: one shared up+down net table
+
+**Change.** The `pick` pin comparison is now a single shared table instead of an
+upvote-only `A (original)` / `A (altered)` pair. It ranks every non-own song by
+combined (or music) score and shows signed net votes (`+up` / `-down` / `·`) in an
+`Original` column (the chosen up option **+** chosen down shape, with **no** pins on
+either axis) and an `Altered` column (the applied ballot). Every net change — up or
+down — is listed as one diff (`#i Title: <orig> → <alt>`). The header names the combo
+(`A cv + pin`). `hadPins` now counts **down** pins too (`hasAnyPins`), so a
+downvote-only pin still renders the comparison and no longer prints a false "Pins
+produced no changes". The clean baseline comes from `applyOptionPick` forcing the
+option's own up split with empty `downOverrides` (down eligibility depends on the up
+split), captured before the pinned reallocation; its `reallocate` closures take an
+explicit `downOverrides` argument.
+
+**Why.** With downvote pins the old output was misleading: down-only pins skipped the
+table entirely (`hadPins` only saw upvote overrides), the table showed only upvotes,
+and it recomputed option A _from_ the pins so the "original" didn't match the menu A.
+The owner asked for the combo `A + cv` as the baseline and the pin diffs measured
+against it — "merge that table as if it's like the ballot but ranked in combined-score
+order, apply both original picks, then see what the diffs are."
+
+**Refs.** `working tree` — `scripts/round/pick.mjs`, `scripts/pick-round.mjs`,
+`scripts/parse/cli-print.mjs`, `scripts/parse/cli-table.mjs`, `tests/cli-print.test.mjs`.
+
+---
+
 ## 2026-07-10 — Split fit flags: `--fit [tier|gate]` + auto-detected numeric fit
 
 **Change.** `--fit-words` (which bundled tier words, gate words, and a bare 2nd number)
@@ -33,7 +81,7 @@ fit is auto-detected because "two numbers on every song clearly means I wanted f
 the 75% threshold tolerates a few stragglers while calling them out (line-156 backlog note:
 a missing fit score deserves the same callout as a missing music score).
 
-**Refs.** `working tree` — `scripts/score/comment.mjs`, `scripts/score-core.mjs`,
+**Refs.** `f43117a` — `scripts/score/comment.mjs`, `scripts/score-core.mjs`,
 `scripts/parse-round.mjs`, `scripts/parse/cli-warn.mjs`, `scripts/ml.mjs`,
 `scripts/score/render.mjs`, `scripts/cli-help.mjs`, `tests/comment-parse.test.mjs`,
 `tests/ml.test.mjs`, regression baseline; `spec/score-parsing.md`, `spec/scoring-comments.md`,

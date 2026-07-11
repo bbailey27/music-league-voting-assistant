@@ -503,7 +503,9 @@ function allocateDownvotes(songs, budget, cap, profile, tradeoffs, downSet) {
   // shaped pool AND from spill (so they're never topped up past the pin), with the
   // rest of the bank shaped around them. `downSet`/`budget` below are the residual.
   const downOverrides = profile.downOverrides || {};
-  const isPinned = (s) => Number.isFinite(downOverrides[s.rawOrderIndex]) && downOverrides[s.rawOrderIndex] > 0;
+  // A down pin of 0 (from `--pin i:0`) forces the song out of the down pool at zero,
+  // so it's "pinned" too — just at magnitude 0. Any finite override counts.
+  const isPinned = (s) => Number.isFinite(downOverrides[s.rawOrderIndex]) && downOverrides[s.rawOrderIndex] >= 0;
   const pinAmount = (s) => Math.max(0, Math.min(downOverrides[s.rawOrderIndex], cap));
   const pinnedDown = songs.filter((s) => downSet.has(s) && isPinned(s));
   const applyPins = () => {

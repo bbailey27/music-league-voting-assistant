@@ -82,6 +82,13 @@ export function fmtCliVoteCell(v, { excluded = false, down = false } = {}) {
   return '·';
 }
 
+/** Signed net-vote cell: +up, -down, or · (zero). */
+export function fmtSignedNet(up = 0, down = 0) {
+  if (up > 0) return `+${up}`;
+  if (down > 0) return `-${down}`;
+  return '·';
+}
+
 /** Raw-order ballot cell; signed (+/−) only when the round uses both vote banks. */
 export function fmtCliBallotVote(s, signed) {
   if (!s) return '';
@@ -89,11 +96,7 @@ export function fmtCliBallotVote(s, signed) {
   if (isExcludedFromAllocation(s)) return '-';
   const up = s.finalVotes ?? s.draftVotes ?? 0;
   const down = s.finalDownvotes ?? s.draftDownvotes ?? 0;
-  if (signed) {
-    if (up > 0) return `+${up}`;
-    if (down > 0) return `-${down}`;
-    return '·';
-  }
+  if (signed) return fmtSignedNet(up, down);
   if (up > 0) return String(up);
   if (down > 0) return String(down);
   return '·';

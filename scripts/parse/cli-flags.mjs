@@ -14,10 +14,18 @@ export function parsePins(specs) {
       const i = Number(idx);
       const v = Number(votes);
       if (!Number.isInteger(i) || i < 0 || !Number.isInteger(v)) {
-        throw new Error(`Invalid --pin "${pair}" (use <rawOrderIndex>:<votes>, negative for downvotes, e.g. 2:2 or 6:-2)`);
+        throw new Error(`Invalid --pin "${pair}" (use <rawOrderIndex>:<votes>, negative for downvotes, 0 to force no vote, e.g. 2:2, 6:-2, or 6:0)`);
       }
-      if (v < 0) downOverrides[i] = -v;
-      else overrides[i] = v;
+      // 0 pins the song to no vote on EITHER axis (excluded from up shaping and the
+      // down pool) — the way to break a tie by removing one song's shape downvote.
+      if (v === 0) {
+        overrides[i] = 0;
+        downOverrides[i] = 0;
+      } else if (v < 0) {
+        downOverrides[i] = -v;
+      } else {
+        overrides[i] = v;
+      }
     }
   }
   const hasUp = Object.keys(overrides).length > 0;

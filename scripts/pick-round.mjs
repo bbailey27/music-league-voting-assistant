@@ -153,6 +153,13 @@ function songsFromPayload(data) {
   return (data.songs || []).map((s) => ({ ...s }));
 }
 
+/** True when the pick carries a manual pin on either the up or down axis. */
+function hasAnyPins(profile) {
+  const up = profile.overrides && Object.keys(profile.overrides).length;
+  const down = profile.downOverrides && Object.keys(profile.downOverrides).length;
+  return Boolean(up || down);
+}
+
 function buildProfile(args, stored, budget, mode) {
   const gate = buildGate(args) ?? stored?.gate;
   const weights = parseWeights(args.weights) ?? stored?.weights;
@@ -251,11 +258,11 @@ async function main() {
     const picked = applyOptionPick({
       optionSpec: args.option,
       reason: args.reason,
-      reallocate: (overrides) =>
+      reallocate: (overrides, downOverrides = profile.downOverrides) =>
         mergeFitJson(parsed, fitData, {
           ...mergeProfile,
           overrides,
-          downOverrides: profile.downOverrides,
+          downOverrides,
         }).tradeoffs,
       initialTradeoffs: tradeoffs,
       baseOverrides: profile.overrides,
@@ -277,8 +284,9 @@ async function main() {
     await writeFile(scoresPaths(roundId).json, JSON.stringify(fitData, null, 2), 'utf8');
     console.log(`Wrote ${scoresPaths(roundId).json}`);
     printAppliedAllocationCli(parsed.songs, parsed.ownSongs, picked.pick, parsed.budget, {
-      hadPins: Boolean(profile.overrides && Object.keys(profile.overrides).length),
+      hadPins: hasAnyPins(profile),
       profile: slimProfile(mergeProfile),
+      baseline: picked.baseline,
     });
     warnPickWithMissingScores(parsed.songs);
     await recordPickToTrainingLog(roundId, fitData.songs, picked.pick);
@@ -294,8 +302,8 @@ async function main() {
   const picked = applyOptionPick({
     optionSpec: args.option,
     reason: args.reason,
-    reallocate: (overrides) =>
-      allocate(songs, upBudget, upCap, { ...profile, overrides }).tradeoffs,
+    reallocate: (overrides, downOverrides = profile.downOverrides) =>
+      allocate(songs, upBudget, upCap, { ...profile, overrides, downOverrides }).tradeoffs,
     initialTradeoffs: tradeoffs,
     baseOverrides: profile.overrides,
     downOverrides: profile.downOverrides,
@@ -339,8 +347,9 @@ async function main() {
   await writeFile(paths.json, JSON.stringify(payload, null, 2), 'utf8');
   console.log(`Wrote ${paths.json}`);
   printAppliedAllocationCli(songs, musicData.ownSongs || [], picked.pick, budget, {
-    hadPins: Boolean(profile.overrides && Object.keys(profile.overrides).length),
+    hadPins: hasAnyPins(profile),
     profile: slim,
+    baseline: picked.baseline,
   });
   warnPickWithMissingScores(songs);
   await recordPickToTrainingLog(roundId, songs, picked.pick);

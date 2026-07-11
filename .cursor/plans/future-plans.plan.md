@@ -17,7 +17,7 @@ isProject: false
 | [split-score-core-into-modules.plan.md](split-score-core-into-modules.plan.md) | Phases 2–4: renderer dedup, split tests, helper dedup — full steps in plan                    |
 | [improve-just-cli-and-docs.plan.md](improve-just-cli-and-docs.plan.md)         | Phase 3: `tests/ml.test.mjs`, e2e fixture — full spec in plan                                 |
 | [release-date-enrichment.plan.md](release-date-enrichment.plan.md)             | Round year-gate shipped; open: fetch providers, CSV enrichment, deluxe schema/spec            |
-| [release-date-airtable-sync.plan.md](release-date-airtable-sync.plan.md)       | Push release dates to Airtable + scrobble→Airtable reconciliation (access method TBD)          |
+| [release-date-airtable-sync.plan.md](release-date-airtable-sync.plan.md)       | Push release dates to Airtable + scrobble→Airtable reconciliation (access method TBD)         |
 
 ## Optional polish (no dedicated plan file)
 
@@ -79,81 +79,8 @@ Output snapshot regression test (diff-based): see
 14. Start writing airtable scripts: Get data like links, release year, and theme summary from here into my airtable listings as well. Maybe add a tags field with a re-classify script instead of all the separarate rough formulas for checkboxes. Solidify scraping scripts or API connections to gather than data. Write merge scripts to get scrobbles into the same view as pandora songs and continue merging and splitting titles/versions/albums and artists properly. If it's too much to import supporting data from here (and those K-Pop databases I found) then maybe export to a raw file, run scripts to merge details without storing them as separate tables (keep the CSVs don't add them raw to airtable), then re-upload with a merge script in Airtable as well if needed.
 15. Just run could also have a detail flag to output current state. I started on the agent window so it ran parse already and I don't want to mess up the flags. But just run (to see what comes next) only said picka distribution. It didn't show me the distributions to pick from.
 16. Improve ballot output some mroe. On CLI I'd like to se votes right next to combined. mod should be next to the score it modifies. Currently not next to the music score. But also what if music and fit scores both were numeric with mods? would they share 1 mod column? is one silently dropped?
-
-## Debug this output
-
-Up # Song Music Fit Combined Mod A B C Comment  
- 0 Love 74 90 84.1 · 2 1 3 74. 9. sentence end  
- 5 To Forget 70 90 78.4 · 1 1 2 7. 9. good noun options like her smile or my …
-6 Revolution 78 - 78 · 1 1 2 78  
- 9 Time 75 83 77.9 · 1 1 1 75. 83. new sentence but adds opportunity for…
-4 Something I Can Never H… 74.2 80 73.5 · 1 1 · 742. 8 fit. good for this sentence but what c…
-8 Lost In The Light 75.5 77 72.6 + 1 1 · 755+. 77 creative. new sentence. wants someth…
-7 Satisfaction 74.5 78 71.3 - 1 1 · 745- like the beat more than the words. 78 fi…
-1 The girl who resembles … 75.5 76 71.0 · · 1 · 755. 76 fit. you. but optional sentence end a…
-Total 8 8 8  
- A just pick 2026-07-04-story-7 A B just pick 2026-07-04-story-7 B C just pick 2026-07-04-story-7 C
-
-Down # Song Music Fit Combined Mod cv cc Comment  
- 1 The girl who resembles … 75.5 76 71.0 · -2 · 755. 76 fit. you. but optional sentence end an…
-3 Another Day 77 70 66.7 · -2 -4 77. 7. check how easy 'to' was to fit next. th…
-Total -4 -4  
- cv just pick 2026-07-04-story-7 A cv cc just pick 2026-07-04-story-7 A cc
-
-Ballot # Song Music Fit Combined Mod Votes Comment  
- 0 Love 74 90 84.1 · +2 74. 9. sentence end  
- 1 The girl who resembles … 75.5 76 71.0 · -2 755. 76 fit. you. but optional sentence end and…
-2 One Day — — — · — ·  
- 3 Another Day 77 70 66.7 · -2 77. 7. check how easy 'to' was to fit next. thi…
-4 Something I Can Never H… 74.2 80 73.5 · +1 742. 8 fit. good for this sentence but what com…
-5 To Forget 70 90 78.4 · +1 7. 9. good noun options like her smile or my li…
-6 Revolution 78 - 78 · +1 78  
- 7 Satisfaction 74.5 78 71.3 - +1 745- like the beat more than the words. 78 fit.…
-8 Lost In The Light 75.5 77 72.6 + +1 755+. 77 creative. new sentence. wants somethin…
-9 Time 75 83 77.9 · +1 75. 83. new sentence but adds opportunity for s…
-Total +8/-4
-
-bridgetbailey@MacBook-Pro:~/dev/music-league-voting-assistant/data output=''
-[main ≡ +8 ~2 -9]$ just pick A cv --pin 3:-1,7:-1,5:2
-node scripts/ml.mjs pick A cv --pin 3:-1,7:-1,5:2
-(current round: 2026-07-04-story-7)
-Applied option A — 2 tiers, 2×1 / 1×6. (2 manual tweaks)
-Wrote data/analysis/2026-07-04-story-7/music.md
-Wrote data/analysis/2026-07-04-story-7/music.json
-
-A + pin # Song Music Fit Combined Mod A (original) A (altered) Comment  
- 0 Love 74 90 84.1 · 2 2 74. 9. sentence end  
- 5 To Forget 70 90 78.4 · 1 2 7. 9. good noun options lik…
-6 Revolution 78 - 78 · 1 1 78  
- 9 Time 75 83 77.9 · 1 1 75. 83. new sentence but ad…
-4 Something I Can Never H… 74.2 80 73.5 · 1 1 742. 8 fit. good for this s…
-8 Lost In The Light 75.5 77 72.6 + 1 1 755+. 77 creative. new sent…
-1 The girl who resembles … 75.5 76 71.0 · 1 · 755. 76 fit. you. but optio…
-Total 8 8/4  
- #5 To Forget: 1 → 2
-#1 The girl who resembles you (feat. Ha Yea Song): 1 → 0
-#3 Another Day: -1
-#7 Satisfaction: -1
-
-Applied # Song Music Fit Combined Mod Votes Comment  
- 0 Love 74 90 84.1 · +2 74. 9. sentence end  
- 1 The girl who resembles … 75.5 76 71.0 · -2 755. 76 fit. you. but optional sentence end and…
-2 One Day — — — · — ·  
- 3 Another Day 77 70 66.7 · -1 77. 7. check how easy 'to' was to fit next. thi…
-4 Something I Can Never H… 74.2 80 73.5 · +1 742. 8 fit. good for this sentence but what com…
-5 To Forget 70 90 78.4 · +2 7. 9. good noun options like her smile or my li…
-6 Revolution 78 - 78 · +1 78  
- 7 Satisfaction 74.5 78 71.3 - -1 745- like the beat more than the words. 78 fit.…
-8 Lost In The Light 75.5 77 72.6 + +1 755+. 77 creative. new sentence. wants somethin…
-9 Time 75 83 77.9 · +1 75. 83. new sentence but adds opportunity for s…
-Total +8/-4  
-Logged pick to data/analysis/picks.jsonl
-bridgetbailey@MacBook-Pro:~/dev/music-league-voting-assistant/data output=''
-
-THe girl who... was at 0 points in A and -2 in cv. Yet pick A cv registered a change from 1>0 out of nowhere. The 'original' table does not match the original A. Ah I see it took song 7 out since I pinned that negative. Change should have been Satisfaction +1 to -1, and then the girl goes from - to -2. Instead it redid A and then calculated the diff from the new one. And didn't show the original downvotes. It also showed 1 > 0 for the girl but didn't acknowledge anywhere that it was actually negative not 0. I guess the downvote side didn't register a 'change' since that one didn't change in cv. Only upvote with the reflow registered a 'change'. Just weird overall.
-The initial up table should show all songs except mine (so it's clear which get 0 in all cases).
-The alterations list from bins should handle the combo like A + cv, not make up scores for the downvote changes. I guess it should also output the combo A+cv as the original. part of the weirdness was from recalculating A partially from the pins, and part was from not displaying the downvotes at all. Much harder to spot what happened when you're missing half the picture AND it's making up new numbers.
-Should have called out my missing fit score. If we're going purely on manual numbers then a missing fit score needs the same callout as a missing music score.
+17. Decouple fit, gate, weights, etc flags from parse. add ability to use a shortcut like re-run or plain just run to alter combined score and weightings and output separate from the actual raw file parsing. May mean restructuring music vs fit json? output the table again after each alteration. also a command to manually adjust a raw score without editing or re-pasting the HTML. Similar to pin but update the actual music and fit jsons. if no re-parse of the raw using these new commands, it should stick.
+18. Testing dry-run / scratch-pad. Agents (and the owner) sometimes need to exercise parse/pick/rescore against a real round to verify behavior, but doing so today overwrites the round's `music.json`/`music.md` (and can silently change weights, as happened when a test re-parse dropped 0.7/0.3 → 0.5/0.5). Provide a safe scratch mode — e.g. a `--scratch`/`--sandbox` flag or a temp working copy — that runs the full pipeline and prints the tables/output WITHOUT writing back to the round's real files (or writes to a throwaway path). Goal: never mutate the owner's committed analysis as a side effect of testing.
 
 ## Bugs
 
@@ -176,6 +103,14 @@ groupings \*before the near-tier merge decision that collapses two adjacent clus
 one point tier), so I can tell it "cut the field into K clusters, then you decide merges,"
 rather than just "make tiers − 1." Revisit what the knob controls / rename accordingly.
 (Ties into backlog #12: whatever K really means, surface it in the CLI.)
+4. **Tied combined score in different vote tiers gets no callout.** When two songs share
+   the same combined score but land in different vote bands (one funded/downvoted, the
+   other not), the allocator picks one arbitrarily with no tie-split notice. There is a
+   `tier-split` tradeoff for the up axis, but the **down** axis (and possibly the CLI
+   surfacing) doesn't flag it — repro on `2026-07-07-story-8`, two songs at 69.0 where the
+   flat down bank downvoted one and not the other silently. Fix: emit a tie-split/notice
+   when equal combined scores straddle a vote-tier boundary on either axis. Workaround
+   today: `--pin i:0` to force one out (now supported).
 
 ## Deferred (may not ship)
 

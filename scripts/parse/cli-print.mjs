@@ -1,7 +1,7 @@
 // Terminal print helpers for parse / pick tradeoff menus.
 
 import { TRADEOFF_OPTION_LETTERS } from '../round/pick.mjs';
-import { downShapeShort, formatPickCmd, pickHintLine } from '../cli-commands.mjs';
+import { downShapeShort, formatPickCmd, formatPickSpec, pickHintLine } from '../cli-commands.mjs';
 import {
   cliScoreCells,
   cliScoreHeaders,
@@ -10,6 +10,7 @@ import {
   fmtCliBallotVote,
   fmtCliBallotVoteTotal,
   fmtCliVoteCell,
+  fmtSignedNet,
   formatCliComment,
   formatCliMod,
   isExcludedFromAllocation,
@@ -141,46 +142,101 @@ function printOptionTableCli(t, roundId, songs, ownSongs, down, profile = null) 
   console.log(`    ${legend}`);
 }
 
-function optionPinColumnLabels(letter) {
-  return [`${letter} (original)`, `${letter} (altered)`];
+/** Combo baseline label: `A cv + pin` (up letter + down shape) or `A + pin`. */
+function comparisonTitle(letter, profile, anyDown) {
+  const downShape = profile?.downShape || (anyDown ? 'curved' : null);
+  return `${formatPickSpec(letter, downShape)} + pin`;
 }
 
-/** Side-by-side original option vs pin-reconciled allocation (combined-score order). */
-export function printOptionPinComparisonCli(songs = [], ownSongs = [], pick = null, profile = null) {
-  if (!pick?.chosen) return false;
+/** Baseline net votes per song: prefer the captured pin-free allocation, else fall
+ *  back to the chosen option's up split (no downvotes) for legacy callers. */
+function baselineNetMap(baseline, pick) {
+  if (baseline instanceof Map) return baseline;
+  if (baseline) return new Map(Object.entries(baseline).map(([k, v]) => [Number(k), v]));
   const chosen =
-    pick.options?.find((o) => o.isChosen) ??
-    pick.options?.[pick.chosenIndex ?? pick.chosen.charCodeAt(0) - 65];
-  if (!chosen?.perSong?.length) return false;
+    pick?.options?.find((o) => o.isChosen) ??
+    pick?.options?.[pick?.chosenIndex ?? (pick?.chosen ? pick.chosen.charCodeAt(0) - 65 : 0)];
+  const m = new Map();
+  for (const p of chosen?.perSong || []) m.set(p.rawOrderIndex, { up: p.votes || 0, down: 0 });
+  return m;
+}
 
-  const letter = pick.chosen;
-  const [origHdr, altHdr] = optionPinColumnLabels(letter);
-  const tableRows = expandTradeoffRows(chosen.perSong, songs, ownSongs, profile);
+/** Non-own songs ranked by combined (or music) score desc; unscored/excluded last. */
+function rankedComparisonSongs(songs, showCombined, profile) {
+  const scoreOf = (s) => (showCombined ? s.combinedScore : s.score);
+  return [...songs].sort((a, b) => {
+    const ea = isExcludedFromAllocation(a, profile);
+    const eb = isExcludedFromAllocation(b, profile);
+    if (ea !== eb) return ea ? 1 : -1;
+    const sa = scoreOf(a);
+    const sb = scoreOf(b);
+    if (sa == null && sb == null) return (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0);
+    if (sa == null) return 1;
+    if (sb == null) return -1;
+    return sb - sa || (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0);
+  });
+}
+
+/**
+ * One shared comparison table for a pinned pick: the chosen up option + down shape
+ * as the `Original` net-vote baseline, the applied ballot as `Altered`, ranked by
+ * combined (or music) score. Downvote and upvote pins read from the same signed
+ * column, and every net change lists a single diff. Returns `{ rendered, changed }`.
+ */
+export function printOptionPinComparisonCli(
+  songs = [],
+  ownSongs = [],
+  pick = null,
+  profile = null,
+  baseline = null
+) {
+  if (!pick?.chosen) return { rendered: false, changed: false };
+  const base = baselineNetMap(baseline, pick);
+  const baseFor = (idx) => base.get(idx) || { up: 0, down: 0 };
   const showCombined = cliShowsCombined(songs, ownSongs);
   const scoreHdrs = cliScoreHeaders(showCombined);
-  const headers = ['#', 'Song', ...scoreHdrs, 'Mod', origHdr, altHdr, 'Comment'];
-  const finalByIdx = new Map(songs.map((s) => [s.rawOrderIndex, s.finalVotes ?? 0]));
-  const origTotal = chosen.perSong.reduce((a, s) => a + (s.votes || 0), 0);
+  const rows = rankedComparisonSongs(songs, showCombined, profile);
+  const anyDown = rows.some(
+    (s) => baseFor(s.rawOrderIndex).down > 0 || (s.finalDownvotes || 0) > 0
+  );
+  const headers = ['#', 'Song', ...scoreHdrs, 'Mod', 'Original', 'Altered', 'Comment'];
+
+  let baseUp = 0;
+  let baseDown = 0;
   let altUp = 0;
   let altDown = 0;
-  for (const s of songs) {
-    if (s.isOwn || isExcludedFromAllocation(s)) continue;
-    altUp += s.finalVotes ?? 0;
-    altDown += s.finalDownvotes ?? 0;
+  const diffs = [];
+  for (const s of rows) {
+    if (isExcludedFromAllocation(s, profile)) continue;
+    const b = baseFor(s.rawOrderIndex);
+    const fUp = s.finalVotes || 0;
+    const fDown = s.finalDownvotes || 0;
+    baseUp += b.up;
+    baseDown += b.down;
+    altUp += fUp;
+    altDown += fDown;
+    if (b.up !== fUp || b.down !== fDown) {
+      diffs.push({
+        rawOrderIndex: s.rawOrderIndex,
+        title: s.title,
+        from: fmtSignedNet(b.up, b.down),
+        to: fmtSignedNet(fUp, fDown),
+      });
+    }
   }
+
   const mkRow = (commentMax) =>
-    tableRows.map((row) => {
-      const excluded = row.excluded || isExcludedFromAllocation(row.song, profile);
-      const orig = chosen.perSong[row.ri]?.votes ?? 0;
-      const alt = finalByIdx.get(row.rawOrderIndex) ?? 0;
+    rows.map((s) => {
+      const excluded = isExcludedFromAllocation(s, profile);
+      const b = baseFor(s.rawOrderIndex);
       return [
-        String(row.rawOrderIndex),
-        truncTitle(row.title),
-        ...cliScoreCells(row.song, showCombined),
-        formatCliMod(row.song),
-        excluded ? '-' : fmtCliVoteCell(orig),
-        excluded ? '-' : fmtCliVoteCell(alt),
-        formatCliComment(row.song, commentMax),
+        String(s.rawOrderIndex),
+        truncTitle(s.title),
+        ...cliScoreCells(s, showCombined),
+        formatCliMod(s),
+        excluded ? '-' : fmtSignedNet(b.up, b.down),
+        excluded ? '-' : fmtSignedNet(s.finalVotes || 0, s.finalDownvotes || 0),
+        formatCliComment(s, commentMax),
       ];
     });
   const dataRows = buildTableRows(headers, mkRow);
@@ -189,28 +245,16 @@ export function printOptionPinComparisonCli(songs = [], ownSongs = [], pick = nu
     'Total',
     ...scoreHdrs.map(() => ''),
     '',
-    fmtCliVoteCell(origTotal),
-    fmtCliBallotVoteTotal(altUp, altDown, false),
+    fmtCliBallotVoteTotal(baseUp, baseDown, true),
+    fmtCliBallotVoteTotal(altUp, altDown, true),
     '',
   ]);
-  console.log(`\n${letter} + pin`);
+  console.log(`\n${comparisonTitle(pick.chosen, profile, anyDown)}`);
   printTextTable(headers, dataRows);
-  return true;
-}
-
-function printUpTweakLines(pick) {
-  if (!pick?.tweaks?.length) return false;
-  for (const t of pick.tweaks) {
-    console.log(`    #${t.rawOrderIndex} ${t.title}: ${t.from} → ${t.to}`);
+  for (const d of diffs) {
+    console.log(`    #${d.rawOrderIndex} ${d.title}: ${d.from} → ${d.to}`);
   }
-  return true;
-}
-
-function printDownTweakLines(pick) {
-  if (!pick?.downTweaks?.length) return;
-  for (const t of pick.downTweaks) {
-    console.log(`    #${t.rawOrderIndex}${t.title ? ` ${t.title}` : ''}: ${t.to}`);
-  }
+  return { rendered: true, changed: diffs.length > 0 };
 }
 
 const PICK_TRADEOFF_KINDS = new Set(['tier-structure', 'down-structure']);
@@ -262,19 +306,15 @@ export function printAppliedAllocationCli(
   ownSongs = [],
   pick = null,
   budget = null,
-  { hadPins = false, profile = null } = {}
+  { hadPins = false, profile = null, baseline = null } = {}
 ) {
   const rows = rawOrderRows(songs, ownSongs);
   if (!rows.length) return;
   const signed = (budget?.downvoteBankSize ?? 0) > 0;
-  const showComparison = hadPins || (pick?.tweaks?.length ?? 0) > 0;
-  if (showComparison && printOptionPinComparisonCli(songs, ownSongs, pick, profile)) {
-    if (hadPins) {
-      if (!printUpTweakLines(pick)) console.log('    Pins produced no changes');
-    } else {
-      printUpTweakLines(pick);
-    }
-    printDownTweakLines(pick);
+  const hasTweaks = (pick?.tweaks?.length ?? 0) > 0 || (pick?.downTweaks?.length ?? 0) > 0;
+  if (hadPins || hasTweaks) {
+    const { rendered, changed } = printOptionPinComparisonCli(songs, ownSongs, pick, profile, baseline);
+    if (rendered && !changed && hadPins) console.log('    Pins produced no changes');
   }
   printRawBallotTable('Applied', rows, cliShowsCombined(songs, ownSongs), signed);
 }

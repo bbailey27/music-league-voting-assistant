@@ -126,16 +126,30 @@ export function applyOptionPick({
       console.error(error);
       process.exit(1);
     }
-    return { error, tradeoffs: initialTradeoffs, pick: null };
+    return { error, tradeoffs: initialTradeoffs, pick: null, baseline: null };
   }
-  const tradeoffs = reallocate(overrides);
+  // Clean baseline for the pin comparison: the chosen option's own up split with
+  // the down shape allocated around it, and NO pins on either axis. Down eligibility
+  // depends on the up split, so this must force the option's exact upvotes (not the
+  // menu default) before capturing the baseline downvotes. Run it first, snapshot,
+  // then reallocate with pins so `songs` ends in the applied (altered) state.
+  const chosen = presented[idx];
+  const optionOverrides = Object.fromEntries(
+    (chosen?.perSong || []).map((p) => [p.rawOrderIndex, p.votes])
+  );
+  reallocate(optionOverrides, {});
+  const baseline = new Map(
+    songs.map((s) => [s.rawOrderIndex, { up: s.finalVotes || 0, down: s.finalDownvotes || 0 }])
+  );
+
+  const tradeoffs = reallocate(overrides, downOverrides);
   const pick = buildPickRecord({ options: presented, chosenIndex: idx, songs, reason, downOverrides });
   console.log(
     `Applied option ${pick.chosen} — ${pick.tierCount} tier${pick.tierCount === 1 ? '' : 's'}, ${pick.shape}.` +
       (pick.tweaks.length ? ` (${pick.tweaks.length} manual tweak${pick.tweaks.length === 1 ? '' : 's'})` : '') +
       (pick.reason ? ` Reason: ${pick.reason}` : '')
   );
-  return { tradeoffs, pick };
+  return { tradeoffs, pick, baseline };
 }
 
 export async function recordPickToTrainingLog(roundId, songs, pick) {
