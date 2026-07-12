@@ -1360,6 +1360,54 @@ test('normalization: contenders exclude gated-out fit so the std reflects real c
   }
 });
 
+test('combined cutoff gates allocation without rescaling the combined scores', () => {
+  // Regression: a `combined` cutoff must NOT shrink the normalization contender
+  // set (that is circular — combinedScore is what normalization produces — and
+  // collapsed the field to a couple songs, blowing the z-scores up). Combined
+  // scores must be identical with and without the cutoff.
+  const base = () => [
+    { rawOrderIndex: 0, score: 76, fitScore: 90 },
+    { rawOrderIndex: 1, score: 73, fitScore: 90 },
+    { rawOrderIndex: 2, score: 72, fitScore: 75 },
+    { rawOrderIndex: 3, score: 71, fitScore: 78 },
+    { rawOrderIndex: 4, score: 72, fitScore: 60 },
+    { rawOrderIndex: 5, score: 55, fitScore: 40 },
+  ];
+  const w = { fit: 0.5, music: 0.5 };
+  const ungated = base();
+  normalizeCombined(ungated, w, null, { fitTrust: 'manual' });
+  const gated = base();
+  normalizeCombined(gated, w, { type: 'cutoff', axis: 'combined', min: 76 }, { fitTrust: 'manual' });
+  for (const i of [0, 1, 2, 3, 4, 5]) {
+    assert.ok(
+      Math.abs(combinedById(ungated)[i] - combinedById(gated)[i]) < 1e-9,
+      `combined cutoff leaves combined score ${i} unchanged`
+    );
+  }
+});
+
+test('combined cutoff zeroes below-line songs and reflows the bank upward', () => {
+  const songs = [
+    { title: 'a', rawOrderIndex: 0, score: 76, fitScore: 90 },
+    { title: 'b', rawOrderIndex: 1, score: 73, fitScore: 90 },
+    { title: 'c', rawOrderIndex: 2, score: 72, fitScore: 75 },
+    { title: 'd', rawOrderIndex: 3, score: 71, fitScore: 78 },
+    { title: 'e', rawOrderIndex: 4, score: 72, fitScore: 60 },
+    { title: 'f', rawOrderIndex: 5, score: 55, fitScore: 40 },
+  ];
+  const w = { fit: 0.5, music: 0.5 };
+  const gate = { type: 'cutoff', axis: 'combined', min: 76 };
+  normalizeCombined(songs, w, gate, { fitTrust: 'manual' });
+  allocate(songs, 10, 5, { rankBy: 'combined', weights: w, gate });
+  const below = songs.filter((s) => s.combinedScore < 76);
+  const above = songs.filter((s) => s.combinedScore >= 76);
+  assert.ok(below.length > 0 && above.length > 0, 'test round splits across the line');
+  for (const s of below) {
+    assert.equal(s.finalVotes, 0, `${s.title} below the combined line earns nothing`);
+  }
+  assert.equal(sum(songs), 10, 'the full bank reflows onto songs above the line');
+});
+
 test('normalization: average contender sits near 75 and a clear standout reaches the 80 anchor', () => {
   const songs = [
     { rawOrderIndex: 0, score: 80, fitScore: 95 }, // clear standout on both axes

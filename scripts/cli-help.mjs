@@ -56,7 +56,10 @@ const WEIGHTS = `  --weights <fit>:<music>  Blend ratio for combined ranking, e.
 
 const GATE = `  --gate passFail|passFailMaybe
                           Thematic gate model (pass/fail or pass/maybe/fail).
-  --cutoff <axis>:<min>    Numeric cutoff gate instead, e.g. fit:70 or music:65.`;
+  --cutoff <axis>:<min>    Numeric cutoff gate instead, e.g. fit:70, music:65, or
+                          combined:76. axis = fit | music | combined. A combined
+                          cutoff gates allocation only — it does NOT rescale the
+                          combined scores (reflows votes to songs above the line).`;
 
 export const HELP = {
   overview: `Music League pipeline — parse → (merge) → pick → render
@@ -319,7 +322,7 @@ Shared allocation / profile flags (see spec/point-allocation.md):
                                                     5:5 parse w/ manual fit. NOT on
                                                     pick (inert) — use just rescore
   --gate passFail|…           ✓       ✓       ✓     Thematic pass/maybe/fail model
-  --cutoff axis:min           ✓       ✓       ✓     Numeric fit/music cutoff gate
+  --cutoff axis:min           ✓       ✓       ✓     Numeric fit/music/combined cutoff gate
   --shape preset              ✓       ✓       ✓     Upvote curve (auto, bell, …)
   --down-shape shape          ✓       ✓       ✓     Downvote curve (flat/curved/…)
   --tier-count n              ✓       ✓       ✓     Force n point tiers

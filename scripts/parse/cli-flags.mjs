@@ -125,10 +125,22 @@ export function parseWeights(spec) {
   return { fit: fit / total, music: music / total };
 }
 
+export const CUTOFF_AXES = ['fit', 'music', 'combined'];
+
 export function buildGate(args) {
   if (args.cutoff) {
-    const [axis, min] = args.cutoff.split(':');
-    return { type: 'cutoff', axis: axis || 'fit', min: Number(min) };
+    const [rawAxis, min] = args.cutoff.split(':');
+    const axis = rawAxis || 'fit';
+    if (!CUTOFF_AXES.includes(axis)) {
+      throw new Error(
+        `Invalid --cutoff axis "${axis}" (use ${CUTOFF_AXES.join(', ')}, e.g. fit:70, music:65, or combined:76)`
+      );
+    }
+    const value = Number(min);
+    if (!Number.isFinite(value)) {
+      throw new Error(`Invalid --cutoff "${args.cutoff}" (use <axis>:<min>, e.g. fit:70)`);
+    }
+    return { type: 'cutoff', axis, min: value };
   }
   if (args.gate === 'passFail' || args.gate === 'passFailMaybe') return { type: args.gate };
   return undefined;

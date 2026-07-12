@@ -302,7 +302,15 @@ a specific field calls for it.
   given, `applyManualFitScoring` sets `passFailMaybe` (any maybe) or `passFail` (only
   pass/fail). A parsed per-song `gate` is otherwise inert — `gateClass` treats every
   song as a pass — so this keeps a high-music `maybe`/`fail` from ranking at the top.
-  - `{ type: 'cutoff', axis: 'fit'|'music', min }` — graded cutoff.
+  - `{ type: 'cutoff', axis: 'fit'|'music'|'combined', min }` — graded cutoff.
+    `fit`/`music` cut on the raw axis and (per the contender rule above) drop
+    below-cutoff songs from the normalization field. A `combined` cutoff is
+    different: it gates allocation **only** and never shrinks the contender set —
+    filtering the field by `combinedScore` before it exists is circular (it
+    collapses the field so the std floors blow every z-score up). So a combined
+    cutoff leaves every `combinedScore` unchanged and simply reflows the bank onto
+    the songs at/above the line. `gateClass` compares against the cutoff's **own**
+    axis, independent of `rankBy`. Unknown axes are rejected by `buildGate`.
   - `{ type: 'passFail' }` — binary; `fail` → 0, allocate among passes.
   - `{ type: 'passFailMaybe', leniency }` — three-state. `fail` → 0. **Passes are
     shaped first, always**, and the governing rule is `max(maybe) ≤ min(funded

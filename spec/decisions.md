@@ -11,6 +11,31 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-12 — `--cutoff combined:<min>` gates allocation without rescaling combined scores
+
+**Change.** A `combined`-axis cutoff is now a pure allocation gate: `isContender`
+(`score/merge.mjs`) no longer lets a combined cutoff shrink the normalization field,
+so every `combinedScore` is identical with and without the cutoff — the gate only
+zeroes songs below the line and reflows the bank upward. `gateClass` (`score/gate.mjs`)
+now compares each cutoff against its **own** axis via `cutoffAxisValue` (was routing
+`music`/`combined` cutoffs through `rankValueForGate`, i.e. `rankBy`, so `--cutoff
+music:65` on a combined-ranked round silently gated on combined). `buildGate`
+(`parse/cli-flags.mjs`) validates the axis against `CUTOFF_AXES = fit|music|combined`
+and rejects a non-numeric min. Help + `spec/point-allocation.md` document `combined`.
+
+**Why.** `--cutoff combined:76` "wildly changed all the combined scores." A combined
+cutoff fed `combinedScore` back into the contender set that *defines* it — circular —
+and because music scores clustered ~72–76, `combined:76` collapsed the field to one
+song, tripping the small-N std floors (2) so z-scores exploded (field ran −29…105).
+Gating on a raw axis while normalizing on a derived one is the real hazard; a combined
+cutoff must gate only. Also fixed the latent `rankBy`-vs-cutoff-axis mismatch.
+
+**Refs.** working tree — `score/merge.mjs` (`isContender`), `score/gate.mjs`
+(`cutoffAxisValue`, `gateClass`), `parse/cli-flags.mjs` (`buildGate`, `CUTOFF_AXES`),
+`cli-help.mjs`, `spec/point-allocation.md` → gate/cutoff; tests in `tests/score.test.mjs`.
+
+---
+
 ## 2026-07-10 — `just rescore`: re-weight/re-allocate from JSON, no HTML re-parse
 
 **Change.** New `scripts/rescore-round.mjs` (`just rescore` / `ml rescore <round> [knobs]`)

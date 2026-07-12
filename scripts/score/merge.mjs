@@ -57,6 +57,12 @@ function isContender(s, gate) {
   if (s.isDisqualified || s.needsUserInput) return false;
   if (!gate) return true;
   if (gate.type === 'cutoff') {
+    // A `combined` cutoff can't shrink the contender set: combinedScore is what
+    // normalization produces, so filtering the field by it before it exists is
+    // circular (and collapses the field to a handful of songs → std floors blow
+    // the z-scores up). It gates allocation only (see gateClass), leaving the
+    // normalization field — and every combined score — unchanged.
+    if (gate.axis === 'combined') return true;
     const v = gate.axis === 'fit' ? s.fitScore : s.score;
     return v != null && v >= gate.min;
   }

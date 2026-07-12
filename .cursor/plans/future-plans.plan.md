@@ -87,6 +87,7 @@ Output snapshot regression test (diff-based): see
       `music.json`/`fit.json`, sticks with no re-parse); (D) any music-vs-fit JSON restructure
       if B needs it.
 18. Testing dry-run / scratch-pad. Agents (and the owner) sometimes need to exercise parse/pick/rescore against a real round to verify behavior, but doing so today overwrites the round's `music.json`/`music.md` (and can silently change weights, as happened when a test re-parse dropped 0.7/0.3 → 0.5/0.5). Provide a safe scratch mode — e.g. a `--scratch`/`--sandbox` flag or a temp working copy — that runs the full pipeline and prints the tables/output WITHOUT writing back to the round's real files (or writes to a throwaway path). Goal: never mutate the owner's committed analysis as a side effect of testing.
+19. Finish splitting up test files and audit tests. Check for unnecessary tests e.g. checking 3rd party libraries or basic code features. Check for assumptions and logical leaps. E.g. compare to the decision file and see if it mentions the explicit edge case or if the agent likely just wrote a test to confirm what it had already assumed. Even the decision file may not be full evidence. Surface anything potentially sketchy, contradictory, or inconsistent in the tests or the decision log.
 
 ## Bugs
 
@@ -104,15 +105,14 @@ bucket should control the \*_pre-merge K-means cluster count_ (the number of nat
 groupings \*before the near-tier merge decision that collapses two adjacent clusters into
 one point tier), so I can tell it "cut the field into K clusters, then you decide merges,"
 rather than just "make tiers − 1." Revisit what the knob controls / rename accordingly.
-(Ties into backlog #12: whatever K really means, surface it in the CLI.)
-4. **Tied combined score in different vote tiers gets no callout.** When two songs share
-   the same combined score but land in different vote bands (one funded/downvoted, the
-   other not), the allocator picks one arbitrarily with no tie-split notice. There is a
-   `tier-split` tradeoff for the up axis, but the **down** axis (and possibly the CLI
-   surfacing) doesn't flag it — repro on `2026-07-07-story-8`, two songs at 69.0 where the
-   flat down bank downvoted one and not the other silently. Fix: emit a tie-split/notice
-   when equal combined scores straddle a vote-tier boundary on either axis. Workaround
-   today: `--pin i:0` to force one out (now supported).
+(Ties into backlog #12: whatever K really means, surface it in the CLI.) 4. **Tied combined score in different vote tiers gets no callout.** When two songs share
+the same combined score but land in different vote bands (one funded/downvoted, the
+other not), the allocator picks one arbitrarily with no tie-split notice. There is a
+`tier-split` tradeoff for the up axis, but the **down** axis (and possibly the CLI
+surfacing) doesn't flag it — repro on `2026-07-07-story-8`, two songs at 69.0 where the
+flat down bank downvoted one and not the other silently. Fix: emit a tie-split/notice
+when equal combined scores straddle a vote-tier boundary on either axis. Workaround
+today: `--pin i:0` to force one out (now supported).
 
 ## Deferred (may not ship)
 
