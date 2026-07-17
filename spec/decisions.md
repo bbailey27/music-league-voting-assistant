@@ -11,7 +11,43 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
-## 2026-07-12 — `--cutoff combined:<min>` gates allocation without rescaling combined scores
+## 2026-07-17 — A 4-digit year is never parsed as a music score
+
+**Change.** `scoreComment` (`scripts/score/comment.mjs`) now skips a bare 4-digit run
+matching `19XX`/`20XX` (1900–2099) when scanning for the music number and the second/fit
+number. The number matcher reads the full digit run (`\d+`) via a new `matchScoreToken`
+helper and rejects year tokens (`YEAR_RE`), instead of the old `\d{1,3}` that clipped
+`2019` → `201` → 20.1. A comment whose only number is a year (`2019`, or a sentence like
+`This was a 2017 single (pre-debut)`) now has no score → words-only (DQ in `objective`
+mode). A year written next to a real score (`73 … 2019`) keeps the score and ignores the
+year. Documented in `spec/score-parsing.md` (new "Years Are Not Scores") and
+`spec/scoring-comments.md`; covered by a new `comment-parse.test.mjs` case.
+
+**Why.** In the K-pop Boy Group Years league the disqualifying comment is frequently just
+the song's release year (e.g. `2019` for a wrong-year submission). The old parser scaled the
+clipped year into a bogus ~20 score, so wrong-year picks landed near the bottom of the
+scored pool instead of being disqualified outright.
+
+**Refs.** working tree — `scripts/score/comment.mjs`, `spec/score-parsing.md`,
+`spec/scoring-comments.md`, `tests/comment-parse.test.mjs`.
+
+## 2026-07-15 — Recurring-league slug families keep a round in one folder
+
+**Change.** Documented recurring-league slug families in `spec/analysis-artifacts.md` (new
+"Recurring league slug families" subsection) and added `.cursor/rules/round-slug-naming.mdc`
+(`alwaysApply`). The K-pop Boy Group Years league is standardized to `bg-<year>`
+(`bg-2016`/`bg-2017`/`bg-2018`); the 2018 submission-research folder was renamed
+`2026-07-15-bg-2018` to match.
+
+**Why.** `applyDateSlugs`/`consolidateDuplicateBareSlugs` (`maintain-rounds.mjs`) fold a later
+input into an existing folder only when the **bare slug** matches (`bareSlugOf`,
+`datedSiblingsOf` in `paths.mjs`). Inconsistent naming splits one round across two
+`analysis/<date>-<slug>/` folders — already seen with 2017 (`2017-bg-kpop` research vs
+`bg-2017` parsed round). Writing the convention down means the eventual voting-HTML export
+lands in the same folder as the pre-round research instead of forking a duplicate.
+
+**Refs.** working tree — `spec/analysis-artifacts.md` (Recurring league slug families),
+`.cursor/rules/round-slug-naming.mdc`.
 
 **Change.** A `combined`-axis cutoff is now a pure allocation gate: `isContender`
 (`score/merge.mjs`) no longer lets a combined cutoff shrink the normalization field,
@@ -24,7 +60,7 @@ music:65` on a combined-ranked round silently gated on combined). `buildGate`
 and rejects a non-numeric min. Help + `spec/point-allocation.md` document `combined`.
 
 **Why.** `--cutoff combined:76` "wildly changed all the combined scores." A combined
-cutoff fed `combinedScore` back into the contender set that *defines* it — circular —
+cutoff fed `combinedScore` back into the contender set that _defines_ it — circular —
 and because music scores clustered ~72–76, `combined:76` collapsed the field to one
 song, tripping the small-N std floors (2) so z-scores exploded (field ran −29…105).
 Gating on a raw axis while normalizing on a derived one is the real hazard; a combined

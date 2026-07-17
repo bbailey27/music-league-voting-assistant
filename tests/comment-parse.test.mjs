@@ -118,6 +118,38 @@ test('comment parse: earliest tier word wins, not highest tier', () => {
   assert.equal(parse('75. solid negative', opts).fitTier, 'moderate');
 });
 
+test('comment parse: a 4-digit year is never a numeric score', () => {
+  // A bare year is a words-only comment: no score. Objective → DQ, subjective → review.
+  const bareSubjective = parse('2019');
+  assert.equal(bareSubjective.score, null);
+  assert.equal(bareSubjective.needsReview, true);
+
+  const bareObjective = parse('2019', { mode: 'objective' });
+  assert.equal(bareObjective.score, null);
+  assert.equal(bareObjective.isDisqualified, true);
+
+  // A sentence mentioning a year, no real score → also words-only → DQ (objective).
+  const sentence = parse('This was a 2017 single (pre-debut)', { mode: 'objective' });
+  assert.equal(sentence.score, null);
+  assert.equal(sentence.isDisqualified, true);
+
+  // Whole 19xx/20xx range is treated as a year.
+  assert.equal(parse('1999', { mode: 'objective' }).score, null);
+  assert.equal(parse('2008', { mode: 'objective' }).score, null);
+
+  // A real score alongside a year: the score wins, the year is ignored (mentioning a
+  // year does not disqualify on its own).
+  const scored = parse('73 great, released 2019', { mode: 'objective' });
+  assert.equal(scored.score, 73);
+  assert.equal(scored.isDisqualified, false);
+
+  // A trailing year is not picked up as a fit-number candidate.
+  assert.equal(parse('73. released 2019').fitNumberCandidate, null);
+
+  // The year filter only skips a *bare* 4-digit run; a 3-digit score is untouched.
+  assert.equal(parse('201').score, 20.1);
+});
+
 test('comment parse: two-number remainder ignored when fitWords off', () => {
   const pair = parse('75 80');
   assert.equal(pair.score, 75);

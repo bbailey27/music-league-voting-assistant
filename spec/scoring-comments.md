@@ -207,10 +207,15 @@ songs have one — period recommended:
 
 ## Special cases (short)
 
-| You wrote                 | Result                                               |
-| ------------------------- | ---------------------------------------------------- |
-| empty box                 | flagged — needs a score                              |
-| `TODO` / `TODO 80`        | flagged — placeholder not trusted                    |
-| `-`                       | disqualified (no vote)                               |
-| `no` / `nope` / `invalid` | disqualified                                         |
-| words only, no number     | disqualified (objective) / needs review (subjective) |
+| You wrote                       | Result                                               |
+| ------------------------------- | ---------------------------------------------------- |
+| empty box                       | flagged — needs a score                              |
+| `TODO` / `TODO 80`              | flagged — placeholder not trusted                    |
+| `-`                             | disqualified (no vote)                               |
+| `no` / `nope` / `invalid`       | disqualified                                         |
+| words only, no number           | disqualified (objective) / needs review (subjective) |
+| `2019` / a sentence with a year | year is not a score → words-only (DQ in objective)   |
+
+A bare 4-digit **year** (19XX / 20XX) is never read as a score, so a year-only comment (or
+a sentence that just cites a year) counts as words-only. A year written **next to a real
+score** (`73 great, released 2019`) keeps the score and ignores the year.

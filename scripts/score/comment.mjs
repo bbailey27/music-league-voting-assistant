@@ -2,7 +2,24 @@
 
 import { FIT_TIER_SCORES, FIT_TIER_ORDER, fitTierForScore } from './fit-signal.mjs';
 
-const SCORE_NUM = /(\d{1,3})(\.\d)?([+\-?=]*)/;
+// Match the FULL digit run (`\d+`, not a clipped `\d{1,3}`) so a 4-digit year can be
+// recognized and rejected rather than silently truncated into a bogus score — e.g.
+// "2019" would otherwise clip to "201" → 20.1. `matchScoreToken` does the year filtering.
+const SCORE_NUM = /(\d+)(\.\d)?([+\-?=]*)/g;
+
+// A bare 4-digit 19xx / 20xx run is a release year, never a score (scores are 1–3
+// digits). Years must not be parsed as numeric scores anywhere on the line.
+const YEAR_RE = /^(?:19|20)\d{2}$/;
+
+// First score-number token on `text` that is not a bare 4-digit year. Returns
+// { intPart, decPart, mods, index, length } or null when there is no usable number.
+function matchScoreToken(text) {
+  for (const m of (text || '').matchAll(SCORE_NUM)) {
+    if (!m[2] && YEAR_RE.test(m[1])) continue; // skip a year (no decimal → not e.g. 20.1)
+    return { intPart: m[1], decPart: m[2], mods: m[3] || '', index: m.index, length: m[0].length };
+  }
+  return null;
+}
 
 // Owner vocabulary: multi-word fit phrases (checked before numeric N fit).
 const FIT_SHORTHAND = [
@@ -180,15 +197,17 @@ export function flagMissingFitSignals(scored, ratio = NUMERIC_FIT_MIN_RATIO) {
   return missing;
 }
 
-// First number on the scoring line is always music; return the rest for fit parsing.
+// First non-year number on the scoring line is always music; return the rest for fit
+// parsing. A comment whose only number is a year (e.g. "2019" or a sentence mentioning
+// one) peels to null → handled as a words-only comment (DQ in objective mode).
 function peelMusic(scoringLine) {
-  const m = scoringLine.match(SCORE_NUM);
+  const m = matchScoreToken(scoringLine);
   if (!m) return null;
   return {
-    intPart: m[1],
-    decPart: m[2],
-    mods: m[3] || '',
-    remainder: scoringLine.slice(m.index + m[0].length),
+    intPart: m.intPart,
+    decPart: m.decPart,
+    mods: m.mods,
+    remainder: scoringLine.slice(m.index + m.length),
   };
 }
 
@@ -243,17 +262,18 @@ function parseFitSignals(scoringLine, remainder, { tierWords, gateWords, numeric
 
   if (out.fitScore == null) {
     const explicit =
-      rem.match(/\bfit\s*(\d{1,3})(\.\d)?\b/i) ||
-      rem.match(/\b(\d{1,3})(\.\d)?\s+fit\b/i);
-    if (explicit) {
+      rem.match(/\bfit\s*(\d+)(\.\d)?\b/i) ||
+      rem.match(/\b(\d+)(\.\d)?\s+fit\b/i);
+    if (explicit && !(explicit[2] == null && YEAR_RE.test(explicit[1]))) {
       out.fitScore = scaleScoreToken(explicit[1], explicit[2]);
     }
   }
 
   // A bare 2nd number is always surfaced (round-wide auto-detect decides whether it
-  // becomes fit); `numericFit` commits it inline for the legacy bundled flag.
-  const second = rem.match(SCORE_NUM);
-  if (second) out.fitNumberCandidate = scaleScoreToken(second[1], second[2]);
+  // becomes fit); `numericFit` commits it inline for the legacy bundled flag. A year
+  // is skipped here too, so a trailing "…released 2019" is never mistaken for a fit.
+  const second = matchScoreToken(rem);
+  if (second) out.fitNumberCandidate = scaleScoreToken(second.intPart, second.decPart);
   if (out.fitScore == null && numericFit && out.fitNumberCandidate != null) {
     out.fitScore = out.fitNumberCandidate;
   }

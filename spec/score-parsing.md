@@ -24,6 +24,20 @@ You can combine them. **`?` applies to whatever it immediately follows:**
 `73=` is treated as `73+` (typo). The `+` / `-` / `play` still apply for tiebreaks;
 modifier-uncertain flags are for your notes and display (`+?`, `-?`, `play?`).
 
+## Years Are Not Scores
+
+A bare 4-digit run matching **19XX or 20XX** (1900–2099) is a release **year**, never a
+music score — scores are 1–3 digits. The parser skips such tokens when scanning for the
+music number and for a second (fit) number, so `2019` is not clipped to `201` → 20.1.
+
+- A comment whose **only** number is a year (e.g. `2019`, or a sentence like
+  `This was a 2017 single (pre-debut)`) has no score → it is a words-only comment
+  (disqualified in `objective` mode, needs-review in `subjective` — see below).
+- A year alongside a real score does **not** disqualify: `73 great, released 2019` scores
+  73 and ignores the year.
+- Only a **bare** 4-digit run is treated as a year; a decimal token like `201.9` is still
+  parsed as a normal score.
+
 ## Bare Dash
 
 A standalone '-' means too low for consideration / not worth scoring.

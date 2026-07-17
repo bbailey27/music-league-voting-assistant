@@ -9,13 +9,13 @@ mounted at **`data/`** (see README → Private data). Each round's outputs live 
 
 Each stage reads/writes specific artifacts. **Only parse reads HTML.**
 
-| Stage | Script | Reads | Writes |
-| --- | --- | --- | --- |
-| **Parse** | `parse-round.mjs` / `just parse` | round `.html`/`.txt` | `music.md`, `music.json` |
-| **Fit research** | agent / manual | round prompt, songs | `fit.json` (thematic only) |
-| **Merge** | `merge-scores.mjs` / `just merge` | `music.json`, `fit.json` | `scores.json` |
-| **Pick** | `pick-round.mjs` / `just pick` | `music.json` (+ `fit.json` for replay) | `pick` on JSON, `picks.jsonl` |
-| **Render** | `render-*-html.mjs` / `just final` | persisted JSON | `music.html`, `scores.html`, `fit.html` |
+| Stage            | Script                             | Reads                                  | Writes                                  |
+| ---------------- | ---------------------------------- | -------------------------------------- | --------------------------------------- |
+| **Parse**        | `parse-round.mjs` / `just parse`   | round `.html`/`.txt`                   | `music.md`, `music.json`                |
+| **Fit research** | agent / manual                     | round prompt, songs                    | `fit.json` (thematic only)              |
+| **Merge**        | `merge-scores.mjs` / `just merge`  | `music.json`, `fit.json`               | `scores.json`                           |
+| **Pick**         | `pick-round.mjs` / `just pick`     | `music.json` (+ `fit.json` for replay) | `pick` on JSON, `picks.jsonl`           |
+| **Render**       | `render-*-html.mjs` / `just final` | persisted JSON                         | `music.html`, `scores.html`, `fit.html` |
 
 **Invariants:**
 
@@ -72,6 +72,31 @@ and at the start of `ml run` before archiving) keeps the trees tidy:
   skipped (unknown age). During `ml run` the round being run is never archived.
 
 Use `ml tidy --dry-run` to preview, `--no-name` / `--no-archive` to run one half.
+
+## Recurring league slug families
+
+Many rounds belong to a **recurring league** that reuses a predictable bare slug (the part
+after the `YYYY-MM-DD-` date). Naming and folding key off the **bare slug**: `applyDateSlugs`
+folds an undated input into an existing dated folder only when their bare slugs match
+(`bareSlugOf`, `datedSiblingsOf` in `scripts/paths.mjs`). So a new installment must reuse its
+league's established slug family — otherwise the pre-round research folder and the later parsed
+round land in two `analysis/<date>-<slug>/` folders that never merge (as happened when 2017
+research was slugged `2017-bg-kpop` but the parsed round was `bg-2017`).
+
+| League                 | Slug family      | Examples                        |
+| ---------------------- | ---------------- | ------------------------------- |
+| K-pop Boy Group Years  | `bg-<year>`      | `bg-2016`, `bg-2017`, `bg-2018` |
+| Story / sentence chain | `story-<n>`      | `story-8`, `story-9`            |
+| Tarot                  | `tarot-<arcana>` | `tarot-devil`, `tarot-hermit`   |
+| Last.fm stats          | `lfm-<topic>`    | `lfm-art`, `lfm-curses`         |
+| AAA                    | `aaa-<topic>`    | `aaa-cars`, `aaa-text`          |
+| K-pop themed           | `kpop-<theme>`   | `kpop-ost`, `kpop-glittering`   |
+
+**Before creating a new round input or analysis folder**, look for prior installments of the
+same league in the active _and_ `archive/` trees (`data/rounds/`, `data/analysis/`) and copy
+their exact slug shape. Name the pre-round research folder, the saved HTML/text input, and
+every analysis artifact with that one bare slug so the whole round stays in a single
+`analysis/<date>-<slug>/` folder — including when the voting-HTML export is added later.
 
 ## Archive
 

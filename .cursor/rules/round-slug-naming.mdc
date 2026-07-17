@@ -1,0 +1,28 @@
+---
+description: Round slug naming — reuse a league's slug family so a round stays in one folder
+alwaysApply: true
+---
+
+# Round slug naming
+
+Round ids are `YYYY-MM-DD-<slug>`. `maintain-rounds.mjs` auto-stamps the date; you choose
+the `<slug>`.
+
+**Recurring leagues reuse one bare slug family.** Date-slugging folds a later HTML/text
+export into an existing research folder **only when the bare slug matches** (the part after
+`YYYY-MM-DD-`). A mismatched slug silently creates a second `analysis/<date>-<slug>/` folder
+for the same round — so the pre-round research and the parsed votes never merge.
+
+Before naming a new round or research folder:
+
+1. Check the active **and** `archive/` trees (`data/rounds/`, `data/analysis/`) for prior
+   installments of the same league.
+2. Reuse their exact slug shape for the research folder, the saved input file, and every
+   analysis artifact.
+
+Known families (full table in [spec/analysis-artifacts.md](../../spec/analysis-artifacts.md)):
+
+- **K-pop Boy Group Years → `bg-<year>`** (`bg-2016`, `bg-2017`, `bg-2018`) — not `<year>-bg-kpop`.
+- Story chain → `story-<n>`; Tarot → `tarot-<arcana>`; Last.fm → `lfm-<topic>`; AAA → `aaa-<topic>`.
+
+If this file disagrees with the spec, follow **spec/**.
