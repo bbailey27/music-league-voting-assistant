@@ -86,7 +86,8 @@ split by the music bonus. Confirm the exact music weight per round (see
 ## Associations
 
 Suggested (not automatic) profile candidates by league / voting style. Add rows as
-patterns recur.
+patterns recur. Per-league profile assignments are also indexed in the central league
+registry ([`spec/leagues.md`](leagues.md) / `just leagues`), which points back here.
 
 | League / style                           | Candidate profiles                    | Notes                                                               |
 | ---------------------------------------- | ------------------------------------- | ------------------------------------------------------------------- |

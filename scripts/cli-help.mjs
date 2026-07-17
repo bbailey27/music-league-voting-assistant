@@ -12,6 +12,7 @@ export const HELP_TOPICS = [
   'flags',
   'tidy',
   'config',
+  'leagues',
 ];
 
 const PIN = `  --pin <index>:<votes>
@@ -85,7 +86,7 @@ Thematic:
 Re-parse only when you replace the HTML export. Pick is always a separate step.
 
 Commands:
-  ml parse | merge | pick | rescore | fit | scores | final | run | status | tidy | config | help
+  ml parse | merge | pick | rescore | fit | scores | final | run | status | tidy | leagues | config | help
 
 Re-weight/re-shape a parsed round from JSON (no HTML re-read): just rescore <name> --weights 5:5.
 
@@ -297,6 +298,23 @@ Flags:
 
 Example:
   just tidy --dry-run`,
+
+  leagues: `just leagues [<name>]
+
+Show the recurring-league registry (scripts/leagues.mjs; narrative in spec/leagues.md).
+Each descriptor ties a league to its slug family, mode, standing eligibility/DQ
+reminders, reusable scripts, rules, skills, and fit-guidance profiles.
+
+  just leagues               List every league (id, slug family, summary).
+  just leagues <name>        Detail one league — matches by id, league name, or slug
+                             family/prefix (e.g. "bg", "bg-years", or "bg-2018").
+
+The matched league's reminders + scripts also print automatically after "just parse",
+and "just status <round>" shows which league a round belongs to.
+
+Example:
+  just leagues bg-years      # boy-group-years: DQ girl groups, release-year gate
+  just leagues story         # story chain: title-scan scripts + story-continuation`,
 
   config: `just config [comment-width [auto|<n>|unset]]
 

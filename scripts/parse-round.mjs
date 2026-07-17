@@ -38,6 +38,7 @@ import { printPickCli } from './parse/cli-print.mjs';
 import { warnMissingScoresCli, warnMissingFitScoresCli } from './parse/cli-warn.mjs';
 import { parseRoundHtml, slimProfile } from './parse/pipeline.mjs';
 import { reconcileOptionPins, resolveOptionPick } from './round/pick.mjs';
+import { leagueForRound, leagueNotesLines } from './leagues.mjs';
 
 export {
   parsePins,
@@ -285,6 +286,10 @@ async function main() {
     await writeFile(paths.json, JSON.stringify(payload, null, 2), 'utf8');
     console.log(`Wrote ${paths.json}`);
   }
+
+  const league = leagueForRound({ roundId, leagueName: parsed.round?.league });
+  const notes = leagueNotesLines(league, { roundId });
+  if (notes.length) console.log(`\n${notes.join('\n')}`);
 
   warnMissingScoresCli(parsed.songs);
   warnMissingFitScoresCli(parsed.songs);

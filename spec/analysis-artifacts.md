@@ -75,6 +75,11 @@ Use `ml tidy --dry-run` to preview, `--no-name` / `--no-archive` to run one half
 
 ## Recurring league slug families
 
+Full per-league context (slug family + eligibility rules, reusable scripts, fit profiles,
+skills) lives in the central registry — [`spec/leagues.md`](leagues.md) /
+[`scripts/leagues.mjs`](../scripts/leagues.mjs), viewable with `just leagues`. This section
+covers only the **slug-family** half that drives naming/folding.
+
 Many rounds belong to a **recurring league** that reuses a predictable bare slug (the part
 after the `YYYY-MM-DD-` date). Naming and folding key off the **bare slug**: `applyDateSlugs`
 folds an undated input into an existing dated folder only when their bare slugs match

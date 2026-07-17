@@ -11,6 +11,31 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-17 — Central league registry (`scripts/leagues.mjs`)
+
+**Change.** Added a recurring-league registry: [`scripts/leagues.mjs`](../scripts/leagues.mjs)
+(`LEAGUES` + `leagueForRound` / `leagueNotesLines` / `leagueDetailLines`) and the narrative
+[`spec/leagues.md`](leagues.md). Each descriptor ties a league to its slug family, mode,
+standing eligibility/DQ reminders, reusable scripts, rules, skills, and fit-guidance
+profiles. Wired in three surfaces: `just parse` prints the matched league's reminders +
+resolved script commands (`<round>`/`<year>` filled) after writing `music.*`; `just status
+<round>` shows the league; new `just leagues [<name>]` command lists/details the registry
+(help topic added). Cross-linked from `analysis-artifacts.md` (slug families),
+`fit-guidance.md` (associations), and the workspace skill. First entries carry existing
+machinery: `bg-years` (DQ girl groups + `release-year-gate.mjs` / `bg-year-scan.mjs`),
+`story-chain` (`title-*-scan` + `story-continuation`), `tarot` / `astrology`
+(`traits-over-symbols` + `lyrics-first`), `lastfm`, `aaa`, `kpop-themed`.
+
+**Why.** Per-league context (which scripts, rules, and fit profiles apply; league-specific
+eligibility like "boy groups only — DQ girl groups") was scattered across rule files, the
+fit-guidance associations, and script headers, and had to be re-remembered each round.
+Centralizing it and surfacing the reminders automatically on parse makes recurring-league
+rules durable instead of tribal.
+
+**Refs.** working tree — `scripts/leagues.mjs`, `spec/leagues.md`, `scripts/parse-round.mjs`,
+`scripts/ml.mjs`, `scripts/cli-help.mjs`, `spec/analysis-artifacts.md`, `spec/fit-guidance.md`,
+`.cursor/skills/music-league-workspace/SKILL.md`, `tests/leagues.test.mjs`.
+
 ## 2026-07-17 — A 4-digit year is never parsed as a music score
 
 **Change.** `scoreComment` (`scripts/score/comment.mjs`) now skips a bare 4-digit run

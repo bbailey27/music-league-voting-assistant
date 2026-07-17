@@ -37,6 +37,7 @@ import {
   DEFAULT_CLI_COMMENT_WIDTH,
 } from './ml-config.mjs';
 import { HELP, HELP_TOPICS, cmdHelpText } from './cli-help.mjs';
+import { LEAGUES, leagueForRound, leagueDetailLines } from './leagues.mjs';
 
 const SCRIPTS_DIR = 'scripts';
 
@@ -523,6 +524,8 @@ function cmdStatusOne(name) {
       ? st.txtPath
       : st.htmlPath;
   console.log(`Round: ${name}`);
+  const league = leagueForRound({ roundId: name, leagueName: readLeagueName(st.music.json) });
+  if (league) console.log(`  League: ${league.names[0] || league.slugFamily}  (ml leagues ${league.id})`);
   console.log(`  ${checkbox(st.hasInput)} Round input    ${inputLabel}`);
   console.log(`  ${checkbox(st.hasParse)} Parse (music)  ${st.music.md} + ${st.music.json}`);
   console.log(
@@ -576,6 +579,43 @@ function cmdStatusAll() {
     const warn = warnParts.length ? `  ⚠ ${warnParts.join(', ')}` : '';
     console.log(`${marks}  ${name}  → ${step.label}${warn}`);
   }
+}
+
+/** Read the league name recorded in a round's music.json (null when absent). */
+function readLeagueName(jsonPath) {
+  try {
+    return JSON.parse(readFileSync(jsonPath, 'utf8'))?.round?.league ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function cmdLeagues(query) {
+  if (!query) {
+    console.log('Recurring leagues (see spec/leagues.md):\n');
+    for (const lg of LEAGUES) {
+      console.log(`  ${lg.id.padEnd(12)} ${lg.slugFamily.padEnd(16)} ${lg.summary}`);
+    }
+    console.log('\nRun "ml leagues <name>" for reminders, scripts, and fit profiles.');
+    return;
+  }
+  const q = query.trim().toLowerCase();
+  const matches = LEAGUES.filter(
+    (lg) =>
+      lg.id.includes(q) ||
+      lg.names.some((n) => n.toLowerCase().includes(q)) ||
+      lg.slugFamily.toLowerCase().includes(q) ||
+      (lg.slugPrefixes || []).some((p) => p && q.startsWith(p))
+  );
+  if (!matches.length) {
+    console.error(`No league matches "${query}". Known: ${LEAGUES.map((l) => l.id).join(', ')}`);
+    process.exit(1);
+  }
+  if (matches.length > 1) {
+    console.error(`"${query}" is ambiguous — matches: ${matches.map((l) => l.id).join(', ')}`);
+    process.exit(1);
+  }
+  console.log(leagueDetailLines(matches[0]).join('\n'));
 }
 
 function usage() {
@@ -670,6 +710,11 @@ function main() {
     }
     case 'tidy':
       return cmdTidy(rest);
+    case 'leagues':
+    case 'league': {
+      const { name } = splitRoundArgs(rest);
+      return cmdLeagues(name);
+    }
     case 'config':
       return cmdConfig(rest);
     case 'help':

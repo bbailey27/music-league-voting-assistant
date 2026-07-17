@@ -74,6 +74,8 @@ just help pick              # per-stage flags + example
 just run tarot              # next scriptable step
 just status                 # checklist for all rounds
 just status tarot           # one round, full checklist + next step
+just leagues                # recurring-league registry (slug family, DQ rules, scripts)
+just leagues bg-years       # one league: reminders, scripts, fit profiles
 just parse tarot            # HTML → music.*
 just merge tarot            # music + fit → scores.json
 just pick tarot B --reason "…"
@@ -89,15 +91,16 @@ Fuzzy `<name>` matches exact → substring → subsequence. Ambiguous queries li
 
 ## Specs (read before judging)
 
-| File                         | Covers                                                          |
-| ---------------------------- | --------------------------------------------------------------- |
-| `spec/analysis-artifacts.md` | Per-round folders, stage ownership, music/fit/scores naming     |
-| `spec/score-parsing.md`      | Digit scaling, modifiers, manual fit tokens                     |
-| `spec/comments.md`           | User vs submitter comments; ML slang                            |
-| `spec/uncertainty.md`        | `?` handling at tier boundaries                                 |
-| `spec/fit-evaluation.md`     | Fit research output + merge                                     |
-| `spec/fit-guidance.md`       | Opt-in, league/style-scoped fit lenses (suggested, not default) |
-| `spec/point-allocation.md`   | Allocator profiles, gates, tradeoffs, pick invariants           |
+| File                         | Covers                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------ |
+| `spec/analysis-artifacts.md` | Per-round folders, stage ownership, music/fit/scores naming                    |
+| `spec/score-parsing.md`      | Digit scaling, modifiers, manual fit tokens                                    |
+| `spec/comments.md`           | User vs submitter comments; ML slang                                           |
+| `spec/uncertainty.md`        | `?` handling at tier boundaries                                                |
+| `spec/fit-evaluation.md`     | Fit research output + merge                                                    |
+| `spec/fit-guidance.md`       | Opt-in, league/style-scoped fit lenses (suggested, not default)                |
+| `spec/leagues.md`            | Recurring-league registry: slug family, DQ rules, scripts, profiles per league |
+| `spec/point-allocation.md`   | Allocator profiles, gates, tradeoffs, pick invariants                          |
 
 If `.cursor/rules/` disagrees with `spec/`, follow **spec/**.
 
