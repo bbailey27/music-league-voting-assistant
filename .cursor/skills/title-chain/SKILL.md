@@ -91,12 +91,24 @@ days I loved_) are `ok-np`; only flag _all/this/that + I/we/you + content-verb_ 
 Identify what the **title must be grammatically** after the fixed prefix, then encode that — not
 story fit.
 
-| Prefix (example)              | Grammatical slot        | `--slot`            |
-| ----------------------------- | ----------------------- | ------------------- |
-| _…all i wanted was_ (story-7) | Copular complement      | `copular` (shipped) |
-| _…we made a pact._            | New sentence / fragment | _(add slot)_        |
-| _…for you_                    | PP completion           | _(add slot)_        |
-| _…one last time_              | NP completion           | _(add slot)_        |
+| Prefix (example)                    | Grammatical slot          | `--slot`            |
+| ----------------------------------- | ------------------------- | ------------------- |
+| _…all i wanted was_ (story-7)       | Copular complement        | `copular` (shipped) |
+| _…oh devil, ___._ (story-10, FINAL) | Terminal sentence (close) | `closer` (shipped)  |
+| _…we made a pact._                  | New sentence / fragment   | _(add slot)_        |
+| _…for you_                          | PP completion             | _(add slot)_        |
+| _…one last time_                    | NP completion             | _(add slot)_        |
+
+**`closer` slot (final round — the title must END the sentence and story).** Inverts the
+usual "leave it open" rule: a complete, terminal statement is the goal; an open NP fragment
+fails. Tags: `ok-clause` (subject + finite verb — "You Won", "The Winner Takes It All"),
+`ok-imperative` (command to the addressee — "Let Her Go"), `ok-excl` ("What a Shame"),
+`ok-question` (grammatically complete but tonally reopens), `bad-fragment` (bare NP/PP —
+"The Winner", "Without You"). `you-in-title` is on-theme when "you" = the addressee.
+
+```bash
+node scripts/title-complement-check.mjs --slot closer "The Winner Takes It All" "Let Her Go" "Game Over"
+```
 
 **How to extend** (`scripts/title-complement-check.mjs`)
 

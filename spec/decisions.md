@@ -11,6 +11,28 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-19 — `closer` complement slot for final-round title chains
+
+**Change.** Added a second slot, `closer`, to
+[`scripts/title-complement-check.mjs`](../scripts/title-complement-check.mjs)
+(`classifyCloserComplement`, registered in `CLASSIFIERS` / `COMPLEMENT_SLOTS`). It classifies
+a title that must **end** a sentence/story after a vocative (e.g. "…oh devil, **[title]**.")
+— the inverse of `copular`: a complete terminal statement is the goal and an open NP fragment
+fails. Tags: `ok-clause` (subject + finite verb, incl. contracted subjects and fronted
+adverb + subject), `ok-imperative` (command to the addressee), `ok-excl` ("What a …"),
+`ok-question` (grammatically complete but tonally reopens), `bad-fragment` (bare NP/PP).
+`you-in-title` stays informational. Documented in the script header + HELP and in the
+title-chain skill; regression tests in
+[`tests/title-complement-check.test.mjs`](../tests/title-complement-check.test.mjs).
+
+**Why.** The story league's final round requires a title that closes the sentence with no
+open next-prompt — the opposite grammatical need from the shipped `copular` slot. Encoding it
+mechanically keeps the "must terminate" judgment out of story-vibe hand-waving, per the
+title-chain skill's "structural check first" rule.
+
+**Refs.** working tree — `scripts/title-complement-check.mjs`,
+`tests/title-complement-check.test.mjs`, `.cursor/skills/title-chain/SKILL.md`.
+
 ## 2026-07-17 — Central league registry (`scripts/leagues.mjs`)
 
 **Change.** Added a recurring-league registry: [`scripts/leagues.mjs`](../scripts/leagues.mjs)
