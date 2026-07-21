@@ -33,15 +33,16 @@ Songs that mention the night sky, moon, or stars. Instrumentals count if the tit
 
 ## Options considered
 
-  | # | Song         | Score | A | B |
-  | : | :----------- | ----: | : | : |
-  | 0 | Starlight    |    78 | 3 | 2 |
-  | 1 | City Glow    |    72 | 2 | 2 |
-  | 2 | Midnight Bus |    65 | 1 | 2 |
-  |   | Total        |       | 6 | 6 |
+  | # | Song         | Score | A | B | C |
+  | : | :----------- | ----: | : | : | : |
+  | 0 | Starlight    |    78 | 3 | 2 | 3 |
+  | 1 | City Glow    |    72 | 2 | 2 | 3 |
+  | 2 | Midnight Bus |    65 | 1 | 2 | 0 |
+  |   | Total        |       | 6 | 6 | 6 |
 
   - **A** **(chosen)** — 3 tiers, `3×1 / 2×1 / 1×1`
   - **B** — 1 tier, `2×3`
+  - **C** — 2 tiers, `3×2 / 0×1` · merges a tier (3→0 jump, no tiebreak)
 
 ---
 Draft allocation — rebalance as needed. Tiers are relative to this round only.

@@ -22,7 +22,28 @@ export function warnBudgetMismatch(tradeoffs) {
 }
 
 export function slimProfile(profile) {
-  const { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand, fitTrust } =
-    profile;
-  return { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand, fitTrust };
+  const {
+    shape,
+    downShape,
+    gate,
+    weights,
+    rankBy,
+    tierCount,
+    bucketCount,
+    optionCount,
+    favoriteBand,
+    fitTrust,
+  } = profile;
+  return {
+    shape,
+    downShape,
+    gate,
+    weights,
+    rankBy,
+    tierCount,
+    bucketCount,
+    optionCount,
+    favoriteBand,
+    fitTrust,
+  };
 }

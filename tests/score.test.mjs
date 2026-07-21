@@ -26,6 +26,7 @@ import {
   pinEligibilityError,
   applyManualFitScoring,
 } from '../scripts/parse-round.mjs';
+import { parseOptionCount, parseScoreOverrides } from '../scripts/parse/cli-flags.mjs';
 import { applyOptionPick } from '../scripts/round/pick.mjs';
 import { buildComboBallot } from '../scripts/render-html-shared.mjs';
 
@@ -532,7 +533,7 @@ test('resolveOptionPick applies a surfaced distribution by letter (music-only pa
   );
 });
 
-test('tier-structure always surfaces a single-option menu so every stage reprints it and pick A resolves', () => {
+test('tier-structure always surfaces a menu (option A) so every stage reprints it and pick A resolves', () => {
   // A tightly-clustered field that collapses to ONE clean staircase — previously
   // this suppressed the tradeoff entirely, so rescore/parse/merge printed only the
   // Ballot and `pick A` errored on an empty menu.
@@ -540,17 +541,92 @@ test('tier-structure always surfaces a single-option menu so every stage reprint
   const g = mk(scores);
   const { tradeoffs } = allocate(g, 15, 10, { shape: 'auto' });
   const ts = tradeoffs.find((t) => t.kind === 'tier-structure');
-  assert.ok(ts, 'a single clean split still surfaces a tier-structure menu');
-  assert.equal(ts.options.length, 1, 'exactly one option when the split is unambiguous');
+  assert.ok(ts, 'a clean split still surfaces a tier-structure menu');
+  assert.equal(ts.options[0].separated, undefined, 'option A is the clean primary split');
   assert.ok(Array.isArray(ts.options[0].perSong) && ts.options[0].perSong.length === scores.length);
 
   const { idx, overrides, error } = resolveOptionPick(tradeoffs, 'A');
-  assert.equal(error, null, 'pick A resolves against the single option');
-  assert.equal(idx, 0, 'A resolves to the only option');
+  assert.equal(error, null, 'pick A resolves against option A');
+  assert.equal(idx, 0, 'A resolves to the first option');
 
   const f = mk(scores);
   allocate(f, 15, 10, { shape: 'auto', overrides });
   assert.equal(sum(f), 15, 'applying option A still spends the full budget');
+});
+
+test('a flat field backfills coarser merge/jump options (no tiebreak) before any tie-split', () => {
+  const scores = [76, 75.5, 75, 75, 74.5, 74.5, 74.5, 74, 74, 74];
+  const { tradeoffs } = allocate(mk(scores), 15, 10, { shape: 'auto' });
+  const ts = tradeoffs.find((t) => t.kind === 'tier-structure');
+  assert.ok(ts.options.length >= 2, 'the single clean split is backfilled with alternatives');
+
+  // The coarser merges never split an equal-score group, so they need NO tiebreak —
+  // they fill the menu ahead of any tie-split alternative.
+  const merges = ts.options.filter((o) => o.jumped);
+  assert.ok(merges.length >= 1, 'at least one merge/jump alternative is offered');
+  for (const m of merges) {
+    assert.ok(!m.separated, 'a merge option is not a tie-split');
+    assert.equal(m.arbitrarySplits, undefined, 'a merge option breaks no ties');
+    assert.doesNotMatch(m.label, /needs a tiebreak/, 'a merge option is not flagged for a tiebreak');
+    assert.match(m.label, /merges a tier/, 'the merge/jump is called out in the label');
+  }
+
+  // Option B is the cheapest bottom-jump merge: 76→3, {75.5,75,74.5}→2, 74s→0
+  // (i.e. 3,2,2,2,2,2,2,0,0,0) — the user's requested "merge 74.5 up into 75, drop
+  // the 74s" distribution, ranked ahead of the taller top-jump merges.
+  const b = ts.options[1];
+  assert.ok(b.jumped, 'option B is a merge/jump option');
+  assert.deepEqual(
+    b.perSong.map((p) => p.votes),
+    [3, 2, 2, 2, 2, 2, 2, 0, 0, 0],
+    'option B is the 2→0 bottom-merge the owner asked for'
+  );
+
+  // Every surfaced option resolves and stays budget-exact when applied.
+  ts.options.forEach((_, i) => {
+    const letter = String.fromCharCode(65 + i);
+    const { overrides, error } = resolveOptionPick(tradeoffs, letter, {}, 10);
+    assert.equal(error, null, `pick ${letter} resolves`);
+    const f = mk(scores);
+    allocate(f, 15, 10, { shape: 'auto', overrides });
+    assert.equal(sum(f), 15, `applying option ${letter} spends the full budget`);
+  });
+});
+
+test('merge/jump options never dump all leftover points on the top song', () => {
+  const scores = [76, 75.5, 75, 75, 74.5, 74.5, 74.5, 74, 74, 74];
+  const { tradeoffs } = allocate(mk(scores), 15, 10, { shape: 'auto', optionCount: 8 });
+  const ts = tradeoffs.find((t) => t.kind === 'tier-structure');
+  for (const o of ts.options) {
+    const votes = o.perSong.map((p) => p.votes);
+    // A lone tall top (top >1 point above the 2nd song) is the regression the jump
+    // penalty prices out — no surfaced option should have one.
+    assert.ok(votes[0] - votes[1] <= 1, `option "${o.shape}" has no lone inflated top`);
+  }
+});
+
+test('--options caps the menu length; default surfaces up to 5', () => {
+  const scores = [76, 75.5, 75, 75, 74.5, 74.5, 74.5, 74, 74, 74];
+  const three = allocate(mk(scores), 15, 10, { shape: 'auto', optionCount: 3 })
+    .tradeoffs.find((t) => t.kind === 'tier-structure');
+  assert.equal(three.options.length, 3, '--options 3 caps the menu at 3');
+
+  const def = allocate(mk(scores), 15, 10, { shape: 'auto' })
+    .tradeoffs.find((t) => t.kind === 'tier-structure');
+  assert.equal(def.options.length, 5, 'the default menu surfaces 5 options on a rich field');
+});
+
+test('--bucket-count re-clusters into K natural-break buckets (real k-means, merges allowed)', () => {
+  const scores = [76, 75.5, 75, 75, 74.5, 74.5, 74.5, 74, 74, 74];
+  const g = mk(scores);
+  allocate(g, 15, 10, { shape: 'auto', bucketCount: 4 });
+  // 4 clusters, then a budget-exact monotonic point per cluster with merges: two
+  // adjacent clusters share a level (a merge) and the lowest bucket is unfunded.
+  assert.equal(sum(g), 15, 'forced bucket curve still spends the budget exactly');
+  const votes = g.map((s) => s.finalVotes);
+  const distinctFunded = new Set(votes.filter((v) => v > 0)).size;
+  assert.ok(distinctFunded < 4, 'a merge collapses at least two of the 4 buckets onto one level');
+  assert.ok(votes.some((v) => v === 0), 'the lowest bucket is left unfunded');
 });
 
 test('reconcileOptionPins reflows a net-positive pin by shedding the bottom (budget stays exact)', () => {
@@ -1906,6 +1982,51 @@ test('parseBucketCount parses a positive integer and rejects bad specs', () => {
   assert.throws(() => parseBucketCount('0'));
   assert.throws(() => parseBucketCount('2.5'));
   assert.throws(() => parseBucketCount('x'));
+});
+
+test('parseOptionCount parses a positive integer and rejects bad specs', () => {
+  assert.equal(parseOptionCount('7'), 7);
+  assert.equal(parseOptionCount(5), 5);
+  assert.equal(parseOptionCount(''), undefined);
+  assert.equal(parseOptionCount(null), undefined);
+  assert.throws(() => parseOptionCount('0'));
+  assert.throws(() => parseOptionCount('2.5'));
+  assert.throws(() => parseOptionCount('x'));
+});
+
+test('parseScoreOverrides parses idx:score with +/-/? modifiers', () => {
+  assert.equal(parseScoreOverrides(''), undefined);
+  assert.equal(parseScoreOverrides([]), undefined);
+
+  assert.deepEqual(parseScoreOverrides('5:74.5+'), [
+    { idx: 5, score: 74.5, plus: true, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false },
+  ]);
+  assert.deepEqual(parseScoreOverrides('7:75'), [
+    { idx: 7, score: 75, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false },
+  ]);
+  assert.deepEqual(parseScoreOverrides('2:76-'), [
+    { idx: 2, score: 76, plus: false, minus: true, uncertain: false, plusUncertain: false, minusUncertain: false },
+  ]);
+  assert.deepEqual(parseScoreOverrides('3:75?'), [
+    { idx: 3, score: 75, plus: false, minus: false, uncertain: true, plusUncertain: false, minusUncertain: false },
+  ]);
+  // `?` combined with a modifier marks that modifier uncertain.
+  assert.deepEqual(parseScoreOverrides('4:74.5+?'), [
+    { idx: 4, score: 74.5, plus: true, minus: false, uncertain: false, plusUncertain: true, minusUncertain: false },
+  ]);
+
+  // Comma / repeated specs both fold into one list.
+  const multi = parseScoreOverrides(['5:74.5+', '7:75,2:76-']);
+  assert.equal(multi.length, 3);
+});
+
+test('parseScoreOverrides rejects malformed specs', () => {
+  assert.throws(() => parseScoreOverrides('5'), /rawOrderIndex/); // no colon
+  assert.throws(() => parseScoreOverrides('x:74'), /rawOrderIndex/);
+  assert.throws(() => parseScoreOverrides('5:abc'), /score/);
+  assert.throws(() => parseScoreOverrides('5:74+-'), /both \+ and -/);
+  // The flag label appears in the error message for the caller-supplied flag name.
+  assert.throws(() => parseScoreOverrides('bad', '--fit-score'), /--fit-score/);
 });
 
 const PICK_OPTIONS = [

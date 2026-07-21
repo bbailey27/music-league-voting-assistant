@@ -16,6 +16,7 @@ import {
   pinCapError,
   parseTierCount,
   parseBucketCount,
+  parseOptionCount,
   parseFavoriteBand,
   parseDownShape,
   parseWeights,
@@ -34,6 +35,7 @@ function parseArgs(argv) {
     pin: [],
     tierCount: null,
     bucketCount: null,
+    optionCount: null,
     favoriteBand: null,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -70,6 +72,9 @@ function parseArgs(argv) {
       ['bucket-count', (v) => {
         args.bucketCount = v;
       }],
+      ['options', (v) => {
+        args.optionCount = v;
+      }],
       ['favorite-band', (v) => {
         args.favoriteBand = v;
       }],
@@ -97,9 +102,30 @@ function songsFromMusicPayload(data) {
 }
 
 function slimProfile(profile) {
-  const { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand, fitTrust } =
-    profile;
-  return { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand, fitTrust };
+  const {
+    shape,
+    downShape,
+    gate,
+    weights,
+    rankBy,
+    tierCount,
+    bucketCount,
+    optionCount,
+    favoriteBand,
+    fitTrust,
+  } = profile;
+  return {
+    shape,
+    downShape,
+    gate,
+    weights,
+    rankBy,
+    tierCount,
+    bucketCount,
+    optionCount,
+    favoriteBand,
+    fitTrust,
+  };
 }
 
 function buildProfile(args, stored, budget) {
@@ -110,12 +136,13 @@ function buildProfile(args, stored, budget) {
   const downOverrides = pins?.downOverrides ?? stored?.downOverrides;
   const tierCount = parseTierCount(args.tierCount) ?? stored?.tierCount;
   const bucketCount = parseBucketCount(args.bucketCount) ?? stored?.bucketCount;
+  const optionCount = parseOptionCount(args.optionCount) ?? stored?.optionCount;
   const favoriteBand = args.favoriteBand !== null ? parseFavoriteBand(args.favoriteBand) : stored?.favoriteBand;
   const downShape = parseDownShape(args.downShape) ?? stored?.downShape;
   const shape = args.shape ?? stored?.shape ?? 'auto';
   const rankBy = args.rank ?? stored?.rankBy ?? 'combined';
   return enrichProfileWithBudget(
-    { shape, downShape, gate, weights, overrides, downOverrides, tierCount, bucketCount, favoriteBand, rankBy },
+    { shape, downShape, gate, weights, overrides, downOverrides, tierCount, bucketCount, optionCount, favoriteBand, rankBy },
     budget
   );
 }

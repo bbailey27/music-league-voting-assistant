@@ -65,6 +65,53 @@ test('rescore re-blends combinedScore under new weights and resets the pick to d
   }
 });
 
+test('rescore --score overrides the music score + modifier and re-allocates', async () => {
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-rescore-score-'));
+  const dataDir = join(tmpRoot, 'data');
+  const env = { ...process.env, ML_DATA_DIR: dataDir };
+  try {
+    await mkdir(join(dataDir, 'rounds'), { recursive: true });
+    await copyFile(fixtureHtml, join(dataDir, 'rounds', `${ROUND}.html`));
+    const musicJson = join(dataDir, 'analysis', ROUND, 'music.json');
+
+    await ml(env, 'parse', ROUND);
+    const before = JSON.parse(await readFile(musicJson, 'utf8'));
+    // Midnight Bus (index 2) parses at 65 — the bottom of the field.
+    assert.equal(songByIndex(before, 2).score, 65);
+
+    // Promote it to the top with a + modifier; no HTML re-parse.
+    await ml(env, 'rescore', ROUND, '--score', '2:78+');
+    const after = JSON.parse(await readFile(musicJson, 'utf8'));
+    const s2 = songByIndex(after, 2);
+    assert.equal(s2.score, 78, '--score wrote the new music score');
+    assert.equal(s2.plus, true, '--score wrote the + modifier');
+    assert.equal(after.songs.reduce((a, s) => a + (s.finalVotes || 0), 0), before.budget.upvoteBankSize);
+    assert.ok(after.tradeoffs.length, 're-allocated menu is present');
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('rescore --score --dry-run does not write music.json', async () => {
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-rescore-score-dry-'));
+  const dataDir = join(tmpRoot, 'data');
+  const env = { ...process.env, ML_DATA_DIR: dataDir };
+  try {
+    await mkdir(join(dataDir, 'rounds'), { recursive: true });
+    await copyFile(fixtureHtml, join(dataDir, 'rounds', `${ROUND}.html`));
+    const musicJson = join(dataDir, 'analysis', ROUND, 'music.json');
+
+    await ml(env, 'parse', ROUND);
+    const before = await readFile(musicJson, 'utf8');
+
+    const { stdout } = await ml(env, 'rescore', ROUND, '--score', '2:78+', '--dry-run');
+    assert.match(stdout, /--score applied/);
+    assert.equal(before, await readFile(musicJson, 'utf8'), 'dry-run leaves music.json untouched');
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
 test('rescore --dry-run does not write and reports the reset', async () => {
   const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-rescore-dry-'));
   const dataDir = join(tmpRoot, 'data');

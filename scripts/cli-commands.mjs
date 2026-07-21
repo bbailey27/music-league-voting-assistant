@@ -73,6 +73,31 @@ export function pickHintLine(roundId, { hasUp = true, hasDown = false } = {}) {
   return `just pick ${roundId} <A|B|C>`;
 }
 
+/**
+ * One-line syntax reminder for the CLI menu. No round name (pick defaults to the
+ * current round) and no per-letter repetition — just the shape of the command plus
+ * the most common flags, so it reads as a syntax hint rather than three
+ * near-identical commands.
+ */
+export function pickSyntaxReminder({ hasDown = false } = {}) {
+  const down = hasDown ? ' [cv|fl|cc]' : '';
+  return `just pick <a|b|c>${down} [--pin <song>:<v>] [--cutoff music:<n>] [--reason "…"]`;
+}
+
+// Suffix describing how a point-split option differs from the primary staircase:
+// a coarser merge/jump (no tiebreak) or a tie-split (needs a tiebreak). Shared by the
+// CLI menu and the md/html legends so all three agree. Empty for the plain staircases.
+export function optionNote(o) {
+  if (o?.jumped) {
+    return ` · merges a tier${o.jump ? ` (${o.jump} jump, no tiebreak)` : ' (no tiebreak)'}`;
+  }
+  if (o?.separated && o.arbitrarySplits) {
+    const n = o.arbitrarySplits;
+    return ` · needs a tiebreak (splits ${n} tie${n > 1 ? 's' : ''})`;
+  }
+  return '';
+}
+
 /** @deprecated use pickHintLine */
 export function pickPromptLine(roundId, tradeoffsOrCount = 1) {
   const list = Array.isArray(tradeoffsOrCount)

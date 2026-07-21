@@ -9,10 +9,11 @@ When you change a workflow these diagrams describe, update the diagram in the sa
 
 ## Diagrams
 
-| Flow                                                  | File                                                               | Primary code                                                   |
-| ----------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------- |
-| Combined normalization — contender pool (cutoff / DQ) | [normalization-contender-pool.md](normalization-contender-pool.md) | `scripts/score/merge.mjs` (`isContender`, `normalizeCombined`) |
-| Combined tier equality — fit trust (manual vs LLM)    | [combined-tier-fit-trust.md](combined-tier-fit-trust.md)           | `scripts/score/merge.mjs`, `scripts/score/allocate.mjs`        |
+| Flow                                                          | File                                                               | Primary code                                                         |
+| ------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| Combined normalization — contender pool (cutoff / DQ)         | [normalization-contender-pool.md](normalization-contender-pool.md) | `scripts/score/merge.mjs` (`isContender`, `normalizeCombined`)       |
+| Combined tier equality — fit trust (manual vs LLM)            | [combined-tier-fit-trust.md](combined-tier-fit-trust.md)           | `scripts/score/merge.mjs`, `scripts/score/allocate.mjs`              |
+| Tier-structure menu — backfill order (merge/jump → tie-split) | [tier-structure-menu-backfill.md](tier-structure-menu-backfill.md) | `scripts/score/allocate.mjs` (`groupAtomicAlternatives`, menu block) |
 
 ## Conventions
 

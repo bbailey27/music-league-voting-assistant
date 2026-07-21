@@ -29,6 +29,7 @@ import {
   pinEligibilityError,
   parseTierCount,
   parseBucketCount,
+  parseOptionCount,
   parseFavoriteBand,
   parseDownShape,
   parseWeights,
@@ -98,6 +99,7 @@ function parseArgs(argv) {
     pin: [],
     tierCount: null,
     bucketCount: null,
+    optionCount: null,
     favoriteBand: null,
     option: null,
     reason: null,
@@ -163,6 +165,9 @@ function parseArgs(argv) {
       }],
       ['bucket-count', (v) => {
         args.bucketCount = v;
+      }],
+      ['options', (v) => {
+        args.optionCount = v;
       }],
       ['favorite-band', (v) => {
         args.favoriteBand = v;
@@ -244,10 +249,11 @@ async function main() {
   }
   const tierCount = parseTierCount(args.tierCount);
   const bucketCount = parseBucketCount(args.bucketCount);
+  const optionCount = parseOptionCount(args.optionCount);
   const favoriteBand = parseFavoriteBand(args.favoriteBand);
   const downShape = parseDownShape(args.downShape);
   const profile = enrichProfileWithBudget(
-    { shape: args.shape, downShape, gate, weights, overrides, downOverrides, tierCount, bucketCount, favoriteBand },
+    { shape: args.shape, downShape, gate, weights, overrides, downOverrides, tierCount, bucketCount, optionCount, favoriteBand },
     parsed.budget
   );
   const combineWeights = applyManualFitScoring(profile, parsed.songs, {

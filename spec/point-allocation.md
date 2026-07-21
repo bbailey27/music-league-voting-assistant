@@ -194,13 +194,54 @@ The allocator **always** emits a **`tier-structure` tradeoff** for the point spl
 that prints it (`parse`, `merge`, `rescore`) reprints the option table and
 `just pick <round> A` always resolves against a real option. When the split is
 genuinely a judgment call (several clusterings are close, or a small score range
-leaves it open) the alternatives ride along as options **B/C**; when only one clean
+leaves it open) the alternatives ride along as options **B/C/…**; when only one clean
 staircase fits the budget the menu is a **single option A** (its `question` says as
 much). Options dedupe on the **final point distribution**, not tier count — two
 bucket counts that yield the same tier count but different distributions both
 appear. Each option's `value` is the **bucket count (K)**; the label names tier
 count and bucket count separately. Record with `just pick <round> <A|B|C>`, or
 force a curve with `just pick <round> A --tier-count <n>` / `--bucket-count <n>`.
+
+The menu targets **5 options by default** (`profile.optionCount`); tune it per round
+with `--options <N>` on `parse` / `merge` / `rescore` / `pick` (persisted on the
+profile like `tier-count`). Option A is always the clean primary staircase; the
+remaining slots are backfilled best-kind-first (see below) and the list is sliced to
+`optionCount`.
+
+#### Backfilling the menu on flat fields
+
+The primary enumeration only offers staircases whose adjacent **distinct** tiers differ by
+exactly 1, so a tightly-clustered round can collapse to a single distribution (one top song,
+a couple of 2s, a wall of 1s). The empty option slots are backfilled toward `optionCount` in
+**two passes, best kind first**:
+
+1. **Coarser merge / jump curves** (`groupAtomicAlternatives`). These enumerate every
+   budget-exact, monotonic-non-increasing point vector over the atomic units, \*\*allowing a
+   > 1 jump between adjacent tiers and unfunded (0) buckets**. Because each unit keeps a single
+   > level, an equal-score group is **never split — no tiebreak needed\*\*. Example (flat k-pop,
+   > scores `76,75.5,75×2,74.5×3,74×3`, budget 15): the one clean staircase is
+   > `3,2,2,2,1,1,1,1,1,1`, but a merge exists with no tiebreak — `3,2,2,2,2,2,2,0,0,0` (merge
+   > `74.5` up to 2, drop the `74`s to 0). These carry `jumped: true` and a `jump` label
+   > (`2→0`), and the label ends with `· merges a tier (2→0 jump, no tiebreak)`.
+2. **Tie-split staircases** (`separatedTierAlternatives`). Taller curves that split a tie by
+   exactly one point (smoothness-safe, but an arbitrary coin flip). Only used to fill slots the
+   merges couldn't. They carry `separated: true` and `arbitrarySplits`, and their label ends
+   with `· needs a tiebreak (splits N tie…)`. Picking one is deterministic (the extra point
+   goes to the better-tiebreak song).
+
+**Jump-cost ranking.** Merge/jump curves are ordered by a weighted `jumpCost`, then most
+separation, then fewest zeros. Each jump costs `(gap − 1) × the UPPER level ÷ the score gap`,
+so a **cheap low bottom jump** between near scores (`2→0`) is preferred and a **tall top jump**
+(`5→3`) is expensive. A **lone inflated top** (top >1 point above the 2nd tier) adds a large
+penalty (`LONE_TOP_PENALTY`), which prices out the old "dump every leftover point on the #1
+song" regression the +1-step limit was originally added to stop — so an even promotion always
+wins. Option A (the clean primary split) is never displaced.
+
+**Tiebreak-limited path.** When the clean options (primary + merges) can't fill the requested
+`optionCount`, the `tier-structure` tradeoff sets `tiebreakLimited: true` and the CLI prints:
+`Can't add more distinct tiers without a tiebreak. Set a score: just rescore <round> --score
+<i>:<v> (e.g. --score 5:74.5+) or --fit-score <i>:<v>.` — pointing at the score override rather
+than silently emitting one option.
 
 Each option also carries structured `tiers`
 (`{ points, count, scoreHi, scoreLo, scores }`) so the report renders it as a
@@ -224,11 +265,31 @@ it then surfaces as a `tier-split` tradeoff.
 
 **Two knobs, different levels.** `--tier-count <n>` sets the number of **distinct
 final point values**, counting the `0` band (e.g. `0–2 points` = 3 tiers).
-`--bucket-count <n>` forces **K**, the number of **funded** point tiers (promotion
-steps + 1, excluding the `0` band) — the lower-level knob. A single integer knob
-can't always reproduce one specific staircase (two staircases can share both counts
-yet differ in size), so the surfaced `tier-structure` option carries both and the
-allocator picks the nearest achievable. `--bucket-count` wins if both are given.
+`--bucket-count <n>` sets **K = the number of natural-break CLUSTERS** to cut the
+field into (optimal 1-D k-means / `ckmeans1dWeighted` over the rank axis), **then**
+assigns a budget-exact, monotonic point value per cluster — adjacent clusters may
+share a level (a **merge**) and the lowest clusters may be **unfunded (0)**, picking
+the cleanest such curve by the same jump cost. So `--bucket-count` can yield **fewer
+funded tiers than K** (merges collapse buckets); it is a real re-clustering knob, not
+`tierCount − 1`. On a flat field where the merge is already spent it may have no
+budget-exact split for a given K, in which case it falls back to the nearest
+funded-tier count. `--bucket-count` wins over `--tier-count` if both are given; both
+suppress the menu and force a single curve.
+
+`--options <N>` is orthogonal: it only controls **how many** options the (unforced)
+menu surfaces, not which curve is chosen.
+
+### Manual score overrides — `rescore --score` / `--fit-score`
+
+When a round is genuinely tiebreak-limited (badly-aligned scores), break a tie by
+adjusting the underlying numbers instead of coin-flipping. `just rescore <round>
+--score <rawOrderIndex>:<value>` writes the **music** score (and its `+`/`-`/`?`
+modifier) onto `music.json`; `--fit-score <i>:<v>` writes the **fit** score onto
+`fit.json` (merge round) or the song's `fitScore` (manual-fit round). The value
+accepts a modifier suffix — `74.5+`, `76-`, `75?`, `74.5+?` — targeting the song by
+`rawOrderIndex` exactly like `--pin`. Both re-allocate from JSON with **no HTML
+re-parse** and reset any committed pick to draft; repeatable and comma-separable
+(`--score 5:74.5+,7:75`). `--dry-run` shows the effect without writing.
 
 ### Standing shape preference (owner default)
 
@@ -382,10 +443,20 @@ spent` line. There is no longer a silent overflow.
   that many distinct values (nearest achievable if none). Set by `just pick
 <round> <letter>` on a surfaced option, or via `--tier-count <n>` on **pick**
   (preview-only on parse/merge).
-- **`bucketCount`** — forces **K**, the number of **funded** point tiers (promotion
-  steps + 1, excluding the `0` band) — the lower-level knob beneath `tierCount`. Set
-  via `--bucket-count <n>` on **pick**; wins over `tierCount` if both are given. Both
+- **`bucketCount`** — forces **K = the number of natural-break clusters** to cut the
+  field into (optimal 1-D k-means), then assigns a budget-exact monotonic point value
+  per cluster (adjacent clusters may merge to one level; low clusters may be `0`).
+  Real re-clustering, not `tierCount − 1`; can yield fewer funded tiers than K. Set via
+  `--bucket-count <n>` on **pick**; wins over `tierCount` if both are given. Both
   suppress the `tier-structure` tradeoff.
+- **`optionCount`** — how many options the `tier-structure` menu surfaces (default
+  **5**). Set via `--options <N>` on parse/merge/pick/rescore; persisted on the
+  profile. Orthogonal to `tierCount`/`bucketCount` (it sizes the menu, doesn't force a
+  curve). Backfill order: primary splits → merge/jump curves → tie-split staircases.
+- **`--score <i>:<v>` / `--fit-score <i>:<v>`** (rescore only) — override a song's
+  music/fit score (with optional `+`/`-`/`?` modifier) by `rawOrderIndex`, then
+  re-allocate from JSON with no HTML re-parse. Use to break a tiebreak-limited round.
+  Comma-separable and repeatable; `--dry-run` previews.
 - **`--option <A|B|C…>`** — record a `tier-structure` fork by column letter
   (**prefer `just pick <round> <letter>`** — JSON-only, never re-reads HTML). Still
   accepted on parse/merge for backward compatibility but deprecated there. Applies

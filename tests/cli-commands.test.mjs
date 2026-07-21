@@ -7,6 +7,7 @@ import {
   parsePickSpec,
   pickHintLine,
   pickPromptLine,
+  pickSyntaxReminder,
   pickUsageError,
 } from '../scripts/cli-commands.mjs';
 
@@ -38,6 +39,14 @@ test('pickHintLine is a one-line command hint', () => {
   assert.equal(pickHintLine('tarot', { hasUp: true, hasDown: false }), 'just pick tarot <A|B|C>');
   assert.equal(pickHintLine('story-6', { hasUp: true, hasDown: true }), 'just pick story-6 <A|B|C> <cv|fl|cc>');
   assert.equal(pickPromptLine('story-6', [{ kind: 'down-structure' }]), 'just pick story-6 <A|B|C> <cv|fl|cc>');
+});
+
+test('pickSyntaxReminder is round-name-free and shows common flags, not per-letter commands', () => {
+  const up = pickSyntaxReminder({ hasDown: false });
+  assert.equal(up, 'just pick <a|b|c> [--pin <song>:<v>] [--cutoff music:<n>] [--reason "…"]');
+  assert.doesNotMatch(up, /cv\|fl\|cc/, 'no down-shape hint when the round has no downvotes');
+  const down = pickSyntaxReminder({ hasDown: true });
+  assert.match(down, /just pick <a\|b\|c> \[cv\|fl\|cc\]/, 'down rounds hint the shape codes');
 });
 
 test('pickUsageError references just pick example', () => {

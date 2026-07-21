@@ -91,6 +91,61 @@ export function parseBucketCount(spec) {
   return parseCountFlag(spec, '--bucket-count');
 }
 
+// How many options the point-split menu should surface (default 5). More options ask
+// the allocator to backfill deeper with merge/jump and tie-split alternatives.
+export function parseOptionCount(spec) {
+  return parseCountFlag(spec, '--options');
+}
+
+// Manual raw-score overrides for `rescore --score` / `--fit-score`. Each spec is
+// `<rawOrderIndex>:<score>` where <score> may carry a modifier suffix: `+` / `-` nudge
+// a tie, `?` marks uncertainty, and `+?` / `-?` combine them (e.g. `5:74.5+`, `7:75?`,
+// `9:76-`). A bare number clears any modifier. Returns a list of
+// `{ idx, score, plus, minus, uncertain, plusUncertain, minusUncertain }`.
+export function parseScoreOverrides(specs, flag = '--score') {
+  const list = (Array.isArray(specs) ? specs : [specs]).filter(Boolean);
+  if (!list.length) return undefined;
+  const out = [];
+  for (const chunk of list) {
+    for (const pair of String(chunk).split(',')) {
+      if (!pair.trim()) continue;
+      const ci = pair.indexOf(':');
+      if (ci < 0) {
+        throw new Error(`Invalid ${flag} "${pair}" (use <rawOrderIndex>:<score>, e.g. 5:74.5+)`);
+      }
+      const idx = Number(pair.slice(0, ci).trim());
+      const valRaw = pair.slice(ci + 1).trim();
+      if (!Number.isInteger(idx) || idx < 0) {
+        throw new Error(`Invalid ${flag} "${pair}" — rawOrderIndex must be a non-negative integer.`);
+      }
+      const m = valRaw.match(/^(\d+(?:\.\d+)?)([+\-?]*)$/);
+      if (!m) {
+        throw new Error(
+          `Invalid ${flag} "${pair}" — use <score> optionally with +, -, or ? (e.g. 74.5+, 75?, 76-).`
+        );
+      }
+      const score = Number(m[1]);
+      const mods = m[2] || '';
+      const plus = mods.includes('+');
+      const minus = mods.includes('-');
+      const q = mods.includes('?');
+      if (plus && minus) {
+        throw new Error(`Invalid ${flag} "${pair}" — a score can't be both + and -.`);
+      }
+      out.push({
+        idx,
+        score,
+        plus,
+        minus,
+        uncertain: q && !plus && !minus,
+        plusUncertain: q && plus,
+        minusUncertain: q && minus,
+      });
+    }
+  }
+  return out.length ? out : undefined;
+}
+
 export function parseFavoriteBand(spec) {
   if (spec === false) return false;
   if (spec == null || spec === '') return undefined;

@@ -1,6 +1,6 @@
 // Report rendering and fit-research orchestration.
 
-import { formatPickCmd, downShapeShort } from '../cli-commands.mjs';
+import { formatPickCmd, downShapeShort, optionNote } from '../cli-commands.mjs';
 import { expandTradeoffRows, isExcludedFromAllocation } from '../tradeoff-rows.mjs';
 import { cell, formatScore } from './format.mjs';
 import { tiebreakRank } from './comment.mjs';
@@ -55,6 +55,8 @@ export function buildPickRecord({
       bucketCount: o.bucketCount,
       shape: o.shape,
       isChosen: i === chosenIndex,
+      ...(o.separated ? { separated: true, arbitrarySplits: o.arbitrarySplits } : {}),
+      ...(o.jumped ? { jumped: true, jump: o.jump } : {}),
       perSong: (o.perSong || []).map((s) => ({
         rawOrderIndex: s.rawOrderIndex,
         title: s.title,
@@ -206,7 +208,7 @@ function renderTierStructure(L, t, roundId = null, songs = [], ownSongs = [], pr
     L.push(
       `  - **${OPTION_LETTERS[i]}**${i === 0 ? ' (default)' : ''} — ${o.tierCount} tier${
         o.tierCount === 1 ? '' : 's'
-      }, \`${o.shape ?? `bucket-count ${o.bucketCount}`}\`, \`${cmd}\``
+      }, \`${o.shape ?? `bucket-count ${o.bucketCount}`}\`, \`${cmd}\`${optionNote(o)}`
     );
   });
   L.push('');
@@ -297,7 +299,9 @@ export function renderPickMarkdown(L, pick, songs = [], ownSongs = [], profile =
   L.push('');
   opts.forEach((o) => {
     const tag = o.isChosen ? ' **(chosen)**' : '';
-    L.push(`  - **${o.letter}**${tag} — ${o.tierCount} tier${o.tierCount === 1 ? '' : 's'}, \`${o.shape}\``);
+    L.push(
+      `  - **${o.letter}**${tag} — ${o.tierCount} tier${o.tierCount === 1 ? '' : 's'}, \`${o.shape}\`${optionNote(o)}`
+    );
   });
   L.push('');
 }

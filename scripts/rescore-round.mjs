@@ -25,10 +25,12 @@ import { musicPaths, fitPaths } from './paths.mjs';
 import {
   parseTierCount,
   parseBucketCount,
+  parseOptionCount,
   parseFavoriteBand,
   parseDownShape,
   parseWeights,
   buildGate,
+  parseScoreOverrides,
 } from './parse/cli-flags.mjs';
 import { printPickCli } from './parse/cli-print.mjs';
 import { warnMissingScoresCli, warnMissingFitScoresCli } from './parse/cli-warn.mjs';
@@ -45,7 +47,10 @@ function parseArgs(argv) {
     weights: null,
     tierCount: null,
     bucketCount: null,
+    optionCount: null,
     favoriteBand: null,
+    score: [],
+    fitScore: [],
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -66,7 +71,10 @@ function parseArgs(argv) {
       ['weights', (v) => (args.weights = v)],
       ['tier-count', (v) => (args.tierCount = v)],
       ['bucket-count', (v) => (args.bucketCount = v)],
+      ['options', (v) => (args.optionCount = v)],
       ['favorite-band', (v) => (args.favoriteBand = v)],
+      ['score', (v) => args.score.push(v)],
+      ['fit-score', (v) => args.fitScore.push(v)],
     ];
     let matched = false;
     for (const [name, setter] of flags) {
@@ -90,6 +98,43 @@ function songsFromPayload(data) {
   return (data.songs || []).map((s) => ({ ...s }));
 }
 
+// Apply `--score` overrides onto the music songs in place: set the raw score and its
+// +/-/? modifier flags so the change sticks with no HTML re-parse. Exits on a bad idx.
+function applyScoreOverrides(songs, overrides) {
+  if (!overrides) return false;
+  const byIdx = new Map(songs.map((s) => [s.rawOrderIndex, s]));
+  for (const ov of overrides) {
+    const s = byIdx.get(ov.idx);
+    if (!s) {
+      console.error(`Invalid --score ${ov.idx}:${ov.score} — no song with rawOrderIndex ${ov.idx}.`);
+      process.exit(1);
+    }
+    s.score = ov.score;
+    s.plus = ov.plus;
+    s.minus = ov.minus;
+    s.uncertain = ov.uncertain;
+    s.plusUncertain = ov.plusUncertain;
+    s.minusUncertain = ov.minusUncertain;
+  }
+  return true;
+}
+
+// Apply `--fit-score` overrides onto a fit-song list in place (music.json songs for a
+// manual-fit round, or fit.json songs for a merge round). Exits on a bad idx.
+function applyFitScoreOverrides(songs, overrides, where) {
+  if (!overrides) return false;
+  const byIdx = new Map(songs.map((s) => [s.rawOrderIndex, s]));
+  for (const ov of overrides) {
+    const s = byIdx.get(ov.idx);
+    if (!s) {
+      console.error(`Invalid --fit-score ${ov.idx}:${ov.score} — no song with rawOrderIndex ${ov.idx} in ${where}.`);
+      process.exit(1);
+    }
+    s.fitScore = ov.score;
+  }
+  return true;
+}
+
 // Merge knobs over the stored profile (same precedence as pick's buildProfile).
 // rescore takes no pins — it re-weights and re-shapes the draft menu, not a ballot.
 function buildProfile(args, stored, budget, mode) {
@@ -97,6 +142,7 @@ function buildProfile(args, stored, budget, mode) {
   const weights = parseWeights(args.weights) ?? stored?.weights;
   const tierCount = parseTierCount(args.tierCount) ?? stored?.tierCount;
   const bucketCount = parseBucketCount(args.bucketCount) ?? stored?.bucketCount;
+  const optionCount = parseOptionCount(args.optionCount) ?? stored?.optionCount;
   const favoriteBand =
     args.favoriteBand !== null ? parseFavoriteBand(args.favoriteBand) : stored?.favoriteBand;
   const downShape = parseDownShape(args.downShape) ?? stored?.downShape;
@@ -104,15 +150,47 @@ function buildProfile(args, stored, budget, mode) {
   const rankBy = args.rank ?? stored?.rankBy ?? (mode === 'thematic' ? 'combined' : 'music');
   const fitTrust = stored?.fitTrust;
   return enrichProfileWithBudget(
-    { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand, fitTrust },
+    {
+      shape,
+      downShape,
+      gate,
+      weights,
+      rankBy,
+      tierCount,
+      bucketCount,
+      optionCount,
+      favoriteBand,
+      fitTrust,
+    },
     budget
   );
 }
 
 function slimProfile(profile) {
-  const { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand, fitTrust } =
-    profile;
-  return { shape, downShape, gate, weights, rankBy, tierCount, bucketCount, favoriteBand, fitTrust };
+  const {
+    shape,
+    downShape,
+    gate,
+    weights,
+    rankBy,
+    tierCount,
+    bucketCount,
+    optionCount,
+    favoriteBand,
+    fitTrust,
+  } = profile;
+  return {
+    shape,
+    downShape,
+    gate,
+    weights,
+    rankBy,
+    tierCount,
+    bucketCount,
+    optionCount,
+    favoriteBand,
+    fitTrust,
+  };
 }
 
 async function main() {
@@ -121,7 +199,8 @@ async function main() {
   const args = parseArgs(argv);
   if (!args.roundId) {
     console.error(
-      'Usage: just rescore <round-id> [--weights fit:music] [--shape …] [--gate …] [--down-shape …] [--rank …] [--dry-run]'
+      'Usage: just rescore <round-id> [--weights fit:music] [--shape …] [--gate …] [--down-shape …] ' +
+        '[--rank …] [--options N] [--tier-count N] [--bucket-count N] [--score <i>:<v>] [--fit-score <i>:<v>] [--dry-run]'
     );
     process.exit(1);
   }
@@ -145,18 +224,28 @@ async function main() {
   const profile = buildProfile(args, musicData.profile, budget, musicData.mode);
   const songs = songsFromPayload(musicData);
 
+  // Manual raw-score overrides (no HTML re-parse): --score writes the music score +
+  // modifier onto music.json; --fit-score writes the fit score onto fit.json (merge
+  // round) or the music song's fitScore (manual-fit round). Applied before allocation
+  // so the menu reflects the new numbers; persisted below (unless --dry-run).
+  const scoreOverrides = parseScoreOverrides(args.score);
+  const fitScoreOverrides = parseScoreOverrides(args.fitScore, '--fit-score');
+  let scoreDirty = applyScoreOverrides(songs, scoreOverrides);
+
   let tradeoffs;
   let combineWeights;
+  let fitData = null;
+  let fitDirty = false;
   const ownSongs = musicData.ownSongs || [];
 
   if (useMerge) {
-    let fitData;
     try {
       fitData = JSON.parse(await readFile(fitJson, 'utf8'));
     } catch (err) {
       console.error(`Could not read ${fitJson}: ${err.message}. Complete fit research first.`);
       process.exit(1);
     }
+    fitDirty = applyFitScoreOverrides(fitData.songs || [], fitScoreOverrides, fitJson);
     const parsed = { round: musicData.round, budget, songs, ownSongs };
     const merged = mergeFitJson(parsed, fitData, {
       ...profile,
@@ -165,6 +254,9 @@ async function main() {
     tradeoffs = merged.tradeoffs;
     combineWeights = fitData.combineWeights ?? profile.weights ?? null;
   } else {
+    // Non-merge: the fit score lives on the music song and is re-persisted with it, so
+    // fold a --fit-score into the music-json write rather than a separate fit.json.
+    if (applyFitScoreOverrides(songs, fitScoreOverrides, musicJson)) scoreDirty = true;
     combineWeights = applyManualFitScoring(profile, songs, {
       explicitRank: args.rank,
       weights: profile.weights,
@@ -179,8 +271,17 @@ async function main() {
     const wLabel = w
       ? `weights ${Math.round((w.fit ?? 0) * 10)}:${Math.round((w.music ?? 0) * 10)} (fit:music)`
       : 'stored weights';
-    console.log(`Would rescore ${roundId} (${wLabel}) → ${musicJson} (pick reset to draft)`);
+    const ovLabel =
+      scoreDirty || fitDirty
+        ? ` [${[scoreDirty && '--score', fitDirty && '--fit-score'].filter(Boolean).join(' + ')} applied]`
+        : '';
+    console.log(`Would rescore ${roundId} (${wLabel})${ovLabel} → ${musicJson} (pick reset to draft)`);
     return;
+  }
+
+  if (fitDirty) {
+    await writeFile(fitJson, `${JSON.stringify(fitData, null, 2)}\n`, 'utf8');
+    console.log(`Wrote ${fitJson} (fit-score override)`);
   }
 
   // Reset any committed pick to draft: no `pick`, songs carry the re-allocated draft.

@@ -11,6 +11,44 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-21 — Coarser merge/jump options, real `--bucket-count`, `--options`, score override
+
+**Change.** [`scripts/score/allocate.mjs`](../scripts/score/allocate.mjs) adds
+`groupAtomicAlternatives()`: budget-exact, monotonic, **group-atomic** point vectors that
+allow a **>1 jump between tiers and unfunded (0) buckets**, so an equal-score group can merge
+up (or drop to 0) with **no tiebreak**. The menu now backfills toward `optionCount` (default
+**5**, `--options N`) in two passes — natural splits → merge/jump curves → tie-split
+staircases (`separatedTierAlternatives`). Merge curves are ranked by a weighted `jumpCost`
+(`(gap−1) × upperLevel ÷ scoreGap`, so a cheap `2→0` bottom jump beats a tall `5→3` top jump)
+plus a `LONE_TOP_PENALTY` that prices out dumping leftover points on the #1 song. `--bucket-count`
+now does **real k-means** (`ckmeans1dWeighted` into K clusters, then a budget-exact monotonic
+value per cluster) instead of filtering by `tierCount − 1` (future-plans Bug 3). New
+`rescore --score <i>:<v>` / `--fit-score` override writes music/fit scores (with `+`/`-`/`?`
+modifiers) by `rawOrderIndex` and re-allocates from JSON with no HTML re-parse. When the clean
+options can't fill `optionCount`, the tradeoff sets `tiebreakLimited` and the CLI points at the
+override. Tests in [`tests/score.test.mjs`](../tests/score.test.mjs),
+[`tests/rescore-e2e.test.mjs`](../tests/rescore-e2e.test.mjs),
+[`tests/cli-print.test.mjs`](../tests/cli-print.test.mjs).
+
+**Why.** On a badly-aligned flat field (k-pop cutoff-74: `76,75.5,75×2,74.5×3,74×3`, budget 15)
+the only clean staircase was `3,2,2,2,1,1,1,1,1,1`; a valid no-tiebreak merge —
+`3,2,2,2,2,2,2,0,0,0` — was discarded because the `2→0` step trips the smoothness rule and
+`violations` sorted first. The owner wanted these merges surfaced (that's the whole point of
+buckets — two clusters can land on one funded tier depending on the budget, and not every
+cluster gets points), preferring no jumps where possible but tolerating cheap low-end jumps.
+The `+1`-step limit had been added to stop the allocator dumping all leftover points on the top
+song; the weighted penalty + lone-top term relaxes it without reviving that regression. Rounds
+that are genuinely impossible without a tiebreak now get a console path to fix the scores rather
+than a silent single option.
+
+**Overruled.** Supersedes the previous entry's "backfill only with tie-split staircases" — merges
+(no tiebreak) are now preferred over tie-splits in the backfill order.
+
+**Refs.** working tree · spec/point-allocation.md → _Backfilling the menu on flat fields_,
+_Manual score overrides_.
+
+---
+
 ## 2026-07-21 — Point-split menu always surfaces (single option A when unambiguous)
 
 **Change.** [`scripts/score/allocate.mjs`](../scripts/score/allocate.mjs) now emits the
@@ -29,7 +67,50 @@ table appear and makes `pick A` resolvable on single-curve rounds. Aligns with t
 direction already noted in `future-plans.plan.md` ("keep emitting the menu with the forced
 curve as option A").
 
-**Refs.** working tree · spec/point-allocation.md → *The point-split menu is always surfaced*.
+**Refs.** `0eaa2dd` · spec/point-allocation.md → _The point-split menu is always surfaced_.
+
+---
+
+## 2026-07-21 — Flat fields backfill more-separated tier options (tie-splits, flagged)
+
+**Change.** [`scripts/score/allocate.mjs`](../scripts/score/allocate.mjs) adds
+`separatedTierAlternatives()`. When the primary enumeration surfaces fewer than 3 distinct
+splits, the empty option slots are backfilled with taller staircases enumerated over
+**singleton positions** (each song its own +1 step), which lets an equal-score group split by
+one point. Only curves with **more** tiers than the primary split are offered; they are ranked
+cleanest-coin-flip first (fewest ties torn, then tightest tear, then most top-heavy, then most
+separation) and carry `separated: true` + `arbitrarySplits`, with a `· needs a tiebreak` label
+suffix. Option A (the clean primary split) and `finalVotes` are unchanged. Regression test in
+[`tests/score.test.mjs`](../tests/score.test.mjs) ("a flat field backfills more-separated
+alternatives…").
+
+**Why.** A tightly-clustered round (e.g. the k-pop theme round after `--cutoff music:74`)
+collapsed to a single distribution — a top song, a couple of 2s, and a wall of 1s — with no
+alternative, because the primary enumeration never splits a tie. `--tier-count`/`--bucket-count`
+were inert there (no unit-boundary staircase has more tiers). The owner would rather see taller
+options with the tiebreak called out than no options at all. The extras are smoothness-safe
+(a tie splits by exactly one point) and deterministic on pick (the extra goes to the
+better-tiebreak song), so picking one is an explicit, recorded coin flip.
+
+**Refs.** working tree · spec/point-allocation.md → _More-separated alternatives on flat fields_.
+
+---
+
+## 2026-07-21 — CLI pick menu prints one syntax reminder, not per-letter commands
+
+**Change.** The CLI menu (`parse`/`merge`/`rescore` via `printPickCli`) no longer prints the
+round-name pick hint before the tables or the per-option `A  just pick <round> A` legend under
+each table. After the option tables it prints one round-name-free reminder,
+`pickSyntaxReminder()` in [`scripts/cli-commands.mjs`](../scripts/cli-commands.mjs):
+`just pick <a|b|c> [cv|fl|cc] [--pin <song>:<v>] [--cutoff music:<n>] [--reason "…"]` (down-shape
+codes only when the round has a downvote bank). `formatPickCmd`/`pickHintLine` are unchanged and
+still used by the HTML renderer.
+
+**Why.** The owner never types the full round name (pick defaults to the current round) and the
+three near-identical `A/B/C` commands were noise — the option-table column headers already label
+A/B/C. A single syntax line reminds them of the common flags instead of repeating commands.
+
+**Refs.** working tree.
 
 ---
 

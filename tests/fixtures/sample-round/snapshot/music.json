@@ -79,6 +79,35 @@
             "votes": 2
           }
         ]
+      },
+      {
+        "letter": "C",
+        "tierCount": 2,
+        "bucketCount": 1,
+        "shape": "3×2 / 0×1",
+        "isChosen": false,
+        "jumped": true,
+        "jump": "3→0",
+        "perSong": [
+          {
+            "rawOrderIndex": 0,
+            "title": "Starlight",
+            "score": 78,
+            "votes": 3
+          },
+          {
+            "rawOrderIndex": 1,
+            "title": "City Glow",
+            "score": 72,
+            "votes": 3
+          },
+          {
+            "rawOrderIndex": 2,
+            "title": "Midnight Bus",
+            "score": 65,
+            "votes": 0
+          }
+        ]
       }
     ]
   },

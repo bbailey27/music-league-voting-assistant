@@ -986,6 +986,309 @@ export function ckmeans1dWeighted(values, weights, K) {
   return { ranges, wss: D[K][n] };
 }
 
+// Supplementary "more separated" tier options. The primary enumeration only offers
+// curves that never split an equal-score group, so a tightly-clustered field can
+// collapse to a single distribution (lots of 1s). These extras enumerate the same
+// +1-step staircases over SINGLETON positions (each song its own step), which lets a
+// tied group split by exactly one point — smoothness-safe, but an arbitrary coin
+// flip, so they're flagged as needing a tiebreak. `ranked` is best-first:
+// `[{ rawOrderIndex, title, score, token, tbRank }]`. Only curves with MORE distinct
+// tiers than the primary split are returned (that's the whole point), best-first by
+// fewest coin-flips, then most separation, then top-heaviness.
+function separatedTierAlternatives(ranked, budget, cap, { excludeVoteKeys, minDistinct, maxOut = 2 }) {
+  const n = ranked.length;
+  if (n === 0 || budget <= 0) return [];
+  const maxPromos = Number.isFinite(cap) ? Math.max(0, cap - 1) : n;
+  const seen = new Set();
+  const cands = [];
+  let nodes = 0;
+  const NODE_CAP = 200000;
+
+  const addCurve = (c, promos) => {
+    const votes = new Array(n);
+    for (let i = 0; i < n; i++) {
+      let v = i < c ? 1 : 0;
+      for (const p of promos) if (i < p) v++;
+      votes[i] = v;
+    }
+    const runs = [];
+    for (let i = 0; i < n; i++) {
+      const last = runs[runs.length - 1];
+      if (last && last.level === votes[i]) {
+        last.count++;
+        last.lo = ranked[i].score;
+        if (!last.tokens.includes(ranked[i].token)) last.tokens.push(ranked[i].token);
+      } else {
+        runs.push({ level: votes[i], count: 1, hi: ranked[i].score, lo: ranked[i].score, tokens: [ranked[i].token] });
+      }
+    }
+    const voteKey = runs.map((r) => `${r.count}:${r.level}`).join('|');
+    if (seen.has(voteKey) || excludeVoteKeys.has(voteKey)) return;
+    seen.add(voteKey);
+    const distinct = runs.length;
+    if (distinct < minDistinct) return;
+    // Arbitrary tie-split: members that share BOTH score and tiebreak rank (no
+    // +/-/? to resolve them) yet land on different points — a genuine coin flip.
+    let arbitrarySplits = 0;
+    const groups = new Map();
+    for (let i = 0; i < n; i++) {
+      const key = `${ranked[i].score}|${ranked[i].tbRank}`;
+      let g = groups.get(key);
+      if (!g) groups.set(key, (g = []));
+      g.push(votes[i]);
+    }
+    // `splitSpan` is how wide a single tie is torn (a 2,1 split spans 1; a 2,1,0
+    // three-way split spans 2) — a tighter tear is a cleaner coin flip.
+    let splitSpan = 0;
+    for (const g of groups.values()) {
+      if (new Set(g).size > 1) {
+        arbitrarySplits++;
+        splitSpan += Math.max(...g) - Math.min(...g);
+      }
+    }
+    const K = runs.filter((r) => r.level > 0).length;
+    let topWeight = 0;
+    for (let i = 0; i < n; i++) topWeight -= votes[i] * i;
+    cands.push({
+      voteKey,
+      distinct,
+      arbitrarySplits,
+      splitSpan,
+      K,
+      topWeight,
+      shape: runs.map((r) => `${r.level}×${r.count}`).join(' / '),
+      runs,
+      perSong: ranked.map((m, i) => ({
+        rawOrderIndex: m.rawOrderIndex,
+        title: m.title,
+        rank: m.score,
+        score: m.score,
+        token: m.token,
+        votes: votes[i],
+      })),
+    });
+  };
+
+  for (let c = 1; c <= n && c <= budget; c++) {
+    const T = budget - c;
+    if (T === 0) {
+      addCurve(c, []);
+      continue;
+    }
+    const solve = (pos, remaining, promos) => {
+      if (nodes++ > NODE_CAP) return;
+      if (remaining === 0) {
+        addCurve(c, promos.slice());
+        return;
+      }
+      if (pos < 1 || promos.length >= maxPromos || remaining < 1) return;
+      if (pos <= remaining) {
+        promos.push(pos);
+        solve(pos - 1, remaining - pos, promos);
+        promos.pop();
+      }
+      solve(pos - 1, remaining, promos);
+    };
+    solve(c < n ? c - 1 : c, T, []);
+  }
+
+  // Cleanest coin flip first (fewest ties torn, then tightest tear), then the most
+  // top-heavy split (keeps the top songs distinguished rather than flattening them),
+  // then the most separation.
+  cands.sort(
+    (a, b) =>
+      a.arbitrarySplits - b.arbitrarySplits ||
+      a.splitSpan - b.splitSpan ||
+      b.topWeight - a.topWeight ||
+      b.distinct - a.distinct ||
+      a.voteKey.localeCompare(b.voteKey)
+  );
+  return cands.slice(0, maxOut);
+}
+
+// A lone top that towers over the second tier is the "dump all leftover points on
+// the #1 song" bug the +1-step limit was added to stop. Price it so heavily that any
+// evenly-promoted curve wins, but still enumerate it (ranked last) rather than hide it.
+const LONE_TOP_PENALTY = 100;
+
+// Cost of the jumps in a monotonic-non-increasing level vector (levels aligned to
+// `vals`, both best-first over the atomic tiers). A jump = adjacent tiers > 1 point
+// apart. Each jump costs `(gap-1) × the UPPER level ÷ the score gap`, so a low bottom
+// jump between near scores (2→0) is cheap while a tall top jump (5→3) is expensive; a
+// lone inflated top is priced out entirely. Shared by the merge/jump generator and the
+// forced --bucket-count curve so both rank coarser curves the same way.
+function monotonicJumpCost(levels, vals) {
+  let cost = 0;
+  for (let i = 0; i < levels.length - 1; i++) {
+    if (levels[i] > levels[i + 1]) {
+      const gap = levels[i] - levels[i + 1];
+      if (gap > 1) {
+        const scoreGap = Math.max(vals[i] - vals[i + 1], 0.5);
+        cost += ((gap - 1) * levels[i]) / scoreGap;
+      }
+    }
+  }
+  if (levels.length > 1 && levels[0] - levels[1] > 1) cost += LONE_TOP_PENALTY * levels[0];
+  return cost;
+}
+
+// Enumerate every budget-exact, monotonic-non-increasing integer level vector over
+// atomic tiers of the given member `counts` (level ≤ cap) and return the one with the
+// lowest jump cost — i.e. the cleanest coarse curve for a fixed number of tiers.
+// Used by forced --bucket-count clustering; returns null when no exact vector exists.
+function bestMonotonicLevels(counts, vals, budget, cap) {
+  const U = counts.length;
+  if (!U || !(budget > 0)) return null;
+  const suffix = new Array(U + 1).fill(0);
+  for (let i = U - 1; i >= 0; i--) suffix[i] = suffix[i + 1] + counts[i];
+  const levelCap = Number.isFinite(cap) ? cap : budget;
+  let best = null;
+  let bestCost = Infinity;
+  let nodes = 0;
+  const NODE_CAP = 300000;
+  const rec = (i, prev, remaining, acc) => {
+    if (nodes++ > NODE_CAP) return;
+    if (i === U) {
+      if (remaining === 0) {
+        const cost = monotonicJumpCost(acc, vals);
+        if (cost < bestCost) {
+          bestCost = cost;
+          best = acc.slice();
+        }
+      }
+      return;
+    }
+    if (remaining < 0 || remaining > prev * suffix[i]) return;
+    for (let l = Math.min(prev, levelCap); l >= 0; l--) {
+      acc.push(l);
+      rec(i + 1, l, remaining - l * counts[i], acc);
+      acc.pop();
+    }
+  };
+  rec(0, levelCap, budget, []);
+  return best;
+}
+
+// Supplementary "coarser / merged" tier options. The primary enumeration only offers
+// staircases whose adjacent DISTINCT tiers differ by exactly 1, so a flat field where
+// the one clean staircase is mostly 1s never surfaces the coarser merges the owner
+// might want (e.g. merge 74.5 up into 75 and drop the 74s to 0: `3,2,2,2,2,2,2,0,0,0`).
+// These enumerate EVERY budget-exact, monotonic-non-increasing point vector over the
+// atomic `units`, ALLOWING a >1 jump between adjacent tiers and unfunded (0) buckets.
+// Each unit gets a single level, so an equal-score group is NEVER split — these need
+// NO tiebreak; the only cost is the jump. `jumpCost` prices a jump by `(gap-1) × the
+// UPPER level ÷ the score gap`, so a cheap low bottom jump (`2→0` between near scores)
+// is preferred while a tall top jump (`5→3`) or a lone inflated top is pushed last.
+// Only curves with an actual jump are returned (the no-jump ones are the primary pool),
+// best-first by jump cost, then most separation, then fewest zeros.
+export function groupAtomicAlternatives(units, budget, cap, { excludeVoteKeys, maxOut = 3 } = {}) {
+  const U = units.length;
+  if (!U || !(budget > 0)) return [];
+  const counts = units.map((u) => u.n);
+  const vals = units.map((u) => u.value);
+  // suffix[i] = songs in units i..end, for the feasibility prune below.
+  const suffix = new Array(U + 1).fill(0);
+  for (let i = U - 1; i >= 0; i--) suffix[i] = suffix[i + 1] + counts[i];
+  const levelCap = Number.isFinite(cap) ? cap : budget;
+  const exclude = excludeVoteKeys || new Set();
+
+  const vectors = [];
+  let nodes = 0;
+  const NODE_CAP = 300000;
+  // Enumerate non-increasing level vectors l0 >= l1 >= … >= 0 (l0 <= cap) that spend
+  // the budget exactly. Prune when the remaining budget can't be reached with every
+  // remaining unit held at or below the previous level.
+  const rec = (i, prev, remaining, acc) => {
+    if (nodes++ > NODE_CAP) return;
+    if (i === U) {
+      if (remaining === 0) vectors.push(acc.slice());
+      return;
+    }
+    if (remaining < 0 || remaining > prev * suffix[i]) return;
+    for (let l = Math.min(prev, levelCap); l >= 0; l--) {
+      acc.push(l);
+      rec(i + 1, l, remaining - l * counts[i], acc);
+      acc.pop();
+    }
+  };
+  rec(0, levelCap, budget, []);
+
+  const cands = [];
+  const seen = new Set();
+  for (const levels of vectors) {
+    const runs = [];
+    const perSong = [];
+    let maxJump = 0;
+    let jumpFromTo = null;
+    let zeros = 0;
+    for (let i = 0; i < U; i++) {
+      const u = units[i];
+      const lvl = levels[i];
+      if (i < U - 1 && levels[i] > levels[i + 1]) {
+        const gap = levels[i] - levels[i + 1];
+        if (gap > 1 && gap > maxJump) {
+          maxJump = gap;
+          jumpFromTo = `${levels[i]}→${levels[i + 1]}`;
+        }
+      }
+      for (const m of u.members) {
+        const token = `${formatScore(m.score)}${formatMusicModifierFlags(m)}`;
+        perSong.push({
+          rawOrderIndex: m.rawOrderIndex,
+          title: m.title,
+          rank: u.value,
+          score: m.combinedScore ?? m.score ?? u.value,
+          token,
+          votes: lvl,
+        });
+        const last = runs[runs.length - 1];
+        if (last && last.level === lvl) {
+          last.count++;
+          last.lo = u.value;
+          if (!last.tokens.includes(token)) last.tokens.push(token);
+        } else {
+          runs.push({ level: lvl, count: 1, hi: u.value, lo: u.value, tokens: [token] });
+        }
+        if (lvl === 0) zeros++;
+      }
+    }
+    const voteKey = runs.map((r) => `${r.count}:${r.level}`).join('|');
+    if (seen.has(voteKey) || exclude.has(voteKey)) continue;
+    seen.add(voteKey);
+    if (maxJump <= 1) continue; // no-jump curves already live in the primary pool
+    const jumpCost = monotonicJumpCost(levels, vals);
+    const distinct = runs.length;
+    const K = runs.filter((r) => r.level > 0).length;
+    let topWeight = 0;
+    perSong.forEach((p, idx) => (topWeight -= p.votes * idx));
+    cands.push({
+      voteKey,
+      distinct,
+      K,
+      runs,
+      perSong,
+      jumpCost,
+      maxJump,
+      jumpFromTo,
+      zeros,
+      topWeight,
+      jumped: true,
+      arbitrarySplits: 0,
+    });
+  }
+  // Cheapest jump first (a low bottom merge beats a tall top jump / lone-top dump),
+  // then the most separation, then the fewest zeros, then top-heaviness, deterministic.
+  cands.sort(
+    (a, b) =>
+      a.jumpCost - b.jumpCost ||
+      b.distinct - a.distinct ||
+      a.zeros - b.zeros ||
+      b.topWeight - a.topWeight ||
+      a.voteKey.localeCompare(b.voteKey)
+  );
+  return cands.slice(0, maxOut);
+}
+
 // Tiers come from optimal 1-D clustering of the rank axis (natural breaks), each
 // given a budget-exact monotonic point value. Equal-opinion songs share a tier
 // (and points); genuine forks (an indivisible split inside a tier, an ambiguous
@@ -1373,10 +1676,43 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
   // matching the target, nearest achievable if none.
   let chosen = ordered[0];
   if (profile.bucketCount) {
-    const want = profile.bucketCount;
-    chosen =
-      ordered.find((c) => c.K === want) ||
-      [...ordered].sort((a, b) => Math.abs(a.K - want) - Math.abs(b.K - want))[0];
+    // `bucketCount` = the number of natural-break CLUSTERS to cut the field into
+    // (Ckmeans.1d.dp over the unit rank axis), THEN a budget-exact monotonic point
+    // value per cluster. Two adjacent clusters may share a point (a merge) and the
+    // lowest clusters may be unfunded (0) when points are scarce — the cleanest such
+    // curve wins. This is the real "cut into K buckets, you decide the merges" knob;
+    // it is NOT `tierCount − 1`. Falls back to nearest funded-tier count if this K has
+    // no budget-exact cluster-atomic curve.
+    const K = Math.max(1, Math.min(profile.bucketCount, U));
+    const { ranges: clusterRanges } = ckmeans1dWeighted(unitVals, unitWts, K);
+    const cCounts = clusterRanges.map(([lo, hi]) => {
+      let n = 0;
+      for (let u = lo; u <= hi; u++) n += unitWts[u];
+      return n;
+    });
+    const cVals = clusterRanges.map(([lo, hi]) => {
+      let sx = 0;
+      let sw = 0;
+      for (let u = lo; u <= hi; u++) {
+        sx += unitVals[u] * unitWts[u];
+        sw += unitWts[u];
+      }
+      return sw > 0 ? sx / sw : unitVals[lo];
+    });
+    const levels = bestMonotonicLevels(cCounts, cVals, budget, cap);
+    if (levels) {
+      chosen = evalCandidate(
+        clusterRanges,
+        levels,
+        0,
+        clusterRanges.map(([lo]) => lo)
+      );
+    } else {
+      const want = profile.bucketCount;
+      chosen =
+        ordered.find((c) => c.K === want) ||
+        [...ordered].sort((a, b) => Math.abs(a.K - want) - Math.abs(b.K - want))[0];
+    }
   } else if (profile.tierCount) {
     const want = profile.tierCount;
     chosen =
@@ -1404,21 +1740,74 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
       distinctCands.push(c);
     }
     if (distinctCands.length >= 1) {
-      const single = distinctCands.length === 1;
       const small = spread <= 6;
       const summarize = (c) => c.runs.map((r) => `${r.level}×${r.count}`).join(' / ');
-      const tierWord = (n) => `${n} tier${n > 1 ? 's' : ''}`;
+      const tierWord = (k) => `${k} tier${k > 1 ? 's' : ''}`;
+
+      // The primary enumeration only offers staircases whose adjacent distinct tiers
+      // differ by exactly 1, so a flat field can collapse to one option (mostly 1s).
+      // Backfill toward `optionCount` (default 5) in two passes, best kind first:
+      //  1. group-atomic merge/jump curves — coarser distributions that jump a tier or
+      //     zero a bucket but never split an equal-score group, so they need NO tiebreak;
+      //  2. tie-split staircases — taller curves that tear a tie by a point, flagged as
+      //     needing a tiebreak, only used to fill slots the merges couldn't.
+      const optionCount = Math.max(1, profile.optionCount || 5);
+      const naturalKeys = new Set(distinctCands.map((c) => c.voteKey));
+      let jumpExtras = [];
+      if (distinctCands.length < optionCount) {
+        jumpExtras = groupAtomicAlternatives(units, budget, cap, {
+          excludeVoteKeys: naturalKeys,
+          maxOut: optionCount - distinctCands.length,
+        });
+      }
+      let splitExtras = [];
+      const afterJump = distinctCands.length + jumpExtras.length;
+      if (afterJump < optionCount) {
+        const naturalMaxDistinct = Math.max(...distinctCands.map((c) => c.distinct));
+        const excludeKeys = new Set([...naturalKeys, ...jumpExtras.map((c) => c.voteKey)]);
+        const rankedForSplit = membersFlat.map((m, i) => ({
+          rawOrderIndex: m.rawOrderIndex,
+          title: m.title,
+          score: m.combinedScore ?? m.score ?? posValue[i],
+          token: rawToken(m),
+          tbRank: tbRank[i],
+        }));
+        splitExtras = separatedTierAlternatives(rankedForSplit, budget, cap, {
+          excludeVoteKeys: excludeKeys,
+          minDistinct: naturalMaxDistinct + 1,
+          maxOut: optionCount - afterJump,
+        }).map((c) => ({ ...c, separated: true }));
+      }
+
+      const combined = [...distinctCands, ...jumpExtras, ...splitExtras].slice(0, optionCount);
+      const single = combined.length === 1;
+      const hasJump = combined.some((c) => c.jumped);
+      const hasSplit = combined.some((c) => c.separated);
+      // Further separation is tiebreak-limited when the clean (no-tiebreak) options —
+      // the primary staircase plus any group-atomic merges — couldn't fill the menu, so
+      // we either fell back to tie-splits or ran short. The CLI turns this into a
+      // "set a tiebreak score" hint (see cli-print).
+      const cleanCount = distinctCands.length + jumpExtras.length;
+      const tiebreakLimited = hasSplit || cleanCount < optionCount;
+      const record =
+        'Record with just pick <round> <a|b|c> --reason "…" (or just pick <round> a --tier-count <n> / --bucket-count <n> to force a curve).';
       const question = single
-        ? `Point split: ${tierWord(chosen.distinct)} (option A) is the only clean staircase for this budget. ` +
-          `Record it with just pick <round> A --reason "…" (or just pick <round> A --tier-count <n> / --bucket-count <n> to reshape).`
-        : `Which point split?${
+        ? `Point split: ${tierWord(chosen.distinct)} (option A) is the only clean staircase for this budget. ${record}`
+        : `Which point split? Option A is the default ${tierWord(chosen.distinct)} staircase.${
+            hasJump ? ' Coarser alternatives merge/jump a tier (no tiebreak needed).' : ''
+          }${hasSplit ? ' Taller alternatives split a tie by a point (each needs a tiebreak).' : ''}${
             small ? ' Scores are tightly clustered (small range), so this is a judgment call.' : ''
-          } Default is ${tierWord(chosen.distinct)} (option A); record with just pick <round> <A|B|C> --reason "…" (or just pick <round> A --tier-count <n> / --bucket-count <n> to force a curve).`;
+          } ${record}`;
       tradeoffs.push({
         kind: 'tier-structure',
-        question,
-        options: distinctCands.slice(0, 3).map((c) => ({
-          label: `${c.distinct} tier${c.distinct > 1 ? 's' : ''} (bucket-count ${c.K}) — ${summarize(c)}`,
+        tiebreakLimited,
+        options: combined.map((c) => ({
+          label:
+            `${tierWord(c.distinct)} (bucket-count ${c.K}) — ${summarize(c)}` +
+            (c.jumped ? ` · merges a tier (${c.jumpFromTo} jump, no tiebreak)` : '') +
+            (c.separated && c.arbitrarySplits
+              ? ` · needs a tiebreak (splits ${c.arbitrarySplits} tie${c.arbitrarySplits > 1 ? 's' : ''})`
+              : ''),
           value: c.K,
           tierCount: c.distinct,
           bucketCount: c.K,
@@ -1426,6 +1815,12 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
           // distinguishes two options that share a tier/bucket count, so legends and
           // labels never look identical.
           shape: summarize(c),
+          // Whether this option breaks a tie the primary split kept together, so a
+          // pick here is a deliberate coin flip (renderer/CLI can flag it).
+          ...(c.separated ? { separated: true, arbitrarySplits: c.arbitrarySplits } : {}),
+          // Whether this option jumps/merges a tier (coarser than the +1 staircase) —
+          // no tiebreak, just a wider gap; the CLI/renderer can note the jump.
+          ...(c.jumped ? { jumped: true, jump: c.jumpFromTo } : {}),
           // Per-song votes (best-first / combined order) for the side-by-side
           // comparison table; index-aligned across every option.
           perSong: c.perSong,
@@ -1440,6 +1835,7 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
             scores: r.tokens,
           })),
         })),
+        question,
       });
     }
   }

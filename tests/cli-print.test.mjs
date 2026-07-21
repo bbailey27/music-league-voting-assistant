@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { actionTradeoffsForCli, printAppliedAllocationCli } from '../scripts/parse/cli-print.mjs';
+import {
+  actionTradeoffsForCli,
+  printAppliedAllocationCli,
+  printPickCli,
+} from '../scripts/parse/cli-print.mjs';
 
 function captureLog(fn) {
   const lines = [];
@@ -139,6 +143,48 @@ test('printAppliedAllocationCli renders a shared table for down-only pins', () =
   assert.doesNotMatch(out, /Pins produced no changes/, 'down change is not "no changes"');
   assert.ok(out.includes('#2 Pinned Down: 0 → -1'), 'gained downvote diff (0, not ·)');
   assert.ok(out.includes('#3 Worst: -1 → 0'), 'lost downvote diff (0, not ·)');
+});
+
+test('printPickCli prints per-option labels and the needs-a-tiebreak hint when limited', () => {
+  const songs = [
+    { rawOrderIndex: 0, title: 'Top', score: 75, finalVotes: 2 },
+    { rawOrderIndex: 1, title: 'Mid', score: 75, finalVotes: 2 },
+    { rawOrderIndex: 2, title: 'Low', score: 75, finalVotes: 1 },
+  ];
+  const tradeoffs = [
+    {
+      kind: 'tier-structure',
+      tiebreakLimited: true,
+      question: 'Which point split?',
+      options: [
+        {
+          label: '2 tiers (bucket-count 2) — 2×2 / 1×1',
+          perSong: [
+            { rawOrderIndex: 0, votes: 2 },
+            { rawOrderIndex: 1, votes: 2 },
+            { rawOrderIndex: 2, votes: 1 },
+          ],
+        },
+        {
+          label: '3 tiers (bucket-count 2) — 2×2 / 1×0 · needs a tiebreak (splits 1 tie)',
+          separated: true,
+          arbitrarySplits: 1,
+          perSong: [
+            { rawOrderIndex: 0, votes: 3 },
+            { rawOrderIndex: 1, votes: 1 },
+            { rawOrderIndex: 2, votes: 1 },
+          ],
+        },
+      ],
+    },
+  ];
+  const out = captureLog(() =>
+    printPickCli(tradeoffs, 'demo-round', songs, [], { upvoteBankSize: 5, downvoteBankSize: 0 })
+  );
+  assert.match(out, /A\. 2 tiers \(bucket-count 2\) — 2×2 \/ 1×1/, 'option A label printed');
+  assert.match(out, /B\..*needs a tiebreak/, 'option B tiebreak note printed');
+  assert.match(out, /Can't add more distinct tiers without a tiebreak/, 'tiebreak hint printed');
+  assert.match(out, /just rescore demo-round --score/, 'hint points at rescore --score');
 });
 
 test('actionTradeoffsForCli keeps ties and drops pick tables', () => {

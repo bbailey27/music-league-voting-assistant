@@ -41,7 +41,8 @@ just parse <name> --shape top-heavy     # skew points upward
 just parse <name> --shape compressed    # tight tiers (mostly 1s + a couple 2s + some 0s)
 just parse <name> --shape relative      # legacy floor-anchored (avoid default)
 just parse <name> --tier-count 3        # force 3 final point tiers (e.g. 0/1/2)
-just parse <name> --bucket-count 4       # force K=4 score clusters (lower-level knob)
+just parse <name> --bucket-count 4       # k-means into K=4 clusters, then merge/fund
+just parse <name> --options 7            # surface up to 7 menu options (default 5)
 just parse <name> --down-shape concentrated  # downvotes: whole bank on the worst song
 just parse <name> --down-shape flat          # downvotes: even 1-each across the worst
 just parse <name> --down-shape curved        # downvotes: graduated bell (default)
@@ -72,18 +73,19 @@ Re-run with different flags when the user asks for a different balance — same 
 
 ## Profile knobs
 
-| Field           | Purpose                                                                                                                          |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `rankBy`        | `music` (default plain), `fit`, `combined` (default with `--fit`)                                                                |
-| `weights`       | Combined blend; default `{ fit: 0.7, music: 0.3 }`; set via `--weights <fit>:<music>`                                            |
-| `shape`         | `auto` (mode-centered bell), `bell`, `compressed`, `balanced`, `top-heavy`, `relative`                                           |
-| `downShape`     | Downvote curve (independent of `shape`): `concentrated`, `flat`, `curved` (default); via `--down-shape`                          |
-| `gate`          | Hard cutoff before tiering — see below                                                                                           |
-| `overrides`     | `{ rawOrderIndex: votes }` pin a song's upvotes; rebalance rest. Set via `--pin <index>:<votes>`                                 |
-| `downOverrides` | `{ rawOrderIndex: magnitude }` pin a song's downvotes; forces it to 0 upvotes. Set via a **negative** `--pin`, e.g. `--pin 6:-2` |
-| `tierCount`     | Force the number of final point tiers (distinct point values); via `--tier-count <n>`                                            |
-| `bucketCount`   | Force K, the number of score clusters (buckets); via `--bucket-count <n>`                                                        |
-| `leniency`      | Funds more `maybe`-band songs when gate allows                                                                                   |
+| Field           | Purpose                                                                                                                                        |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rankBy`        | `music` (default plain), `fit`, `combined` (default with `--fit`)                                                                              |
+| `weights`       | Combined blend; default `{ fit: 0.7, music: 0.3 }`; set via `--weights <fit>:<music>`                                                          |
+| `shape`         | `auto` (mode-centered bell), `bell`, `compressed`, `balanced`, `top-heavy`, `relative`                                                         |
+| `downShape`     | Downvote curve (independent of `shape`): `concentrated`, `flat`, `curved` (default); via `--down-shape`                                        |
+| `gate`          | Hard cutoff before tiering — see below                                                                                                         |
+| `overrides`     | `{ rawOrderIndex: votes }` pin a song's upvotes; rebalance rest. Set via `--pin <index>:<votes>`                                               |
+| `downOverrides` | `{ rawOrderIndex: magnitude }` pin a song's downvotes; forces it to 0 upvotes. Set via a **negative** `--pin`, e.g. `--pin 6:-2`               |
+| `tierCount`     | Force the number of final point tiers (distinct point values); via `--tier-count <n>`                                                          |
+| `bucketCount`   | Force K natural-break clusters (real k-means), then budget-exact monotonic points per cluster (merges/zeros allowed); via `--bucket-count <n>` |
+| `optionCount`   | How many `tier-structure` options the menu surfaces (default 5); via `--options <n>` (parse/merge/pick/rescore)                                |
+| `leniency`      | Funds more `maybe`-band songs when gate allows                                                                                                 |
 
 ### Gates
 
@@ -109,7 +111,7 @@ _Allocation model_, _How the tiers are drawn_, _Smoothness_, _Standing shape pre
 Quick reference:
 
 - Mode-centered bell (`auto` default); `--tier-count` = final point tiers;
-  `--bucket-count` = score clusters (wins if both set)
+  `--bucket-count` = K real k-means clusters, then merge/fund (wins if both set)
 - Ckmeans.1d.dp clustering + smoothness rule (≤1 score apart → ≤1 point apart)
 - Upvote bank spent exactly; `userAllocatedVotes` is a floor
 
@@ -128,15 +130,15 @@ flatten a tied top to `2/2/2/2`. Optional consolidation onto one recording is a
 
 Allocator emits `tradeoffs[]` instead of silent guesses:
 
-| kind                     | Meaning                                                                                                                                       |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tier-split`             | Equal tier can't split points evenly; no modifier tiebreak                                                                                    |
-| `tier-structure`         | Point-split menu (always surfaced unless a curve is forced); options are distinct distributions keyed by bucket count — B/C appear when ambiguous, single option A when one clean split fits (re-run with `--bucket-count`; `--tier-count` for a count) |
-| `maybe-band`             | How many questionable entries to fund                                                                                                         |
-| `preallocation-overflow` | Floors exceed budget                                                                                                                          |
-| `forced-spill`           | Upvote remainder landed outside primary up slice                                                                                              |
-| `forced-spill-down`      | Downvote remainder spilled within down slice                                                                                                  |
-| `tier-split-down`        | Equal low tier can't split downvotes evenly                                                                                                   |
+| kind                     | Meaning                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tier-split`             | Equal tier can't split points evenly; no modifier tiebreak                                                                                                                                                                                                                                                                                                            |
+| `tier-structure`         | Point-split menu (always surfaced unless a curve is forced), up to `optionCount` (default 5). Backfill order: natural splits → **merge/jump curves** (`groupAtomicAlternatives`, no tiebreak, `2→0`-style) → tie-split staircases (`separatedTierAlternatives`, needs a tiebreak). `tiebreakLimited` set when clean options run out — CLI points at `rescore --score` |
+| `maybe-band`             | How many questionable entries to fund                                                                                                                                                                                                                                                                                                                                 |
+| `preallocation-overflow` | Floors exceed budget                                                                                                                                                                                                                                                                                                                                                  |
+| `forced-spill`           | Upvote remainder landed outside primary up slice                                                                                                                                                                                                                                                                                                                      |
+| `forced-spill-down`      | Downvote remainder spilled within down slice                                                                                                                                                                                                                                                                                                                          |
+| `tier-split-down`        | Equal low tier can't split downvotes evenly                                                                                                                                                                                                                                                                                                                           |
 
 Printed by CLI after parse/merge; listed in markdown "Needs your call". Re-run with overrides once user chooses.
 
@@ -144,18 +146,20 @@ Printed by CLI after parse/merge; listed in markdown "Needs your call". Re-run w
 
 Map natural language → profile:
 
-| User wants                                      | Try                                            |
-| ----------------------------------------------- | ---------------------------------------------- |
-| More separation / taller tiers                  | `--shape auto` or `--shape balanced`           |
-| Concentrate on favorites                        | `--shape top-heavy`                            |
-| Flat / mostly 1s                                | `--shape compressed`                           |
-| Fewer / more tiers                              | `--tier-count <n>` or accept `tier-structure`  |
-| Force cluster count                             | `--bucket-count <n>`                           |
-| Fit vs music balance                            | `--rank combined --weights <fit>:<music>`      |
-| Off-theme gets nothing                          | `--cutoff fit:68` or `--gate passFail`         |
-| Reward borderline fits                          | `--gate passFailMaybe` + `maybe-band` tradeoff |
-| Pin a song's upvotes                            | `--pin <index>:<votes>`                        |
-| Pin a song's downvotes (punish a specific song) | `--pin <index>:-<n>` (e.g. `6:-2`)             |
+| User wants                                      | Try                                                                     |
+| ----------------------------------------------- | ----------------------------------------------------------------------- |
+| More separation / taller tiers                  | `--shape auto` or `--shape balanced`                                    |
+| Concentrate on favorites                        | `--shape top-heavy`                                                     |
+| Flat / mostly 1s                                | `--shape compressed`                                                    |
+| Fewer / more tiers                              | `--tier-count <n>` or accept `tier-structure`                           |
+| More menu options on a hard round               | `--options <n>` (default 5)                                             |
+| Force cluster count (real k-means)              | `--bucket-count <n>`                                                    |
+| Break a tiebreak-limited round                  | `just rescore <round> --score <i>:<v>` (e.g. `5:74.5+`) / `--fit-score` |
+| Fit vs music balance                            | `--rank combined --weights <fit>:<music>`                               |
+| Off-theme gets nothing                          | `--cutoff fit:68` or `--gate passFail`                                  |
+| Reward borderline fits                          | `--gate passFailMaybe` + `maybe-band` tradeoff                          |
+| Pin a song's upvotes                            | `--pin <index>:<votes>`                                                 |
+| Pin a song's downvotes (punish a specific song) | `--pin <index>:-<n>` (e.g. `6:-2`)                                      |
 
 Dense/oversubscribed rounds (below ~1:1) naturally push more songs to 0 — expected and on-preference; rebalance manually or adjust shape only if a field calls for it.
 

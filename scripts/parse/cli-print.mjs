@@ -1,7 +1,7 @@
 // Terminal print helpers for parse / pick tradeoff menus.
 
 import { TRADEOFF_OPTION_LETTERS } from '../round/pick.mjs';
-import { downShapeShort, formatPickCmd, formatPickSpec, pickHintLine } from '../cli-commands.mjs';
+import { downShapeShort, formatPickSpec, pickSyntaxReminder } from '../cli-commands.mjs';
 import {
   cliScoreCells,
   cliScoreHeaders,
@@ -130,16 +130,13 @@ function printOptionTableCli(t, roundId, songs, ownSongs, down, profile = null) 
   ]);
   console.log(`\n${down ? 'Down' : 'Up'}`);
   printTextTable(headers, dataRows);
-  const legend = opts
-    .map((o, i) => {
-      const code = down ? downShapeShort(o.downShape) : letters[i];
-      const cmd = down
-        ? formatPickCmd(roundId, 'A', { downShape: o.downShape })
-        : formatPickCmd(roundId, letters[i]);
-      return `${code}  ${cmd}`;
-    })
-    .join('    ');
-  console.log(`    ${legend}`);
+  // Per-option legend for the up menu: the allocator's label already carries the
+  // shape plus any merge/jump or tiebreak note, so print it under each letter.
+  if (!down) {
+    opts.forEach((o, i) => {
+      if (o.label) console.log(`    ${letters[i]}. ${o.label}`);
+    });
+  }
 }
 
 /** Combo baseline label: `A cv + pin` (up letter + down shape) or `A + pin`. */
@@ -282,11 +279,21 @@ export function printPickCli(tradeoffs, roundId, songs = [], ownSongs = [], budg
   const down = list.filter((t) => t.kind === 'down-structure');
   const signed = (budget?.downvoteBankSize ?? 0) > 0;
 
-  if (up.length || down.length) {
-    console.log(`\n${pickHintLine(roundId, { hasUp: up.length > 0, hasDown: down.length > 0 })}`);
-  }
   for (const t of up) printOptionTableCli(t, roundId, songs, ownSongs, false, profile);
   for (const t of down) printOptionTableCli(t, roundId, songs, ownSongs, true, profile);
+  if (up.length || down.length) {
+    console.log(`\n${pickSyntaxReminder({ hasDown: down.length > 0 })}`);
+  }
+  // When the clean options (primary + merge/jump) couldn't fill the menu, further
+  // separation is only possible by breaking a tie — point the owner at the score
+  // override rather than silently emitting one option.
+  if (up.some((t) => t.tiebreakLimited)) {
+    const round = roundId ?? '<round>';
+    console.log(
+      `  Can't add more distinct tiers without a tiebreak. Set a score: ` +
+        `just rescore ${round} --score <i>:<v> (e.g. --score 5:74.5+) or --fit-score <i>:<v>.`
+    );
+  }
   printActionTradeoffsCli(list);
   printBallotCli(songs, ownSongs, signed);
 }

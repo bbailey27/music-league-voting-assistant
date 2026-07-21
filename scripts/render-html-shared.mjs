@@ -1,7 +1,7 @@
 // Shared HTML rendering helpers and stylesheet fragments for fit/final reports.
 
 import { formatScore, OPTION_LETTERS } from './score-core.mjs';
-import { downShapeShort } from './cli-commands.mjs';
+import { downShapeShort, optionNote } from './cli-commands.mjs';
 import { expandTradeoffRows, isExcludedFromAllocation } from './tradeoff-rows.mjs';
 
 export function esc(s) {
@@ -243,7 +243,7 @@ function tierStructureTableHtml(t, chosenIndex = null, songs = [], ownSongs = []
       const axisLabel = down ? downShapeShort(o.downShape) : OPTION_LETTERS[i];
       const desc = down
         ? `<code>${esc(o.shape)}</code>, <code>--down-shape ${esc(o.downShape)}</code> (pair with up letter A|B|C)`
-        : `${o.tierCount} tier${o.tierCount === 1 ? '' : 's'}, <code>${esc(o.shape)}</code>, <code>--option ${OPTION_LETTERS[i]}</code>`;
+        : `${o.tierCount} tier${o.tierCount === 1 ? '' : 's'}, <code>${esc(o.shape)}</code>, <code>--option ${OPTION_LETTERS[i]}</code>${esc(optionNote(o))}`;
       return `<li><b>${axisLabel}</b>${tag}${pick} — ${desc}</li>`;
     })
     .join('');
