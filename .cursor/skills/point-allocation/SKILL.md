@@ -131,7 +131,7 @@ Allocator emits `tradeoffs[]` instead of silent guesses:
 | kind                     | Meaning                                                                                                                                       |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `tier-split`             | Equal tier can't split points evenly; no modifier tiebreak                                                                                    |
-| `tier-structure`         | Point split is ambiguous; options are distinct distributions keyed by bucket count (re-run with `--bucket-count`; `--tier-count` for a count) |
+| `tier-structure`         | Point-split menu (always surfaced unless a curve is forced); options are distinct distributions keyed by bucket count — B/C appear when ambiguous, single option A when one clean split fits (re-run with `--bucket-count`; `--tier-count` for a count) |
 | `maybe-band`             | How many questionable entries to fund                                                                                                         |
 | `preallocation-overflow` | Floors exceed budget                                                                                                                          |
 | `forced-spill`           | Upvote remainder landed outside primary up slice                                                                                              |

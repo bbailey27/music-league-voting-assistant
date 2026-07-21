@@ -532,6 +532,27 @@ test('resolveOptionPick applies a surfaced distribution by letter (music-only pa
   );
 });
 
+test('tier-structure always surfaces a single-option menu so every stage reprints it and pick A resolves', () => {
+  // A tightly-clustered field that collapses to ONE clean staircase — previously
+  // this suppressed the tradeoff entirely, so rescore/parse/merge printed only the
+  // Ballot and `pick A` errored on an empty menu.
+  const scores = [76, 75.5, 75, 75, 74.5, 74.5, 74.5, 74, 74, 74];
+  const g = mk(scores);
+  const { tradeoffs } = allocate(g, 15, 10, { shape: 'auto' });
+  const ts = tradeoffs.find((t) => t.kind === 'tier-structure');
+  assert.ok(ts, 'a single clean split still surfaces a tier-structure menu');
+  assert.equal(ts.options.length, 1, 'exactly one option when the split is unambiguous');
+  assert.ok(Array.isArray(ts.options[0].perSong) && ts.options[0].perSong.length === scores.length);
+
+  const { idx, overrides, error } = resolveOptionPick(tradeoffs, 'A');
+  assert.equal(error, null, 'pick A resolves against the single option');
+  assert.equal(idx, 0, 'A resolves to the only option');
+
+  const f = mk(scores);
+  allocate(f, 15, 10, { shape: 'auto', overrides });
+  assert.equal(sum(f), 15, 'applying option A still spends the full budget');
+});
+
 test('reconcileOptionPins reflows a net-positive pin by shedding the bottom (budget stays exact)', () => {
   // Option distribution best-first: 2,2,2,1,1 = budget 8 (mirrors story-5 option A).
   const perSong = [

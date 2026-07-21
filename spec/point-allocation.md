@@ -187,16 +187,20 @@ Songs **≤ 1 score apart never end > 1 point apart**, and distinct point tiers 
 stack of `+1` steps over contiguous, descending units. A `>1`-point jump can only
 exist across a real score gap (a unit boundary), and monotonicity is automatic.
 
-### Ambiguous tier counts are surfaced
+### The point-split menu is always surfaced
 
-When the split is genuinely a judgment call (several clusterings are close, or a
-small score range leaves it open), the allocator emits a **`tier-structure`
-tradeoff** listing distinct candidate curves. Options dedupe on the **final point
-distribution**, not tier count — two bucket counts that yield the same tier count
-but different distributions both appear. Each option's `value` is the **bucket
-count (K)**; the label names tier count and bucket count separately. Record with
-`just pick <round> <A|B|C>`, or force a curve with `just pick <round> A
---tier-count <n>` / `--bucket-count <n>`.
+The allocator **always** emits a **`tier-structure` tradeoff** for the point split
+(unless a curve is forced with `--tier-count`/`--bucket-count`), so every stage
+that prints it (`parse`, `merge`, `rescore`) reprints the option table and
+`just pick <round> A` always resolves against a real option. When the split is
+genuinely a judgment call (several clusterings are close, or a small score range
+leaves it open) the alternatives ride along as options **B/C**; when only one clean
+staircase fits the budget the menu is a **single option A** (its `question` says as
+much). Options dedupe on the **final point distribution**, not tier count — two
+bucket counts that yield the same tier count but different distributions both
+appear. Each option's `value` is the **bucket count (K)**; the label names tier
+count and bucket count separately. Record with `just pick <round> <A|B|C>`, or
+force a curve with `just pick <round> A --tier-count <n>` / `--bucket-count <n>`.
 
 Each option also carries structured `tiers`
 (`{ points, count, scoreHi, scoreLo, scores }`) so the report renders it as a

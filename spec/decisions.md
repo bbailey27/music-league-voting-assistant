@@ -11,6 +11,28 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-21 — Point-split menu always surfaces (single option A when unambiguous)
+
+**Change.** [`scripts/score/allocate.mjs`](../scripts/score/allocate.mjs) now emits the
+`tier-structure` tradeoff whenever the split isn't force-pinned (`distinctCands.length >= 1`,
+was `>= 2`). When several clusterings are close the alternatives still ride along as options
+B/C; when only one clean staircase fits the budget the menu is a single option A, whose
+`question` says so. Regression test in [`tests/score.test.mjs`](../tests/score.test.mjs)
+("tier-structure always surfaces a single-option menu…").
+
+**Why.** Fields that collapse to one distinct curve previously suppressed the tradeoff
+entirely, so the stages that print it (`parse`, `merge`, `rescore` via `printPickCli`) showed
+only the `Ballot` — no option table — and `just pick <round> A` then errored with "0 options"
+(an empty menu with no letter to resolve against). The owner wants the option table reprinted
+after commands that change or re-offer the menu; always surfacing at least option A makes the
+table appear and makes `pick A` resolvable on single-curve rounds. Aligns with the fix
+direction already noted in `future-plans.plan.md` ("keep emitting the menu with the forced
+curve as option A").
+
+**Refs.** working tree · spec/point-allocation.md → *The point-split menu is always surfaced*.
+
+---
+
 ## 2026-07-19 — `closer` complement slot for final-round title chains
 
 **Change.** Added a second slot, `closer`, to

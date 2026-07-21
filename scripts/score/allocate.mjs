@@ -1384,13 +1384,17 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
       [...ordered].sort((a, b) => Math.abs(a.distinct - want) - Math.abs(b.distinct - want))[0];
   }
 
-  // When the split is genuinely ambiguous (and not pinned), surface the
-  // alternatives as a "needs your call" choice; call out a small range. Dedup on
-  // the FINAL point distribution, not the tier count — two clusterings (different
-  // bucket counts) that land on the same number of tiers but a different
-  // distribution are a real tradeoff and both shown. The value is the bucket count
-  // (K) that uniquely reproduces the curve (`--bucket-count`); the label names the
-  // tier count and bucket count separately so the two aren't conflated.
+  // Always surface the point split as a menu (with the chosen curve as option A),
+  // even when it collapses to a single distribution — so every stage that prints
+  // this menu (parse/merge/rescore) reprints an option table, and `just pick A`
+  // always resolves against a real option instead of erroring on an empty menu.
+  // When the split is genuinely ambiguous (and not pinned), the alternatives ride
+  // along as options B/C. Dedup on the FINAL point distribution, not the tier
+  // count — two clusterings (different bucket counts) that land on the same number
+  // of tiers but a different distribution are a real tradeoff and both shown. The
+  // value is the bucket count (K) that uniquely reproduces the curve
+  // (`--bucket-count`); the label names the tier count and bucket count separately
+  // so the two aren't conflated.
   if (!profile.tierCount && !profile.bucketCount) {
     const seen = new Set();
     const distinctCands = [];
@@ -1399,14 +1403,20 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
       seen.add(c.voteKey);
       distinctCands.push(c);
     }
-    if (distinctCands.length >= 2) {
+    if (distinctCands.length >= 1) {
+      const single = distinctCands.length === 1;
       const small = spread <= 6;
       const summarize = (c) => c.runs.map((r) => `${r.level}×${r.count}`).join(' / ');
+      const tierWord = (n) => `${n} tier${n > 1 ? 's' : ''}`;
+      const question = single
+        ? `Point split: ${tierWord(chosen.distinct)} (option A) is the only clean staircase for this budget. ` +
+          `Record it with just pick <round> A --reason "…" (or just pick <round> A --tier-count <n> / --bucket-count <n> to reshape).`
+        : `Which point split?${
+            small ? ' Scores are tightly clustered (small range), so this is a judgment call.' : ''
+          } Default is ${tierWord(chosen.distinct)} (option A); record with just pick <round> <A|B|C> --reason "…" (or just pick <round> A --tier-count <n> / --bucket-count <n> to force a curve).`;
       tradeoffs.push({
         kind: 'tier-structure',
-        question: `Which point split?${
-          small ? ' Scores are tightly clustered (small range), so this is a judgment call.' : ''
-        } Default is ${chosen.distinct} tier${chosen.distinct > 1 ? 's' : ''} (option A); record with just pick <round> <A|B|C> --reason "…" (or just pick <round> A --tier-count <n> / --bucket-count <n> to force a curve).`,
+        question,
         options: distinctCands.slice(0, 3).map((c) => ({
           label: `${c.distinct} tier${c.distinct > 1 ? 's' : ''} (bucket-count ${c.K}) — ${summarize(c)}`,
           value: c.K,
