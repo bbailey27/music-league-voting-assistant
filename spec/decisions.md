@@ -11,6 +11,37 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-28 — Release-date spec (`spec/release-dates.md`)
+
+**Change.** Added [`spec/release-dates.md`](release-dates.md): version-specific earliest
+release (a 2020 remix of a 2018 original counts for 2020), league-specific gate rules
+(`version-earliest` for `bg-years`; `album-body` documented for album-only leagues),
+date-precision guidance (store `YYYY-MM-DD` when known), cache schema, and confidence
+levels. `bg-years` carries `releaseDateRule: version-earliest` in
+[`scripts/leagues.mjs`](../scripts/leagues.mjs); cache `_doc` and
+`release-year-gate.mjs` header aligned.
+
+**Why.** The file was referenced from the league registry and gate script but missing;
+eligibility rules differ by league and by recording version, not one global "earliest ever."
+
+**Refs.** `working tree` — `spec/release-dates.md`, `scripts/leagues.mjs`,
+`scripts/release-year-gate.mjs`, `data/ref/release-dates.json`
+
+---
+
+## 2026-07-28 — bg-years: male soloists and subunits eligible
+
+**Change.** Kpop Boy Group Years (`bg-years`) standing reminders now say boy groups,
+male soloists, and subunits are eligible; only girl-group submissions are DQ'd.
+
+**Why.** League clarified that the round name's "boy group" framing covers the broader
+male-idol era (groups, solo debuts, and official subunits) — not strictly full-group
+tracks.
+
+**Refs.** `working tree` — `scripts/leagues.mjs`, `spec/leagues.md`
+
+---
+
 ## 2026-07-27 — Menu-wide pin reflow + consistent explore tables
 
 **Change.** Explore commands (`parse`, `merge`, `rescore`) share

@@ -9,8 +9,8 @@
 //   just merge <round> --rank music --gate passFail
 //
 // Two dates are tracked per track (see spec/release-dates.md):
-//   - earliestReleaseDate — earliest official release of the RECORDING (single
-//     before album counts). This is what the year gate tests.
+//   - earliestReleaseDate — gate date per the league's releaseDateRule (bg-years:
+//     version-earliest = first official release of THIS recording/version).
 //   - albumReleaseDate    — release date of the SPECIFIC album this track sits on
 //     (a compilation / repackage / deluxe can be years later). Display + audit.
 //

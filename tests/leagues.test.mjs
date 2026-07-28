@@ -58,7 +58,9 @@ test('leagues: bg-years carries the standing DQ + release-year reminders', () =>
   const bg = leagueByName('Kpop Boy Group Years');
   const remindersText = bg.reminders.join(' ');
   assert.match(remindersText, /girl-group/i);
-  assert.match(remindersText, /release/i);
+  assert.match(remindersText, /male soloists/i);
+  assert.match(remindersText, /subunits/i);
+  assert.match(remindersText, /version-earliest/i);
 });
 
 test('resolveScriptCmd: fills <round> and derives <year> from a bg-YYYY slug', () => {
@@ -83,6 +85,7 @@ test('leagueNotesLines: null league → empty; bg round → label, reminders, sc
   });
   assert.match(lines[0], /^League: Kpop Boy Group Years/);
   assert.ok(lines.some((l) => l.includes('girl-group')));
+  assert.ok(lines.some((l) => l.includes('male soloists')));
   assert.ok(lines.some((l) => l.includes('--year 2018')));
   assert.equal(lines.at(-1), '  See: spec/leagues.md');
 });

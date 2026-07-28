@@ -31,6 +31,8 @@ import { bareSlugOf } from './paths.mjs';
  * @property {string[]} [skills]    Relevant `.cursor/skills/*` ids.
  * @property {string[]} [fitProfiles] `spec/fit-guidance.md` profile ids.
  * @property {string[]} [refs]      Relevant spec files.
+ * @property {'version-earliest'|'album-body'} [releaseDateRule]
+ *                                   Which release-date gate rule applies (spec/release-dates.md).
  */
 
 /** @type {League[]} */
@@ -41,10 +43,10 @@ export const LEAGUES = [
     slugFamily: 'bg-<year>',
     slugPrefixes: ['bg-'],
     mode: 'objective',
-    summary: 'K-pop boy-group songs from a specific release year (one year per round).',
+    summary: 'K-pop songs from a specific release year — boy groups, male soloists, and boy group subunits (one year per round).',
     reminders: [
-      'Boy groups only — disqualify girl-group submissions (write a DQ comment; a text-only comment DQs in objective mode).',
-      "Release-year gate: each song's EARLIEST official release must be the target year (spec/release-dates.md). A year-only comment like `2019` DQs a wrong-year pick — years are never scored (spec/score-parsing.md → Years Are Not Scores).",
+      'Eligible: boy groups, male soloists, and boy group subunits — disqualify girl-group, female soloist, and male-female collab submissions (write a DQ comment; a text-only comment DQs in objective mode).',
+      "Release-year gate (rule: version-earliest — spec/release-dates.md): this version's earliest official release must be the target year. A year-only comment like `2019` DQs a wrong-year pick — years are never scored (spec/score-parsing.md → Years Are Not Scores).",
     ],
     scripts: [
       {
@@ -59,6 +61,7 @@ export const LEAGUES = [
     rules: ['.cursor/rules/round-slug-naming.mdc'],
     skills: ['submission-song-search'],
     fitProfiles: [],
+    releaseDateRule: 'version-earliest',
     refs: ['spec/release-dates.md', 'spec/score-parsing.md'],
   },
   {

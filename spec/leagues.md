@@ -16,20 +16,21 @@ sync when adding a league.
 
 Each entry in `LEAGUES` is a `League` descriptor:
 
-| Field          | Meaning                                                                     |
-| -------------- | --------------------------------------------------------------------------- |
-| `id`           | Stable kebab-case key (`bg-years`, `story-chain`, …).                       |
-| `names`        | Exact league names as they appear in the ML page `<title>`.                 |
-| `slugFamily`   | Human slug shape (`bg-<year>`, `story-<n>`) — matches `analysis-artifacts`. |
-| `slugPrefixes` | Bare-slug prefixes for matching a round when the league name is absent.     |
-| `mode`         | Default scoring mode (`objective` / `thematic`).                            |
-| `summary`      | One-line description.                                                       |
-| `reminders`    | Standing eligibility / DQ / scoring reminders (surfaced on parse).          |
-| `scripts`      | Reusable scripts + a one-line role each.                                    |
-| `rules`        | Relevant `.cursor/rules/*.mdc`.                                             |
-| `skills`       | Relevant `.cursor/skills/*` ids.                                            |
-| `fitProfiles`  | `spec/fit-guidance.md` profile ids (thematic leagues).                      |
-| `refs`         | Relevant spec files.                                                        |
+| Field             | Meaning                                                                          |
+| ----------------- | -------------------------------------------------------------------------------- |
+| `id`              | Stable kebab-case key (`bg-years`, `story-chain`, …).                            |
+| `names`           | Exact league names as they appear in the ML page `<title>`.                      |
+| `slugFamily`      | Human slug shape (`bg-<year>`, `story-<n>`) — matches `analysis-artifacts`.      |
+| `slugPrefixes`    | Bare-slug prefixes for matching a round when the league name is absent.          |
+| `mode`            | Default scoring mode (`objective` / `thematic`).                                 |
+| `summary`         | One-line description.                                                            |
+| `reminders`       | Standing eligibility / DQ / scoring reminders (surfaced on parse).               |
+| `releaseDateRule` | Release-date gate rule when the league is year-themed (`spec/release-dates.md`). |
+| `scripts`         | Reusable scripts + a one-line role each.                                         |
+| `rules`           | Relevant `.cursor/rules/*.mdc`.                                                  |
+| `skills`          | Relevant `.cursor/skills/*` ids.                                                 |
+| `fitProfiles`     | `spec/fit-guidance.md` profile ids (thematic leagues).                           |
+| `refs`            | Relevant spec files.                                                             |
 
 ## How a round is matched
 
@@ -54,15 +55,15 @@ Unknown rounds resolve to `null` and surface no banner.
 
 Authoritative list in [`scripts/leagues.mjs`](../scripts/leagues.mjs); this table is a map.
 
-| id            | Slug family      | Mode      | Standing notes / machinery                                                       |
-| ------------- | ---------------- | --------- | -------------------------------------------------------------------------------- |
-| `bg-years`    | `bg-<year>`      | objective | DQ girl groups; release-year gate (`release-year-gate.mjs`, `bg-year-scan.mjs`). |
-| `story-chain` | `story-<n>`      | thematic  | Title-only; `title-*-scan` scripts; profile `story-continuation`.                |
-| `tarot`       | `tarot-<arcana>` | thematic  | Profiles `traits-over-symbols` + `lyrics-first`.                                 |
-| `astrology`   | `<sign>`         | thematic  | Chill Western Astrology League; `traits-over-symbols` + `lyrics-first`.          |
-| `lastfm`      | `lfm-<topic>`    | objective | `lastfm-*` table scripts; query via scan scripts, never raw grep.                |
-| `aaa`         | `aaa-<topic>`    | thematic  | Themed AAA rounds.                                                               |
-| `kpop-themed` | `kpop-<theme>`   | thematic  | Themed K-pop song picks.                                                         |
+| id            | Slug family      | Mode      | Standing notes / machinery                                                                 |
+| ------------- | ---------------- | --------- | ------------------------------------------------------------------------------------------ |
+| `bg-years`    | `bg-<year>`      | objective | Boy groups, male soloists, subunits; DQ girl groups; `version-earliest` release-year gate. |
+| `story-chain` | `story-<n>`      | thematic  | Title-only; `title-*-scan` scripts; profile `story-continuation`.                          |
+| `tarot`       | `tarot-<arcana>` | thematic  | Profiles `traits-over-symbols` + `lyrics-first`.                                           |
+| `astrology`   | `<sign>`         | thematic  | Chill Western Astrology League; `traits-over-symbols` + `lyrics-first`.                    |
+| `lastfm`      | `lfm-<topic>`    | objective | `lastfm-*` table scripts; query via scan scripts, never raw grep.                          |
+| `aaa`         | `aaa-<topic>`    | thematic  | Themed AAA rounds.                                                                         |
+| `kpop-themed` | `kpop-<theme>`   | thematic  | Themed K-pop song picks.                                                                   |
 
 ## Adding or editing a league
 
