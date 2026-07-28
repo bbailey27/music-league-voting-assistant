@@ -11,6 +11,32 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-27 — Menu-wide pin reflow + consistent explore tables
+
+**Change.** Explore commands (`parse`, `merge`, `rescore`) share
+[`scripts/round/explore.mjs`](../scripts/round/explore.mjs): build the unpinned
+menu (`menuProfile`), then `applyPinsToMenuTradeoffs` reflows every
+`tier-structure` / `down-structure` option column via `reconcileOptionPins` /
+`reconcileDownOptionPins`. Pins persist on `profile.overrides` in JSON; `just pick`
+inherits them when `--pin` is omitted. `just rescore --pin` is supported (no longer
+silently ignored). `parse --weights` (and `--rank` / `--gate` / `--cutoff`) auto-chains
+`mergeFitJson` when `fit.json` exists, writing `scores.json` and printing blended
+tables. All explore commands always print Up/Down/Ballot via `finishExploreCli`;
+`pick --dry-run` prints the full menu before the applied preview.
+
+**Why.** Owner wanted `--pin 8:1,5:1` to constrain every option column while keeping
+distinct staircases, and `--weights` on parse to show updated tables on thematic rounds.
+
+**Refs.** `working tree` — `scripts/round/explore.mjs`, `scripts/round/pick.mjs`
+(`applyPinsToMenuTradeoffs`, `reconcileDownOptionPins`, `menuProfile`,
+`syncBallotFromExploreMenu`), `scripts/parse-round.mjs`, `scripts/merge-scores.mjs`,
+`scripts/rescore-round.mjs`, `scripts/pick-round.mjs`, `scripts/parse/pipeline.mjs`
+(`slimProfile`), `scripts/cli-help.mjs`, `tests/score.test.mjs`,
+`tests/rescore-e2e.test.mjs`; `spec/point-allocation.md` → _Allocation profile_
+(`overrides`, menu-wide explore reflow).
+
+---
+
 ## 2026-07-21 — Coarser merge/jump options, real `--bucket-count`, `--options`, score override
 
 **Change.** [`scripts/score/allocate.mjs`](../scripts/score/allocate.mjs) adds
@@ -44,7 +70,7 @@ than a silent single option.
 **Overruled.** Supersedes the previous entry's "backfill only with tie-split staircases" — merges
 (no tiebreak) are now preferred over tie-splits in the backfill order.
 
-**Refs.** working tree · spec/point-allocation.md → _Backfilling the menu on flat fields_,
+**Refs.** `8fe6d4a` · spec/point-allocation.md → _Backfilling the menu on flat fields_,
 _Manual score overrides_.
 
 ---
@@ -92,7 +118,7 @@ options with the tiebreak called out than no options at all. The extras are smoo
 (a tie splits by exactly one point) and deterministic on pick (the extra goes to the
 better-tiebreak song), so picking one is an explicit, recorded coin flip.
 
-**Refs.** working tree · spec/point-allocation.md → _More-separated alternatives on flat fields_.
+**Refs.** `8fe6d4a` · spec/point-allocation.md → _More-separated alternatives on flat fields_.
 
 ---
 
@@ -110,7 +136,7 @@ still used by the HTML renderer.
 three near-identical `A/B/C` commands were noise — the option-table column headers already label
 A/B/C. A single syntax line reminds them of the common flags instead of repeating commands.
 
-**Refs.** working tree.
+**Refs.** `8fe6d4a`.
 
 ---
 
@@ -133,7 +159,7 @@ open next-prompt — the opposite grammatical need from the shipped `copular` sl
 mechanically keeps the "must terminate" judgment out of story-vibe hand-waving, per the
 title-chain skill's "structural check first" rule.
 
-**Refs.** working tree — `scripts/title-complement-check.mjs`,
+**Refs.** `da84a46` — `scripts/title-complement-check.mjs`,
 `tests/title-complement-check.test.mjs`, `.cursor/skills/title-chain/SKILL.md`.
 
 ## 2026-07-17 — Central league registry (`scripts/leagues.mjs`)
@@ -157,7 +183,7 @@ fit-guidance associations, and script headers, and had to be re-remembered each 
 Centralizing it and surfacing the reminders automatically on parse makes recurring-league
 rules durable instead of tribal.
 
-**Refs.** working tree — `scripts/leagues.mjs`, `spec/leagues.md`, `scripts/parse-round.mjs`,
+**Refs.** `65e2dfe` — `scripts/leagues.mjs`, `spec/leagues.md`, `scripts/parse-round.mjs`,
 `scripts/ml.mjs`, `scripts/cli-help.mjs`, `spec/analysis-artifacts.md`, `spec/fit-guidance.md`,
 `.cursor/skills/music-league-workspace/SKILL.md`, `tests/leagues.test.mjs`.
 
@@ -178,7 +204,7 @@ the song's release year (e.g. `2019` for a wrong-year submission). The old parse
 clipped year into a bogus ~20 score, so wrong-year picks landed near the bottom of the
 scored pool instead of being disqualified outright.
 
-**Refs.** working tree — `scripts/score/comment.mjs`, `spec/score-parsing.md`,
+**Refs.** `04b4bf1` — `scripts/score/comment.mjs`, `spec/score-parsing.md`,
 `spec/scoring-comments.md`, `tests/comment-parse.test.mjs`.
 
 ## 2026-07-15 — Recurring-league slug families keep a round in one folder
@@ -196,7 +222,7 @@ input into an existing folder only when the **bare slug** matches (`bareSlugOf`,
 `bg-2017` parsed round). Writing the convention down means the eventual voting-HTML export
 lands in the same folder as the pre-round research instead of forking a duplicate.
 
-**Refs.** working tree — `spec/analysis-artifacts.md` (Recurring league slug families),
+**Refs.** `04b4bf1` — `spec/analysis-artifacts.md` (Recurring league slug families),
 `.cursor/rules/round-slug-naming.mdc`.
 
 **Change.** A `combined`-axis cutoff is now a pure allocation gate: `isContender`
@@ -216,7 +242,7 @@ song, tripping the small-N std floors (2) so z-scores exploded (field ran −29�
 Gating on a raw axis while normalizing on a derived one is the real hazard; a combined
 cutoff must gate only. Also fixed the latent `rankBy`-vs-cutoff-axis mismatch.
 
-**Refs.** working tree — `score/merge.mjs` (`isContender`), `score/gate.mjs`
+**Refs.** `a521d25` — `score/merge.mjs` (`isContender`), `score/gate.mjs`
 (`cutoffAxisValue`, `gateClass`), `parse/cli-flags.mjs` (`buildGate`, `CUTOFF_AXES`),
 `cli-help.mjs`, `spec/point-allocation.md` → gate/cutoff; tests in `tests/score.test.mjs`.
 
@@ -243,7 +269,7 @@ re-ranked the field). A separate JSON-sourced verb keeps `parse` (HTML → truth
 Scope confirmed with owner as **A + C** of future-plans #17; the manual raw-score edit (B)
 and music/fit JSON restructure (D) remain deferred.
 
-**Refs.** `working tree` — `scripts/rescore-round.mjs`, `scripts/pick-round.mjs`,
+**Refs.** `510eeb5` — `scripts/rescore-round.mjs`, `scripts/pick-round.mjs`,
 `scripts/ml.mjs`, `justfile`, `scripts/cli-help.mjs`, `tests/rescore-e2e.test.mjs`;
 `spec/point-allocation.md`, `spec/score-parsing.md`, `README.md`.
 
@@ -265,7 +291,7 @@ mostly-tier-graded round could hide a song with no fit signal. The owner asked t
 cover tier and gate rounds too ("Does needs fit score cover if I used tier words or gate
 words … It should cover both").
 
-**Refs.** `working tree` — `scripts/score/comment.mjs`, `scripts/score-core.mjs`,
+**Refs.** `510eeb5` — `scripts/score/comment.mjs`, `scripts/score-core.mjs`,
 `scripts/parse/cli-warn.mjs`, `scripts/ml.mjs`, `tests/comment-parse.test.mjs`,
 regression baseline; `spec/score-parsing.md`.
 
@@ -280,7 +306,7 @@ placeholder. The shared net-vote **table** keeps `·` for zero.
 **Why.** `#0 Take Me Away: · → -1` read oddly in prose; `0 → -1` is clearer. The dot still
 suits the dense table.
 
-**Refs.** `working tree` — `scripts/parse/cli-table.mjs`, `scripts/parse/cli-print.mjs`,
+**Refs.** `8e544a3` — `scripts/parse/cli-table.mjs`, `scripts/parse/cli-print.mjs`,
 `tests/cli-print.test.mjs`.
 
 ---
@@ -301,7 +327,7 @@ partner. `:0` is the natural "force zero" pin for that. (Related gap logged in
 `future-plans` Bugs #4: tied scores straddling a vote-tier boundary should also emit a
 tie-split callout.)
 
-**Refs.** `working tree` — `scripts/parse/cli-flags.mjs`, `scripts/score/allocate.mjs`,
+**Refs.** `8e544a3` — `scripts/parse/cli-flags.mjs`, `scripts/score/allocate.mjs`,
 `tests/score.test.mjs`.
 
 ---
@@ -328,7 +354,7 @@ The owner asked for the combo `A + cv` as the baseline and the pin diffs measure
 against it — "merge that table as if it's like the ballot but ranked in combined-score
 order, apply both original picks, then see what the diffs are."
 
-**Refs.** `working tree` — `scripts/round/pick.mjs`, `scripts/pick-round.mjs`,
+**Refs.** `8e544a3` — `scripts/round/pick.mjs`, `scripts/pick-round.mjs`,
 `scripts/parse/cli-print.mjs`, `scripts/parse/cli-table.mjs`, `tests/cli-print.test.mjs`.
 
 ---
@@ -384,7 +410,7 @@ overruled the old "`strong negative` is ignored" rule: `strong negative` is a st
 _bad_ fit, so the tier is mirrored (→ `weak`) rather than dropped. `node --test` 212 pass;
 added comment-parse cases locking earliest-wins (both directions) and the `negative` mirror.
 
-**Refs.** `working tree` — `scripts/score/comment.mjs`, `tests/comment-parse.test.mjs`,
+**Refs.** `ebd2597` — `scripts/score/comment.mjs`, `tests/comment-parse.test.mjs`,
 `spec/score-parsing.md` (Fit channels → Tier / gate words).
 
 ---
@@ -405,7 +431,7 @@ were drift risks. Pure refactor — output byte-identical (regression snapshot c
 baseline change was the barrel export-list adding `normalizeDownShape` + `OPTION_LETTERS`).
 `npm test` 211, unchanged; no new eslint errors.
 
-**Refs.** `working tree` — `scripts/score/allocate.mjs`, `scripts/score/render.mjs`,
+**Refs.** `4079eb7` — `scripts/score/allocate.mjs`, `scripts/score/render.mjs`,
 `scripts/score-core.mjs`, `scripts/parse/cli-flags.mjs`, `scripts/render-html-shared.mjs`,
 `scripts/round/pick.mjs`; `.cursor/plans/split-score-core-into-modules.plan.md` (Phase 4).
 
@@ -449,7 +475,7 @@ diff-based catch-net beyond unit tests — behavior drift in vote tables / JSON 
 caught otherwise. This is Wave 2 of `remaining-work-master`, the prerequisite gate for the
 score-core Phases 2–4. See `.cursor/plans/hands-off-orchestrator.plan.md`.
 
-**Refs.** `working tree` — `scripts/regression-snapshot.mjs`, `scripts/paths.mjs`,
+**Refs.** `e99a04e` — `scripts/regression-snapshot.mjs`, `scripts/paths.mjs`,
 `tests/{ml,pipeline-e2e,regression-snapshot}.test.mjs`, `tests/fixtures/sample-round/snapshot/`,
 `justfile`.
 
@@ -485,7 +511,7 @@ post-pick view must reflect it; the option menu is a pre-decision aid only.
 **Overruled.** The prior behavior where `buildComboBallot` kept showing `pick.options`
 as multiple ballot columns "when tradeoffs are resolved" (former
 `pipeline-stages.test.mjs` case) — the owner clarified the multi-option ballot is for
-BEFORE picking only. **Refs:** working tree.
+BEFORE picking only. **Refs:** `217b631`.
 
 ## 2026-07-07 — `--fit-words` gate words auto-activate the gate
 
@@ -505,7 +531,7 @@ pass field (reported on `2026-07-06-kpop-controversial`). Requiring a separate
 `--gate passFailMaybe` was a non-obvious second step; auto-wiring mirrors the existing
 auto-default of `rankBy` → `combined` for manual fit.
 
-**Refs.** `working tree` · `scripts/parse-round.mjs` (`applyManualFitScoring`),
+**Refs.** `e68d0a0` · `scripts/parse-round.mjs` (`applyManualFitScoring`),
 `tests/score.test.mjs`, `spec/score-parsing.md`, `spec/scoring-comments.md`,
 `spec/point-allocation.md`.
 
@@ -542,7 +568,7 @@ album-aware rules are required — hence `albumRules` + `override.set`. Personal
 which job" is kept in the data submodule so a public fork stays clean (fork-safe defaults in
 code). Instrumentals with real plays are surfaced as fixes since they're usually mis-scrobbles.
 
-**Refs.** `working tree` · `scripts/lastfm-export.mjs`, `scripts/lastfm-aggregate.mjs`,
+**Refs.** `5bdf81b` · `scripts/lastfm-export.mjs`, `scripts/lastfm-aggregate.mjs`,
 `scripts/lastfm-merge-candidates.mjs`, `scripts/lastfm-add-rule.mjs`, `scripts/title-prefix-scan.mjs`,
 `scripts/title-candidate-score.mjs`, `data/ref/lastfm/{merge-rules,table-map}.json`, `data/ref/lastfm/{README,lastfm-fixes}.md`,
 `spec/lastfm-data.md`, `tests/lastfm-export.test.mjs`.
@@ -572,7 +598,7 @@ Last.fm" list. Growl album-merge decision left OPEN pending a re-export (Chinese
 plain `Growl`, EXO-K/EXO-M variants); note EXO-K/EXO-M are language indicators and must not be
 blanket-merged, and all-songs lists artist `EXO` vs the export's `Exo`.
 
-**Refs.** `working tree` · `scripts/lastfm-export.mjs` (`normTitle`/`normalizeVersionLabels`),
+**Refs.** `5bdf81b` · `scripts/lastfm-export.mjs` (`normTitle`/`normalizeVersionLabels`),
 `scripts/lastfm-merge-candidates.mjs`, `scripts/lastfm-add-rule.mjs`, `tests/lastfm-export.test.mjs`.
 
 ---
@@ -603,7 +629,7 @@ claim was doubly wrong (bad aggregation + no evidence): user confirmed 놀리러
 at #313 on the site, so Last.fm INCLUDES symbol titles and numbers through them; `chart` now
 includes them. Tie-break confirmed: count desc, artist asc, title asc (case-insensitive).
 
-**Refs.** `working tree` · `scripts/lastfm-export.mjs`, `scripts/lastfm-aggregate.mjs`,
+**Refs.** `5bdf81b` · `scripts/lastfm-export.mjs`, `scripts/lastfm-aggregate.mjs`,
 `scripts/lastfm-merge-candidates.mjs`, `data/ref/lastfm/`, `spec/lastfm-data.md`.
 
 ---
@@ -618,7 +644,7 @@ imports it. Documented in `.cursor/skills/title-chain/SKILL.md`; story-7 finalis
 **Why.** Raw scrobbles alone under-rank library titles the user thumbs up but rarely scrobbles
 (_My Girl_, _Nothing Short of a Miracle_ baseline +10 from all-songs presence).
 
-**Refs.** `working tree` · `scripts/title-candidate-score.mjs`, `.cursor/skills/title-chain/SKILL.md`.
+**Refs.** `6465c0c` · `scripts/title-candidate-score.mjs`, `.cursor/skills/title-chain/SKILL.md`.
 
 ---
 
@@ -633,7 +659,7 @@ New slots register in `CLASSIFIERS`. Updated `.cursor/skills/title-chain/SKILL.m
 relative-clause NPs (_All the Things She Said_). Mechanical rules match what the user
 validates: complement type after the fixed prefix, not whether the sentence ends.
 
-**Refs.** `working tree` · `scripts/title-complement-check.mjs`, `.cursor/skills/title-chain/SKILL.md`.
+**Refs.** `6465c0c` · `scripts/title-complement-check.mjs`, `.cursor/skills/title-chain/SKILL.md`.
 
 ---
 
@@ -658,7 +684,7 @@ numeric fit should not silently apply LLM coarse-band cutoffs.
 **Overruled.** Using coarse fit bands for manual numerics (85 vs 86 crossing
 excellent/strong was unintentional).
 
-**Refs.** `working tree` · `scripts/score/merge.mjs`, `scripts/score/allocate.mjs`,
+**Refs.** `2f7f62a` · `scripts/score/merge.mjs`, `scripts/score/allocate.mjs`,
 `scripts/parse-round.mjs`, `spec/point-allocation.md` (Same score = same tier).
 
 ---
@@ -674,7 +700,7 @@ thread `profile` into `expandTradeoffRows`.
 (`--cutoff fit:52`) classify failures via profile, so those songs vanished from the
 A/B/C table.
 
-**Refs.** `working tree` · `scripts/score/gate.mjs`, `scripts/tradeoff-rows.mjs`,
+**Refs.** `f68a018` · `scripts/score/gate.mjs`, `scripts/tradeoff-rows.mjs`,
 `tests/cli-table.test.mjs`.
 
 ## 2026-06-30 — Parse: manual fit + explicit `--rank combined`
@@ -688,7 +714,7 @@ default weights: **5:5** on parse with manual fit, **7:3** on merge/thematic pic
 “don’t run combined setup,” leaving `combinedScore` null and hiding Music/Fit/Combined
 columns even though allocation still blended via fallback.
 
-**Refs.** `working tree` — `scripts/parse-round.mjs`, `scripts/cli-help.mjs`,
+**Refs.** `b655ecb` — `scripts/parse-round.mjs`, `scripts/cli-help.mjs`,
 `tests/score.test.mjs`.
 
 ## 2026-06-29 — Thematic pick: combined rank + option+pin comparison table
@@ -703,7 +729,7 @@ before the applied ballot.
 table), treated pins as no-ops when the corrupted menu already had 3s, shed mid-tier 2s
 instead of bottom 1s, and showed a 13/15 applied total with no before/after view.
 
-**Refs.** `working tree` · `scripts/pick-round.mjs`, `scripts/round/pick.mjs`,
+**Refs.** `7eb4775` · `scripts/pick-round.mjs`, `scripts/round/pick.mjs`,
 `scripts/parse/cli-print.mjs`.
 
 ## 2026-06-29 — Gate-fail songs visible in tradeoff / ballot tables
@@ -716,7 +742,7 @@ combo columns match own-song dashes. Shared logic lives in `scripts/tradeoff-row
 **Why.** Gate-failed entries (e.g. BPM out of range) were omitted from the A/B/C
 comparison table — easy to miss a disqualified song mid-scroll.
 
-**Refs.** `working tree` · `scripts/tradeoff-rows.mjs`, `scripts/parse/cli-table.mjs`,
+**Refs.** `f68a018` · `scripts/tradeoff-rows.mjs`, `scripts/parse/cli-table.mjs`,
 `scripts/score/render.mjs`, `scripts/render-html-shared.mjs`.
 
 ## 2026-06-29 — CLI comment column: left-aligned, terminal-wide, configurable
@@ -728,7 +754,7 @@ comment-width <auto|n>` sets a per-clone cap (default auto).
 **Why.** Wide terminals wasted space with a 28-char right-aligned comment column;
 users wanted readable full comments without reformatting every session.
 
-**Refs.** working tree — `scripts/ml-config.mjs`, `scripts/parse/cli-print.mjs`,
+**Refs.** `9a67f7b` — `scripts/ml-config.mjs`, `scripts/parse/cli-print.mjs`,
 `scripts/ml.mjs`, `justfile`.
 
 ---
@@ -742,7 +768,7 @@ Song titles truncate by display width too.
 **Why.** CJK titles like `...말하자면` are 7 code units but 11 terminal columns,
 which shifted Score/Mod/Vote columns one cell right in monospace output.
 
-**Refs.** working tree — `scripts/text-width.mjs`, `scripts/parse/cli-print.mjs`,
+**Refs.** `a4dc3d4` — `scripts/text-width.mjs`, `scripts/parse/cli-print.mjs`,
 `scripts/score/render.mjs`.
 
 ---
@@ -756,7 +782,7 @@ which shifted Score/Mod/Vote columns one cell right in monospace output.
 **Why.** Minus on down matches ballot/sign convention; combined-mode tiers group by
 music + coarse fit band, so different Combined columns can still be one allocation tier.
 
-**Refs.** working tree — `scripts/parse/cli-table.mjs`, `scripts/parse/cli-print.mjs`,
+**Refs.** `3c18056` — `scripts/parse/cli-table.mjs`, `scripts/parse/cli-print.mjs`,
 `scripts/score/allocate.mjs`.
 
 ---
@@ -771,7 +797,7 @@ in output use the shorthand.
 **Why.** Fit was only visible in comments; down shape needed a clearer combo syntax
 than reusing A/B/C or a separate long flag.
 
-**Refs.** working tree — `scripts/cli-commands.mjs`, `scripts/parse/cli-table.mjs`,
+**Refs.** `7eb4775` — `scripts/cli-commands.mjs`, `scripts/parse/cli-table.mjs`,
 `scripts/parse/cli-print.mjs`, `scripts/pick-round.mjs`, `scripts/ml.mjs`.
 
 ---
@@ -787,7 +813,7 @@ tables match the CLI. `just pick` persists `--down-shape` into round profile JSO
 **Why.** Both tradeoffs reused A/B/C, so `just pick A` looked ambiguous; down shape
 was already a separate flag but never surfaced clearly in the CLI.
 
-**Refs.** working tree — `scripts/cli-commands.mjs`, `scripts/parse/cli-print.mjs`,
+**Refs.** `7eb4775` — `scripts/cli-commands.mjs`, `scripts/parse/cli-print.mjs`,
 `scripts/score/render.mjs`, `scripts/render-html-shared.mjs`, `scripts/pick-round.mjs`.
 
 ---
@@ -802,7 +828,7 @@ Argument parsing treats tokens starting with `-` as flags, so
 **Why.** Mid-round workflow should not require retyping the round slug on every step;
 `--fit-words` must not be mistaken for a fuzzy round name.
 
-**Refs.** working tree — `scripts/ml.mjs`, `scripts/paths.mjs`, `justfile`.
+**Refs.** `7eb4775` — `scripts/ml.mjs`, `scripts/paths.mjs`, `justfile`.
 
 ## 2026-06-27 — Forced up spill: DQ and blanks before budget-mismatch
 
@@ -813,7 +839,7 @@ excluded.
 **Why.** Spill must exhaust every valid sink before `budget-mismatch`; blanks outrank DQ
 when both could absorb overflow.
 
-**Refs.** working tree — `scripts/score/allocate.mjs`, `spec/point-allocation.md`.
+**Refs.** `150a5bd` — `scripts/score/allocate.mjs`, `spec/point-allocation.md`.
 
 ## 2026-06-27 — Per-song caps are hard (no spill relaxation)
 
@@ -826,7 +852,7 @@ stops and `budget-mismatch` flags the under-spent remainder.
 **Overruled.** Prior spill paths that exceeded `maxUpvotesPerSong` /
 `maxDownvotesPerSong` to force budget exactness.
 
-**Refs.** working tree — `scripts/score/allocate.mjs`, `spec/point-allocation.md`.
+**Refs.** `150a5bd` — `scripts/score/allocate.mjs`, `spec/point-allocation.md`.
 
 ## 2026-06-27 — Blank-score `--pin` + bell-style spill (not top dump)
 
@@ -840,7 +866,7 @@ pins had spilled onto POSE (+3) instead of 74-tier songs.
 
 **Overruled.** 2026-06-27 entry rejecting blank-score pins.
 
-**Refs.** `working tree` · `scripts/score/allocate.mjs`, `scripts/round/pick.mjs`,
+**Refs.** `150a5bd` · `scripts/score/allocate.mjs`, `scripts/round/pick.mjs`,
 `scripts/parse/cli-flags.mjs`.
 
 ## 2026-06-27 — Reject `--pin` on blank-score / out-of-menu songs
@@ -854,7 +880,7 @@ could not apply it, leaving a spare point that `spillRemainder` gave to POSE (+3
 
 **Overruled.** Blank-score pins allowed; allocate applies them; spill uses tier promotion.
 
-**Refs.** `working tree` · `scripts/parse/cli-flags.mjs`, `scripts/round/pick.mjs`,
+**Refs.** `14791fa` · `scripts/parse/cli-flags.mjs`, `scripts/round/pick.mjs`,
 `scripts/pick-round.mjs`.
 
 ## 2026-06-27 — Tradeoff prompts point at pick, not parse re-run
@@ -867,7 +893,7 @@ preview the draft only; pick commits.
 **Why.** Three-stage split left misleading “re-run parse with --tier-count” wording
 in allocator output and `music.md`.
 
-**Refs.** `working tree` · `scripts/score/allocate.mjs`, `spec/point-allocation.md`.
+**Refs.** `3c18056` · `scripts/score/allocate.mjs`, `spec/point-allocation.md`.
 
 ## 2026-06-27 — CLI tradeoff tables: Mod/Comment columns + excluded songs
 
@@ -879,7 +905,7 @@ bottom of the options table with **BLANK** or **-** in Score, **-** in vote colu
 **Why.** Long tradeoff output scrolled past the head missing-score banner; excluded
 songs were invisible in the A/B/C table and modifiers lived only in markdown.
 
-**Refs.** `working tree` · `scripts/parse/cli-table.mjs`, `scripts/parse/cli-print.mjs`.
+**Refs.** `3c18056` · `scripts/parse/cli-table.mjs`, `scripts/parse/cli-print.mjs`.
 
 ## 2026-06-27 — Pick CLI shows `just pick`, not `--option`
 
@@ -891,7 +917,7 @@ prominently on blank scores; pick warns on single-dash flags (`-pin`).
 **Why.** `just` is the documented interface; `--option A` and raw `ml` forms mixed with
 positional `just pick name A` and hid post-pin allocations.
 
-**Refs.** `working tree` · `scripts/cli-commands.mjs`, `scripts/parse/cli-print.mjs`,
+**Refs.** `3c18056` · `scripts/cli-commands.mjs`, `scripts/parse/cli-print.mjs`,
 `scripts/pick-round.mjs`, `spec/point-allocation.md` (pick stage).
 
 ## 2026-06-27 — Modifier-qualified `?` (score vs +/−/play)
@@ -960,7 +986,7 @@ print helpers, and HTML parse helpers moved out; public re-exports unchanged.
 **Why.** Wave 3 of pipeline-cleanup master plan — slim parse entry after pick/merge
 extraction.
 
-**Refs.** working tree — `scripts/parse-round.mjs`, `scripts/parse/*`.
+**Refs.** `0c0e694` — `scripts/parse-round.mjs`, `scripts/parse/*`.
 
 ## 2026-06-26 — Pure render + fit field persistence (Wave 2b)
 
@@ -974,7 +1000,7 @@ and top-level `combineWeights`. Parse auto-switches to `rankBy: combined` with
 **Why.** Wave 2b of pipeline-cleanup master plan — allocation belongs in
 parse/merge only; renderers are pure presenters.
 
-**Refs.** working tree — `scripts/render-final-html.mjs`, `scripts/score/render.mjs`,
+**Refs.** `8b6707e` — `scripts/render-final-html.mjs`, `scripts/score/render.mjs`,
 `scripts/parse-round.mjs`, `scripts/ml.mjs`, `scripts/score/fit-signal.mjs`.
 
 ## 2026-06-26 — Three-stage pipeline: parse / merge / pick
@@ -989,7 +1015,7 @@ into music.json for pick replay.
 **Why.** Wave 2 of pipeline-cleanup master plan — parse never writes `pick`, pick
 never reads HTML, merge never picks.
 
-**Refs.** working tree — `scripts/merge-scores.mjs`, `scripts/pick-round.mjs`,
+**Refs.** `69f1ef9` — `scripts/merge-scores.mjs`, `scripts/pick-round.mjs`,
 `scripts/round/pick.mjs`, `scripts/parse-round.mjs`, `scripts/ml.mjs`, `justfile`.
 
 ## 2026-06-26 — Split score-core into focused modules
@@ -1002,7 +1028,7 @@ keep the allocate↔merge import graph acyclic.
 **Why.** The 2300-line monolith mixed six concerns; module split is Wave 1 of the
 pipeline-cleanup master plan and unblocks allocator work in `allocate.mjs` only.
 
-**Refs.** working tree — `scripts/score-core.mjs`, `scripts/score/*`.
+**Refs.** `0b5a05e` — `scripts/score-core.mjs`, `scripts/score/*`.
 
 ## 2026-06-22 — Point badges use discrete tier palette, not score heat
 
@@ -1018,7 +1044,7 @@ unchanged. `render-html-shared.mjs` exports `VOTE_TIER_HUES`, `buildVoteTierMap`
 gradient, so two songs with the same 2 points could show different shades. Points
 are tier-based (same value = same tier), not continuous scores.
 
-**Refs.** `working tree`; `scripts/render-html-shared.mjs`, `scripts/render-fit-html.mjs`, `scripts/render-final-html.mjs`.
+**Refs.** `7fa7639`; `scripts/render-html-shared.mjs`, `scripts/render-fit-html.mjs`, `scripts/render-final-html.mjs`.
 
 ## 2026-06-22 — scores.html defaults to combined order; score boxes use round-relative heat
 
@@ -1035,7 +1061,7 @@ and `scoreHeatAttrs`.
 relative coloring makes tight spreads (e.g. music 68–77) readable without a
 fixed 0–100 scale.
 
-**Refs.** `working tree`; `scripts/render-fit-html.mjs`, `scripts/render-html-shared.mjs`.
+**Refs.** `7fa7639`; `scripts/render-fit-html.mjs`, `scripts/render-html-shared.mjs`.
 
 ## 2026-06-22 — Pins can no longer exceed a bank: reflow, flag, and reject
 
@@ -1070,7 +1096,7 @@ latter wasn't supported for the `--option` path, and nothing caught the overshoo
 **Overruled.** Prior behavior that pins (and `--option`+pin) may overspend a bank
 without a tradeoff.
 
-**Refs.** working tree — `spec/point-allocation.md` (Profile → overrides/pins;
+**Refs.** `14791fa` — `spec/point-allocation.md` (Profile → overrides/pins;
 Interactive tradeoffs → `budget-mismatch`); `scripts/parse-round.mjs`,
 `scripts/score-core.mjs`; tests in `tests/score.test.mjs`.
 
@@ -1091,7 +1117,7 @@ oblique beats must still connect to the scene.
 (it's lyric/theme-based). The leading-word scan + the "where can you leave the end of the sentence"
 rules are reusable across future story rounds even though the sentence changes.
 
-**Refs.** working tree (`scripts/title-prefix-scan.mjs`, `.cursor/skills/title-chain/SKILL.md`).
+**Refs.** `5de94a9` (`scripts/title-prefix-scan.mjs`, `.cursor/skills/title-chain/SKILL.md`).
 
 ## 2026-06-19 — topic-summary `verify` column + English-source link rule
 
@@ -1110,7 +1136,7 @@ web-search synthesis (or Korean reading), not the saved link — a provenance ga
 low-confidence summaries. The `verify` tag plus the English-source rule make each row's grounding
 explicit and checkable.
 
-**Refs.** working tree (`data/ref/song-topic-summaries.csv`,
+**Refs.** `98ba305` (`data/ref/song-topic-summaries.csv`,
 `.cursor/skills/submission-song-search/SKILL.md`).
 
 ---
@@ -1130,7 +1156,7 @@ reusable, round-neutral topic cache so the same songs aren't re-searched across 
 and burned searches on songs whose titles lied about their lyrics. A standing skill + summary
 cache makes future themed-submission research cheaper and reproducible.
 
-**Refs.** working tree (`.cursor/skills/submission-song-search/SKILL.md`,
+**Refs.** `13cdeef` (`.cursor/skills/submission-song-search/SKILL.md`,
 `data/ref/song-topic-summaries.csv`).
 
 ---
@@ -1147,7 +1173,7 @@ the earliest date. Added `bareSlugOf` / `datedSiblingsOf` in `paths.mjs`.
 A later `ml run` on another round could date-slug that folder; importing HTML
 and running again stamped a second date for the same round slug.
 
-**Refs.** working tree (`spec/analysis-artifacts.md` → Date slugs and tidying).
+**Refs.** `7eb4775` (`spec/analysis-artifacts.md` → Date slugs and tidying).
 
 ---
 
@@ -1162,7 +1188,7 @@ and agent parses all date-slug undated rounds the same way `ml run` does. Added
 the input undated and wrote analysis under the bare slug; only `ml run` ran naming
 first. Parse should stamp the date without pulling in stale-round archiving.
 
-**Refs.** working tree (`spec/analysis-artifacts.md` → Date slugs and tidying).
+**Refs.** `e348f39` (`spec/analysis-artifacts.md` → Date slugs and tidying).
 
 ---
 
@@ -1188,7 +1214,7 @@ window and an explicit-only archive command; chose keep-3-days plus auto-on-run
 slugging covers analysis folders too (not just input files as the plan literally
 said) so an orphan folder like `analysis/tarot-hermit` gets dated as well.
 
-**Refs.** working tree; `spec/analysis-artifacts.md` → Date slugs and tidying,
+**Refs.** `13cdeef`; `spec/analysis-artifacts.md` → Date slugs and tidying,
 `scripts/maintain-rounds.mjs`, `scripts/ml.mjs`, `scripts/paths.mjs`.
 
 ---
@@ -1218,7 +1244,7 @@ per-round path juggling).
 piecemeal) and `git-crypt` in a single repo (opaque blobs in a portfolio repo, key
 management). Single `data/` submodule chosen for a clean public/private boundary.
 
-**Refs.** working tree; README → Private data, `spec/analysis-artifacts.md`,
+**Refs.** `8edb67e`; README → Private data, `spec/analysis-artifacts.md`,
 `scripts/paths.mjs`.
 
 ---
@@ -1396,7 +1422,7 @@ _what was shown → what was chosen and why_ makes the deliverable auditable and
 builds a dataset for future allocation/training work. Embedding in `scores.json`
 keeps each round self-contained; the global `picks.jsonl` accumulates across rounds.
 
-**Refs.** `working tree` · `spec/point-allocation.md` (`--reason`, pick record) ·
+**Refs.** `053c379` · `spec/point-allocation.md` (`--reason`, pick record) ·
 `scripts/score-core.mjs` (`buildPickRecord`) ·
 `scripts/render-html-shared.mjs` (`pickHtml`, `tierStructureTableHtml` `chosenIndex`).
 
@@ -1426,7 +1452,7 @@ keeps each round self-contained; the global `picks.jsonl` accumulates across rou
 building a pin command; and the ballot you transcribe into the app was both in the
 wrong order (combined, not submission) and missing your own song's slot.
 
-**Refs.** `working tree` · `scripts/parse-round.mjs` (`--option`, `resolveOptionIndex`,
+**Refs.** `053c379` · `scripts/parse-round.mjs` (`--option`, `resolveOptionIndex`,
 two-order CLI ballot), `scripts/score-core.mjs` (option `shape`, `ownSongs`
 writeback), `scripts/render-html-shared.mjs` (`tradeoffsHtml` two tables + own row),
 `scripts/render-fit-html.mjs` + `scripts/render-final-html.mjs` (transfer interleaves
@@ -1471,7 +1497,7 @@ the mis-scaled merge stops manufacturing fake co-favorites; the lift flag keeps 
 simply disabling it for combined rounds (the tier/bucket-count tradeoffs already give
 top-flattening control).
 
-**Refs.** `working tree` · `scripts/score-core.mjs` (`favMin` gate, `normalizeCombined`
+**Refs.** `053c379` · `scripts/score-core.mjs` (`favMin` gate, `normalizeCombined`
 `fitNorm`/`musicNorm`, `flagMusicLifts`, `perSong.score`), `scripts/render-fit-html.mjs`
 (norm breakdown + lift flag), `scripts/render-html-shared.mjs` (styles, table score),
 `spec/point-allocation.md` R2 + combined sections.
@@ -1495,7 +1521,7 @@ A shared table makes the delta obvious at a glance and reads in the same combine
 order as the ranked list. Non-distribution tradeoffs (favorite-band split, etc.)
 stay as compact bullet choice lists.
 
-**Refs.** `working tree` · `scripts/render-html-shared.mjs` (`tradeoffsHtml`),
+**Refs.** `6c423eb` · `scripts/render-html-shared.mjs` (`tradeoffsHtml`),
 `scripts/score-core.mjs` (`renderTierStructure`, `perSong`, `mergeFitJson` writeback),
 `scripts/parse-round.mjs` (`printTradeoffCli`), `scripts/render-fit-html.mjs`,
 `scripts/render-final-html.mjs`.
@@ -1541,7 +1567,7 @@ gap, the exact opposite of the goal. The high fit floor prevents that. Snapping 
 to its band anchors (an earlier idea) was rejected to keep granular fit scores
 visible (cliff-vs-slope) for research and the owner's eye.
 
-**Refs.** working tree; `normalizeCombined` / `effectiveMusic` / `isContender` and
+**Refs.** `053c379`; `normalizeCombined` / `effectiveMusic` / `isContender` and
 the `rankValue` + combined `tierKey` changes in `scripts/score-core.mjs`; combined
 sort in `scripts/render-fit-html.mjs`; `cmdScores` `--order combined` default in
 `scripts/ml.mjs`; tests under _Combined-score normalization_ in
@@ -1579,7 +1605,7 @@ a junk-promo count gates top-heaviness first, then quality, then shorter top. Th
 plan's `3 3 3 → C2` example (favorites at `3` over a graduated `≥75` band) still
 holds because its second step lands on the 75 anchor, not a junk gap.
 
-**Refs.** working tree; `allocateBell` in `scripts/score-core.mjs`
+**Refs.** `053c379`; `allocateBell` in `scripts/score-core.mjs`
 (staircase enumerator, `JUNK_GAP`/`PROMO_PENALTY`, R2 merge), `--favorite-band`
 flags in `scripts/parse-round.mjs`; tests in `tests/score.test.mjs` (R1/R2 +
 `3 3 3` regression + contiguity); spec _How the tiers are drawn_ / _R2_ in
@@ -1609,7 +1635,7 @@ reading left maybes at `0` even with generous budgets. Corrected per owner inten
 the rule allows equality (maybe = lowest pass) and a leniency dial, not "never fund
 a maybe."
 
-**Refs.** working tree; `allocate` maybe-funding branch in
+**Refs.** `053c379`; `allocate` maybe-funding branch in
 `scripts/score-core.mjs`; tests in `tests/score.test.mjs` (invariant, leniency,
 low-pass graduated band); spec _Profile → gate → passFailMaybe_ and _maybe-band_ in
 `spec/point-allocation.md`.

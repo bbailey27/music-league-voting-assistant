@@ -7,22 +7,24 @@
 //
 // Usage: node scripts/rescore-round.mjs <round-id> [--weights fit:music] [--shape ...]
 //        [--gate ...] [--cutoff ...] [--down-shape ...] [--tier-count N]
-//        [--bucket-count N] [--favorite-band ...] [--rank ...] [--dry-run]
+//        [--bucket-count N] [--favorite-band ...] [--rank ...] [--pin ...] [--dry-run]
 
 import { existsSync } from 'node:fs';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import {
-  allocate,
   buildMarkdown,
   buildJsonPayload,
-  mergeFitJson,
   enrichProfileWithBudget,
 } from './score-core.mjs';
 import { applyManualFitScoring } from './parse-round.mjs';
 import { matchFlag, warnUnknownShortFlags } from './cli-args.mjs';
 import { musicPaths, fitPaths } from './paths.mjs';
+import { slimProfile } from './parse/pipeline.mjs';
+import { exploreAllocate, finishExploreCli } from './round/explore.mjs';
 import {
+  parsePins,
+  pinCapError,
   parseTierCount,
   parseBucketCount,
   parseOptionCount,
@@ -32,7 +34,6 @@ import {
   buildGate,
   parseScoreOverrides,
 } from './parse/cli-flags.mjs';
-import { printPickCli } from './parse/cli-print.mjs';
 import { warnMissingScoresCli, warnMissingFitScoresCli } from './parse/cli-warn.mjs';
 
 function parseArgs(argv) {
@@ -51,6 +52,7 @@ function parseArgs(argv) {
     favoriteBand: null,
     score: [],
     fitScore: [],
+    pin: [],
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -75,6 +77,7 @@ function parseArgs(argv) {
       ['favorite-band', (v) => (args.favoriteBand = v)],
       ['score', (v) => args.score.push(v)],
       ['fit-score', (v) => args.fitScore.push(v)],
+      ['pin', (v) => args.pin.push(v)],
     ];
     let matched = false;
     for (const [name, setter] of flags) {
@@ -98,8 +101,12 @@ function songsFromPayload(data) {
   return (data.songs || []).map((s) => ({ ...s }));
 }
 
-// Apply `--score` overrides onto the music songs in place: set the raw score and its
-// +/-/? modifier flags so the change sticks with no HTML re-parse. Exits on a bad idx.
+function resolveExplorePins(args) {
+  if (!args.pin.length) return { overrides: undefined, downOverrides: undefined };
+  const pins = parsePins(args.pin);
+  return { overrides: pins?.overrides, downOverrides: pins?.downOverrides };
+}
+
 function applyScoreOverrides(songs, overrides) {
   if (!overrides) return false;
   const byIdx = new Map(songs.map((s) => [s.rawOrderIndex, s]));
@@ -119,8 +126,6 @@ function applyScoreOverrides(songs, overrides) {
   return true;
 }
 
-// Apply `--fit-score` overrides onto a fit-song list in place (music.json songs for a
-// manual-fit round, or fit.json songs for a merge round). Exits on a bad idx.
 function applyFitScoreOverrides(songs, overrides, where) {
   if (!overrides) return false;
   const byIdx = new Map(songs.map((s) => [s.rawOrderIndex, s]));
@@ -135,11 +140,10 @@ function applyFitScoreOverrides(songs, overrides, where) {
   return true;
 }
 
-// Merge knobs over the stored profile (same precedence as pick's buildProfile).
-// rescore takes no pins — it re-weights and re-shapes the draft menu, not a ballot.
 function buildProfile(args, stored, budget, mode) {
   const gate = buildGate(args) ?? stored?.gate;
   const weights = parseWeights(args.weights) ?? stored?.weights;
+  const { overrides, downOverrides } = resolveExplorePins(args);
   const tierCount = parseTierCount(args.tierCount) ?? stored?.tierCount;
   const bucketCount = parseBucketCount(args.bucketCount) ?? stored?.bucketCount;
   const optionCount = parseOptionCount(args.optionCount) ?? stored?.optionCount;
@@ -155,6 +159,8 @@ function buildProfile(args, stored, budget, mode) {
       downShape,
       gate,
       weights,
+      overrides,
+      downOverrides,
       rankBy,
       tierCount,
       bucketCount,
@@ -166,33 +172,6 @@ function buildProfile(args, stored, budget, mode) {
   );
 }
 
-function slimProfile(profile) {
-  const {
-    shape,
-    downShape,
-    gate,
-    weights,
-    rankBy,
-    tierCount,
-    bucketCount,
-    optionCount,
-    favoriteBand,
-    fitTrust,
-  } = profile;
-  return {
-    shape,
-    downShape,
-    gate,
-    weights,
-    rankBy,
-    tierCount,
-    bucketCount,
-    optionCount,
-    favoriteBand,
-    fitTrust,
-  };
-}
-
 async function main() {
   const argv = process.argv.slice(2);
   warnUnknownShortFlags(argv);
@@ -200,7 +179,8 @@ async function main() {
   if (!args.roundId) {
     console.error(
       'Usage: just rescore <round-id> [--weights fit:music] [--shape …] [--gate …] [--down-shape …] ' +
-        '[--rank …] [--options N] [--tier-count N] [--bucket-count N] [--score <i>:<v>] [--fit-score <i>:<v>] [--dry-run]'
+        '[--rank …] [--options N] [--tier-count N] [--bucket-count N] [--pin <i>:<v>] ' +
+        '[--score <i>:<v>] [--fit-score <i>:<v>] [--dry-run]'
     );
     process.exit(1);
   }
@@ -220,20 +200,19 @@ async function main() {
 
   const budget = musicData.budget;
   const upCap = budget?.maxUpvotesPerSong ?? Infinity;
-  const upBudget = budget?.upvoteBankSize ?? 0;
+  const downCap = budget?.maxDownvotesPerSong ?? Infinity;
   const profile = buildProfile(args, musicData.profile, budget, musicData.mode);
-  const songs = songsFromPayload(musicData);
+  const capErr = pinCapError(profile.overrides, profile.downOverrides, upCap, downCap);
+  if (capErr) {
+    console.error(capErr);
+    process.exit(1);
+  }
 
-  // Manual raw-score overrides (no HTML re-parse): --score writes the music score +
-  // modifier onto music.json; --fit-score writes the fit score onto fit.json (merge
-  // round) or the music song's fitScore (manual-fit round). Applied before allocation
-  // so the menu reflects the new numbers; persisted below (unless --dry-run).
+  const songs = songsFromPayload(musicData);
   const scoreOverrides = parseScoreOverrides(args.score);
   const fitScoreOverrides = parseScoreOverrides(args.fitScore, '--fit-score');
   let scoreDirty = applyScoreOverrides(songs, scoreOverrides);
 
-  let tradeoffs;
-  let combineWeights;
   let fitData = null;
   let fitDirty = false;
   const ownSongs = musicData.ownSongs || [];
@@ -246,22 +225,32 @@ async function main() {
       process.exit(1);
     }
     fitDirty = applyFitScoreOverrides(fitData.songs || [], fitScoreOverrides, fitJson);
-    const parsed = { round: musicData.round, budget, songs, ownSongs };
-    const merged = mergeFitJson(parsed, fitData, {
-      ...profile,
-      rankBy: args.rank ?? musicData.profile?.rankBy ?? 'combined',
-    });
-    tradeoffs = merged.tradeoffs;
-    combineWeights = fitData.combineWeights ?? profile.weights ?? null;
-  } else {
-    // Non-merge: the fit score lives on the music song and is re-persisted with it, so
-    // fold a --fit-score into the music-json write rather than a separate fit.json.
-    if (applyFitScoreOverrides(songs, fitScoreOverrides, musicJson)) scoreDirty = true;
+  } else if (applyFitScoreOverrides(songs, fitScoreOverrides, musicJson)) {
+    scoreDirty = true;
+  }
+
+  let combineWeights = null;
+  if (!useMerge) {
     combineWeights = applyManualFitScoring(profile, songs, {
       explicitRank: args.rank,
       weights: profile.weights,
     });
-    tradeoffs = allocate(songs, upBudget, upCap, profile).tradeoffs;
+  }
+
+  const parsed = { round: musicData.round, budget, songs, ownSongs };
+  const { tradeoffs, pinNotes } = exploreAllocate({
+    songs,
+    budget,
+    profile: useMerge
+      ? { ...profile, rankBy: args.rank ?? musicData.profile?.rankBy ?? 'combined' }
+      : profile,
+    fitData,
+    parsed,
+    useMerge,
+  });
+
+  if (useMerge) {
+    combineWeights = fitData.combineWeights ?? profile.weights ?? null;
   }
 
   const slim = slimProfile(profile);
@@ -276,6 +265,9 @@ async function main() {
         ? ` [${[scoreDirty && '--score', fitDirty && '--fit-score'].filter(Boolean).join(' + ')} applied]`
         : '';
     console.log(`Would rescore ${roundId} (${wLabel})${ovLabel} → ${musicJson} (pick reset to draft)`);
+    warnMissingScoresCli(songs);
+    warnMissingFitScoresCli(songs);
+    finishExploreCli({ tradeoffs, roundId, songs, ownSongs, budget, profile, pinNotes });
     return;
   }
 
@@ -284,7 +276,6 @@ async function main() {
     console.log(`Wrote ${fitJson} (fit-score override)`);
   }
 
-  // Reset any committed pick to draft: no `pick`, songs carry the re-allocated draft.
   const ctx = {
     round: musicData.round,
     budget,
@@ -317,7 +308,7 @@ async function main() {
 
   warnMissingScoresCli(songs);
   warnMissingFitScoresCli(songs);
-  printPickCli(tradeoffs, roundId, songs, ownSongs, budget, slim);
+  finishExploreCli({ tradeoffs, roundId, songs, ownSongs, budget, profile, pinNotes });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

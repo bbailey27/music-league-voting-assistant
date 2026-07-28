@@ -27,7 +27,12 @@ import {
   applyManualFitScoring,
 } from '../scripts/parse-round.mjs';
 import { parseOptionCount, parseScoreOverrides } from '../scripts/parse/cli-flags.mjs';
-import { applyOptionPick } from '../scripts/round/pick.mjs';
+import {
+  applyOptionPick,
+  applyPinsToMenuTradeoffs,
+  reconcileDownOptionPins,
+} from '../scripts/round/pick.mjs';
+import { slimProfile } from '../scripts/parse/pipeline.mjs';
 import { buildComboBallot } from '../scripts/render-html-shared.mjs';
 
 // ---------------------------------------------------------------------------
@@ -692,6 +697,95 @@ test('reconcileOptionPins injects out-of-menu pins (blank-score slots) and reflo
   assert.equal(ov[20], 1);
   assert.equal(ov[26], 1);
   assert.equal(Object.values(ov).reduce((a, b) => a + b, 0), 6, 'budget preserved');
+});
+
+test('applyPinsToMenuTradeoffs honors up pins on every tier-structure option', () => {
+  const tradeoffs = [
+    {
+      kind: 'tier-structure',
+      options: [
+        {
+          label: 'A — 2×2 / 1×1',
+          perSong: [
+            { rawOrderIndex: 0, votes: 2 },
+            { rawOrderIndex: 1, votes: 2 },
+            { rawOrderIndex: 8, votes: 1 },
+            { rawOrderIndex: 5, votes: 1 },
+          ],
+        },
+        {
+          label: 'B — 3×1 / 1×2',
+          perSong: [
+            { rawOrderIndex: 0, votes: 1 },
+            { rawOrderIndex: 1, votes: 1 },
+            { rawOrderIndex: 8, votes: 2 },
+            { rawOrderIndex: 5, votes: 2 },
+          ],
+        },
+      ],
+    },
+  ];
+  applyPinsToMenuTradeoffs(tradeoffs, { overrides: { 8: 1, 5: 1 } });
+  for (const opt of tradeoffs[0].options) {
+    const byIdx = Object.fromEntries(opt.perSong.map((p) => [p.rawOrderIndex, p.votes]));
+    assert.equal(byIdx[8], 1, `${opt.label}: song 8 pinned to 1`);
+    assert.equal(byIdx[5], 1, `${opt.label}: song 5 pinned to 1`);
+    assert.equal(opt.perSong.reduce((a, p) => a + p.votes, 0), 6, 'budget exact per option');
+  }
+});
+
+test('applyPinsToMenuTradeoffs dedupes options that collapse to the same distribution', () => {
+  const tradeoffs = [
+    {
+      kind: 'tier-structure',
+      options: [
+        {
+          label: 'A',
+          perSong: [
+            { rawOrderIndex: 0, votes: 2 },
+            { rawOrderIndex: 1, votes: 2 },
+            { rawOrderIndex: 2, votes: 1 },
+          ],
+        },
+        {
+          label: 'B',
+          perSong: [
+            { rawOrderIndex: 0, votes: 2 },
+            { rawOrderIndex: 1, votes: 1 },
+            { rawOrderIndex: 2, votes: 2 },
+          ],
+        },
+      ],
+    },
+  ];
+  const notes = applyPinsToMenuTradeoffs(tradeoffs, { overrides: { 0: 2, 1: 1, 2: 1 } });
+  assert.equal(tradeoffs[0].options.length, 1, 'both options collapse to 2,1,1');
+  assert.ok(notes.some((n) => /merged/i.test(n)), 'reports deduped options');
+});
+
+test('reconcileDownOptionPins promotes worst unfunded songs when shedding from the top', () => {
+  // best-first down menu: best songs listed first, downvotes on worst
+  const perSong = [
+    { rawOrderIndex: 0, votes: 0 },
+    { rawOrderIndex: 1, votes: 0 },
+    { rawOrderIndex: 2, votes: 2 },
+    { rawOrderIndex: 3, votes: 2 },
+  ];
+  const ov = reconcileDownOptionPins(perSong, { 0: 1 });
+  assert.equal(ov[0], 1, 'pin honored on best song');
+  assert.equal(Object.values(ov).reduce((a, b) => a + b, 0), 4, 'down budget preserved');
+});
+
+test('slimProfile persists overrides and downOverrides when set', () => {
+  const slim = slimProfile({
+    shape: 'auto',
+    overrides: { 8: 1, 5: 1 },
+    downOverrides: { 3: 1 },
+  });
+  assert.deepEqual(slim.overrides, { 8: 1, 5: 1 });
+  assert.deepEqual(slim.downOverrides, { 3: 1 });
+  const bare = slimProfile({ shape: 'auto', overrides: {}, downOverrides: {} });
+  assert.equal(bare.overrides, undefined);
 });
 
 test('pinEligibilityError allows pins on blank-score songs', () => {

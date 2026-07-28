@@ -13,6 +13,24 @@ song-research rankings, candidate add/drop adjustments, or per-round `data/analy
 edits are not spec changes and don't belong here.
 
 Format: `## <YYYY-MM-DD> — <title>` · **Change** · **Why** · **Overruled** (if any) ·
-**Refs** (`working tree` until committed, then short hash + spec section).
+**Refs** (short hash + spec section once shipped; see below).
 
 Skip in-session false starts. Per `no-auto-commit`, only commit when the user asks.
+
+## Refs: `working tree` and backfill
+
+- The **entry you are writing now** for uncommitted work uses `working tree` in
+  **Refs** until that work is committed.
+- You cannot know the hash before commit. After the behavior lands in git, update
+  that entry's ref on the **next** `decisions.md` edit (same session or later) —
+  not in the same breath as drafting the entry.
+- **Whenever you add or edit any decision-log entry**, also scan older entries:
+  1. `rg 'working tree' spec/decisions.md` — skip non-ref prose (e.g.
+     no-auto-commit wording).
+  2. For each stale **Refs** line except the current uncommitted entry, find the
+     introducing commit (`git log -1 --oneline -- <primary file from ref>`) and
+     replace `working tree` with that short hash.
+  3. Backfill a few obvious matches per pass; do not repo-wide sweep unless asked.
+
+This keeps refs current incrementally — each decision-log touch cleans up prior
+`working tree` leftovers.

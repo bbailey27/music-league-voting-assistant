@@ -33,8 +33,10 @@ export function slimProfile(profile) {
     optionCount,
     favoriteBand,
     fitTrust,
+    overrides,
+    downOverrides,
   } = profile;
-  return {
+  const slim = {
     shape,
     downShape,
     gate,
@@ -46,4 +48,7 @@ export function slimProfile(profile) {
     favoriteBand,
     fitTrust,
   };
+  if (overrides && Object.keys(overrides).length) slim.overrides = overrides;
+  if (downOverrides && Object.keys(downOverrides).length) slim.downOverrides = downOverrides;
+  return slim;
 }

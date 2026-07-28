@@ -113,19 +113,23 @@ Blank-score songs (needsUserInput) may be pinned on pick — manual ballot slot.
 Own, disqualified, and unknown indices are rejected at pick.
 
 Other songs are re-allocated around the pin so the vote bank is still spent exactly.
-On pick, a pin is a tweak on top of the chosen option (logged as a manual tweak;
-CLI prints B (original) | B (altered) when pins change the distribution).
+On explore (parse / merge / rescore), pins reflow every A–E option column; on pick,
+a pin is a tweak on top of the chosen option (logged as a manual tweak; CLI prints
+B (original) | B (altered) when pins change the distribution). Stored pins in JSON
+apply on pick when --pin is omitted.
 
-Works on:  parse (explore)  merge (thematic explore)  pick (commit with tweak)
+Works on:  parse  merge  rescore  pick
 
 Examples:
-  just parse kpop-favorite --pin 3:3          # explore: pin #3 to 3 upvotes
+  just rescore --pin 8:1,5:1               # every option column honors both pins
+  just merge tarot --pin 3:3               # thematic explore with pinned menu
   just pick story-5 A --pin 9:2 --reason "pin Two Evils to 2; reflow drops bottom 1"`,
 
   parse: `just parse [<name>] [flags]
 
 Parse a saved round HTML or text file → music.md + music.json.
-Does NOT write pick or scores. Does NOT read fit.json.
+Does NOT write pick. When fit.json exists and you pass --weights / --rank / --gate /
+--cutoff, also merges into scores.json and prints the blended option tables.
 Omit <name> to reuse the current round (data/.current-round).
 
 Flags:
@@ -232,12 +236,13 @@ Flags:
   ${SHAPE}
   ${DOWN_SHAPE}
   ${TIER_KNOBS}
+  ${PIN}
   ${FAVORITE_BAND}
   --dry-run                Report the re-weight target without writing files.
 
 Example:
   just rescore tarot --weights 5:5    # re-blend 50/50, reset pick to draft
-  just rescore story-8 --weights 7:3  # back to the fit-heavy default
+  just rescore --pin 8:1,5:1          # reflow every option column around pins
   just rescore --shape bell           # re-shape the current round's menu`,
 
   final: `just final [<name>] [flags]
@@ -345,7 +350,7 @@ Shared allocation / profile flags (see spec/point-allocation.md):
   --down-shape shape          ✓       ✓       ✓     Downvote curve (flat/curved/…)
   --tier-count n              ✓       ✓       ✓     Force n point tiers
   --bucket-count n            ✓       ✓       ✓     Force n funded clusters
-  --pin i:v                   ✓       ✓       ✓     Pin song votes (explore or pick)
+  --pin i:v                   ✓       ✓       ✓     Pin song votes (menu reflow on explore; pick tweak)
   --favorite-band min         ✓       ✓       ✓     Shared top tier at score floor
   --no-favorite-band          ✓       ✓       ✓     Disable favorite-band merge
 
@@ -369,7 +374,7 @@ Render (fit / scores / final):
 
 Rescore-only (re-blend/re-allocate from JSON; resets pick to draft):
   just rescore <name> --weights fit:music | --shape | --rank | --gate | --down-shape
-                                    | --tier-count | --bucket-count | --favorite-band | --dry-run
+                                    | --tier-count | --bucket-count | --pin | --favorite-band | --dry-run
 
 Other commands:
   just tidy     --dry-run | --no-name | --no-archive | --age <days>

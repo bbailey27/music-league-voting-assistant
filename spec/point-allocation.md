@@ -424,6 +424,14 @@ pass)`: a `maybe` never earns more points than the lowest-funded pass. By
     candidates (best-ranked unfunded unpinned first, then best-ranked below-cap). So
     `--option A --pin <topSong>:2` lifts that song and drops the bottom funded one,
     rather than printing a `+1`-over ballot.
+  - **Menu-wide explore reflow** (`applyPinsToMenuTradeoffs`): on **parse**, **merge**,
+    and **rescore**, `--pin` reflows **every** up (`tier-structure`) and down
+    (`down-structure`) option column around the pins — the same `reconcileOptionPins`
+    shortcut as running `pick <letter> --pin …` on each option. Options that collapse
+    to the same distribution after reflow are deduped. Explore pins persist on
+    `profile.overrides` / `profile.downOverrides` in JSON until cleared (re-run without
+    `--pin`). **`just pick`** inherits stored pins when `--pin` is omitted; a new
+    `--pin` replaces them. The Ballot preview syncs from option A after reflow.
   - **`budget-mismatch` is flagged** whenever any final allocation leaves a bank
     over- or under-filled (a bare pin that doesn't even out, an under-pinned down
     bank, etc.). The allocator emits a `budget-mismatch` tradeoff (so every report

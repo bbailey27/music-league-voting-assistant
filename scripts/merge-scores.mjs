@@ -7,10 +7,11 @@
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-import { mergeFitJson, enrichProfileWithBudget } from './score-core.mjs';
+import { enrichProfileWithBudget } from './score-core.mjs';
 import { matchFlag } from './cli-args.mjs';
 import { musicPaths, fitPaths, scoresPaths } from './paths.mjs';
-import { printPickCli } from './parse/cli-print.mjs';
+import { slimProfile } from './parse/pipeline.mjs';
+import { exploreAllocate, finishExploreCli } from './round/explore.mjs';
 import {
   parsePins,
   pinCapError,
@@ -101,39 +102,16 @@ function songsFromMusicPayload(data) {
   return (data.songs || []).map((s) => ({ ...s }));
 }
 
-function slimProfile(profile) {
-  const {
-    shape,
-    downShape,
-    gate,
-    weights,
-    rankBy,
-    tierCount,
-    bucketCount,
-    optionCount,
-    favoriteBand,
-    fitTrust,
-  } = profile;
-  return {
-    shape,
-    downShape,
-    gate,
-    weights,
-    rankBy,
-    tierCount,
-    bucketCount,
-    optionCount,
-    favoriteBand,
-    fitTrust,
-  };
+function resolveExplorePins(args) {
+  if (!args.pin.length) return { overrides: undefined, downOverrides: undefined };
+  const pins = parsePins(args.pin);
+  return { overrides: pins?.overrides, downOverrides: pins?.downOverrides };
 }
 
 function buildProfile(args, stored, budget) {
   const gate = buildGate(args) ?? stored?.gate;
   const weights = parseWeights(args.weights) ?? stored?.weights;
-  const pins = parsePins(args.pin.length ? args.pin : undefined);
-  const overrides = pins?.overrides ?? stored?.overrides;
-  const downOverrides = pins?.downOverrides ?? stored?.downOverrides;
+  const { overrides, downOverrides } = resolveExplorePins(args);
   const tierCount = parseTierCount(args.tierCount) ?? stored?.tierCount;
   const bucketCount = parseBucketCount(args.bucketCount) ?? stored?.bucketCount;
   const optionCount = parseOptionCount(args.optionCount) ?? stored?.optionCount;
@@ -194,13 +172,31 @@ async function main() {
     ownSongs: musicData.ownSongs || [],
   };
 
-  const { fitData: merged, tradeoffs } = mergeFitJson(parsed, fitData, profile);
+  const { tradeoffs, pinNotes } = exploreAllocate({
+    songs: parsed.songs,
+    budget: parsed.budget,
+    profile,
+    fitData,
+    parsed,
+    useMerge: true,
+  });
+
+  fitData.tradeoffs = tradeoffs;
+  fitData.profile = slimProfile(profile);
 
   await mkdir(scoresPaths(roundId).dir, { recursive: true });
-  await writeFile(scoresOut, JSON.stringify(merged, null, 2), 'utf8');
+  await writeFile(scoresOut, JSON.stringify(fitData, null, 2), 'utf8');
   console.log(`Wrote ${scoresOut} (merged scores + draftVotes; fit source unchanged: ${fitJson})`);
 
-  printPickCli(tradeoffs, roundId, parsed.songs, parsed.ownSongs, parsed.budget, slimProfile(profile));
+  finishExploreCli({
+    tradeoffs,
+    roundId,
+    songs: parsed.songs,
+    ownSongs: parsed.ownSongs,
+    budget: parsed.budget,
+    profile,
+    pinNotes,
+  });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

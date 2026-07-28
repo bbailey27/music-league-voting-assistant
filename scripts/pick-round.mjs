@@ -29,8 +29,10 @@ import {
   parseDownShape,
   buildGate,
 } from './parse/cli-flags.mjs';
-import { applyOptionPick, recordPickToTrainingLog } from './round/pick.mjs';
+import { applyOptionPick, recordPickToTrainingLog, menuProfile } from './round/pick.mjs';
+import { exploreAllocate, finishExploreCli } from './round/explore.mjs';
 import { printAppliedAllocationCli } from './parse/cli-print.mjs';
+import { slimProfile } from './parse/pipeline.mjs';
 import { warnPickWithMissingScores } from './parse/cli-warn.mjs';
 import { downShapeFromShort, parsePickSpec } from './cli-commands.mjs';
 
@@ -164,14 +166,18 @@ function hasAnyPins(profile) {
   return Boolean(up || down);
 }
 
+function resolvePickPins(args, stored) {
+  if (args.pin.length) {
+    const pins = parsePins(args.pin);
+    return { overrides: pins?.overrides, downOverrides: pins?.downOverrides };
+  }
+  return { overrides: stored?.overrides, downOverrides: stored?.downOverrides };
+}
+
 function buildProfile(args, stored, budget, mode) {
   const gate = buildGate(args) ?? stored?.gate;
-  // pick never re-blends: it ranks off the stored combinedScore. Re-weighting lives
-  // in `just rescore` (see the --weights guard in main).
   const weights = stored?.weights;
-  const pins = parsePins(args.pin.length ? args.pin : undefined);
-  const overrides = pins?.overrides ?? stored?.overrides;
-  const downOverrides = pins?.downOverrides ?? stored?.downOverrides;
+  const { overrides, downOverrides } = resolvePickPins(args, stored);
   const tierCount = parseTierCount(args.tierCount) ?? stored?.tierCount;
   const bucketCount = parseBucketCount(args.bucketCount) ?? stored?.bucketCount;
   const optionCount = parseOptionCount(args.optionCount) ?? stored?.optionCount;
@@ -184,38 +190,6 @@ function buildProfile(args, stored, budget, mode) {
     { shape, downShape, gate, weights, overrides, downOverrides, tierCount, bucketCount, optionCount, favoriteBand, rankBy, fitTrust },
     budget
   );
-}
-
-function slimProfile(profile) {
-  const {
-    shape,
-    downShape,
-    gate,
-    weights,
-    rankBy,
-    tierCount,
-    bucketCount,
-    optionCount,
-    favoriteBand,
-    fitTrust,
-  } = profile;
-  return {
-    shape,
-    downShape,
-    gate,
-    weights,
-    rankBy,
-    tierCount,
-    bucketCount,
-    optionCount,
-    favoriteBand,
-    fitTrust,
-  };
-}
-
-/** Profile for menu tradeoffs — pin overrides apply only after option+pin reconcile. */
-function menuProfile(profile) {
-  return { ...profile, overrides: undefined };
 }
 
 async function main() {
@@ -283,19 +257,39 @@ async function main() {
       songs: songsFromPayload(musicData),
       ownSongs: musicData.ownSongs || [],
     };
-    const mergeProfile = {
-      ...menuProfile(profile),
-      rankBy: args.rank ?? musicData.profile?.rankBy ?? 'combined',
-    };
     warnPickWithMissingScores(parsed.songs);
 
-    let { tradeoffs } = mergeFitJson(parsed, fitData, mergeProfile);
+    let { tradeoffs, pinNotes } = exploreAllocate({
+      songs: parsed.songs,
+      budget: parsed.budget,
+      profile: {
+        ...profile,
+        rankBy: args.rank ?? musicData.profile?.rankBy ?? 'combined',
+      },
+      fitData,
+      parsed,
+      useMerge: true,
+    });
+
+    if (args.dryRun) {
+      finishExploreCli({
+        tradeoffs,
+        roundId,
+        songs: parsed.songs,
+        ownSongs: parsed.ownSongs,
+        budget: parsed.budget,
+        profile,
+        pinNotes,
+      });
+    }
+
     const picked = applyOptionPick({
       optionSpec: args.option,
       reason: args.reason,
       reallocate: (overrides, downOverrides = profile.downOverrides) =>
         mergeFitJson(parsed, fitData, {
-          ...mergeProfile,
+          ...menuProfile(profile),
+          rankBy: args.rank ?? musicData.profile?.rankBy ?? 'combined',
           overrides,
           downOverrides,
         }).tradeoffs,
@@ -315,12 +309,13 @@ async function main() {
     tradeoffs = picked.tradeoffs;
     fitData.pick = picked.pick;
     fitData.tradeoffs = tradeoffs;
+    fitData.profile = slimProfile({ ...profile, rankBy: args.rank ?? musicData.profile?.rankBy ?? 'combined' });
     await mkdir(scoresPaths(roundId).dir, { recursive: true });
     await writeFile(scoresPaths(roundId).json, JSON.stringify(fitData, null, 2), 'utf8');
     console.log(`Wrote ${scoresPaths(roundId).json}`);
     printAppliedAllocationCli(parsed.songs, parsed.ownSongs, picked.pick, parsed.budget, {
       hadPins: hasAnyPins(profile),
-      profile: slimProfile(mergeProfile),
+      profile: slimProfile({ ...profile, rankBy: args.rank ?? musicData.profile?.rankBy ?? 'combined' }),
       baseline: picked.baseline,
     });
     warnPickWithMissingScores(parsed.songs);
@@ -332,7 +327,24 @@ async function main() {
   warnPickWithMissingScores(songs);
 
   const upBudget = budget?.upvoteBankSize ?? 0;
-  let { tradeoffs } = allocate(songs, upBudget, upCap, menuProfile(profile));
+  let { tradeoffs, pinNotes } = exploreAllocate({
+    songs,
+    budget,
+    profile,
+    useMerge: false,
+  });
+
+  if (args.dryRun) {
+    finishExploreCli({
+      tradeoffs,
+      roundId,
+      songs,
+      ownSongs: musicData.ownSongs || [],
+      budget,
+      profile,
+      pinNotes,
+    });
+  }
 
   const picked = applyOptionPick({
     optionSpec: args.option,

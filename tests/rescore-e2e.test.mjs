@@ -134,6 +134,33 @@ test('rescore --dry-run does not write and reports the reset', async () => {
   }
 });
 
+test('rescore --pin reflows every option column and persists overrides on profile', async () => {
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-rescore-pin-'));
+  const dataDir = join(tmpRoot, 'data');
+  const env = { ...process.env, ML_DATA_DIR: dataDir };
+  try {
+    await mkdir(join(dataDir, 'rounds'), { recursive: true });
+    await copyFile(fixtureHtml, join(dataDir, 'rounds', `${ROUND}.html`));
+    const musicJson = join(dataDir, 'analysis', ROUND, 'music.json');
+
+    await ml(env, 'parse', ROUND);
+    const { stdout } = await ml(env, 'rescore', ROUND, '--pin', '2:1,4:1');
+    assert.match(stdout, /\nUp\n/, 'rescore --pin prints the Up option table');
+
+    const after = JSON.parse(await readFile(musicJson, 'utf8'));
+    assert.deepEqual(after.profile.overrides, { 2: 1, 4: 1 });
+    const ts = after.tradeoffs.find((t) => t.kind === 'tier-structure');
+    assert.ok(ts?.options?.length, 'tier-structure menu present');
+    for (const opt of ts.options) {
+      const byIdx = Object.fromEntries(opt.perSong.map((p) => [p.rawOrderIndex, p.votes]));
+      assert.equal(byIdx[2], 1);
+      assert.equal(byIdx[4], 1);
+    }
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
 test('pick rejects --weights and points to rescore', async () => {
   const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-pick-weights-'));
   const dataDir = join(tmpRoot, 'data');

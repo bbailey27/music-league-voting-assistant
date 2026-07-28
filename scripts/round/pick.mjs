@@ -17,6 +17,11 @@ function resolveOptionIndex(spec, count) {
   return idx != null && idx >= 0 && idx < count ? idx : null;
 }
 
+/** Strip pin overrides so the tier-structure menu is built unpinned first. */
+export function menuProfile(profile) {
+  return { ...profile, overrides: undefined, downOverrides: undefined };
+}
+
 export function reconcileOptionPins(perSong, pins, cap = Infinity) {
   const order = perSong.map((p) => p.rawOrderIndex);
   const votes = new Map(perSong.map((p) => [p.rawOrderIndex, p.votes || 0]));
@@ -75,6 +80,151 @@ export function reconcileOptionPins(perSong, pins, cap = Infinity) {
   }
 
   return Object.fromEntries(order.map((i) => [i, votes.get(i) || 0]));
+}
+
+/** Down-menu reflow: shed surplus from best-ranked funded, promote worst unfunded first. */
+export function reconcileDownOptionPins(perSong, pins, cap = Infinity) {
+  return reconcileOptionPins([...(perSong || [])].reverse(), pins, cap);
+}
+
+function voteKeyFromPerSong(perSong) {
+  const runs = [];
+  for (const p of perSong || []) {
+    const lvl = p.votes || 0;
+    const last = runs[runs.length - 1];
+    if (last && last.level === lvl) last.count++;
+    else runs.push({ level: lvl, count: 1 });
+  }
+  return runs.map((r) => `${r.count}:${r.level}`).join('|');
+}
+
+export function summarizeVoteShape(perSong) {
+  const runs = [];
+  for (const p of perSong || []) {
+    const lvl = p.votes || 0;
+    const last = runs[runs.length - 1];
+    if (last && last.level === lvl) last.count++;
+    else runs.push({ level: lvl, count: 1 });
+  }
+  return runs.map((r) => `${r.level}×${r.count}`).join(' / ');
+}
+
+function patchLabelShape(label, shape) {
+  if (!label) return shape;
+  const sep = ' — ';
+  const idx = label.indexOf(sep);
+  if (idx < 0) return label;
+  const prefix = label.slice(0, idx + sep.length);
+  const suffix = label.slice(idx + sep.length);
+  const noteIdx = suffix.indexOf(' · ');
+  const notes = noteIdx >= 0 ? suffix.slice(noteIdx) : '';
+  return prefix + shape + notes;
+}
+
+function applyReconciledVotes(perSong, reconciled) {
+  const byIdx = new Map((perSong || []).map((p) => [p.rawOrderIndex, p]));
+  const order = (perSong || []).map((p) => p.rawOrderIndex);
+  for (const k of Object.keys(reconciled || {})) {
+    const i = Number(k);
+    if (!order.includes(i)) order.push(i);
+  }
+  return order.map((i) => {
+    const base = byIdx.get(i) || { rawOrderIndex: i, title: null, score: null };
+    return { ...base, votes: reconciled[i] ?? 0 };
+  });
+}
+
+function reflowMenuOption(opt, reconciled, budget) {
+  const total = Object.values(reconciled).reduce((a, v) => a + v, 0);
+  const perSong = applyReconciledVotes(opt.perSong, reconciled);
+  const shape = summarizeVoteShape(perSong);
+  return {
+    ...opt,
+    perSong,
+    shape,
+    label: patchLabelShape(opt.label, shape),
+    _budgetMismatch: total !== budget,
+  };
+}
+
+/**
+ * Reflow up/down pins across every option column in tier-structure / down-structure
+ * tradeoffs. Returns notes (deduped options, budget warnings).
+ */
+export function applyPinsToMenuTradeoffs(tradeoffs, { overrides, downOverrides, upCap, downCap } = {}) {
+  const notes = [];
+  const upPins = overrides && Object.keys(overrides).length ? overrides : null;
+  const downPins = downOverrides && Object.keys(downOverrides).length ? downOverrides : null;
+  if (!upPins && !downPins) return notes;
+
+  for (const t of tradeoffs || []) {
+    if (t.kind === 'tier-structure' && upPins) {
+      const before = t.options?.length ?? 0;
+      const reflowed = (t.options || []).map((opt) => {
+        const budget = (opt.perSong || []).reduce((a, p) => a + (p.votes || 0), 0);
+        const reconciled = reconcileOptionPins(opt.perSong, upPins, upCap ?? Infinity);
+        const next = reflowMenuOption(opt, reconciled, budget);
+        if (next._budgetMismatch) {
+          notes.push(`Option "${next.shape}" could not fully reconcile up pins (budget ${budget}).`);
+        }
+        delete next._budgetMismatch;
+        return next;
+      });
+      const seen = new Set();
+      t.options = reflowed.filter((opt) => {
+        const key = voteKeyFromPerSong(opt.perSong);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      if (t.options.length < before) {
+        notes.push(`Pins merged ${before - t.options.length} identical up option(s).`);
+      }
+    }
+    if (t.kind === 'down-structure' && downPins) {
+      const before = t.options?.length ?? 0;
+      const reflowed = (t.options || []).map((opt) => {
+        const budget = (opt.perSong || []).reduce((a, p) => a + (p.votes || 0), 0);
+        const reconciled = reconcileDownOptionPins(opt.perSong, downPins, downCap ?? Infinity);
+        const next = reflowMenuOption(opt, reconciled, budget);
+        if (next._budgetMismatch) {
+          notes.push(`Down option "${next.shape}" could not fully reconcile down pins (budget ${budget}).`);
+        }
+        delete next._budgetMismatch;
+        return next;
+      });
+      const seen = new Set();
+      t.options = reflowed.filter((opt) => {
+        const key = voteKeyFromPerSong(opt.perSong);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      if (t.options.length < before) {
+        notes.push(`Pins merged ${before - t.options.length} identical down option(s).`);
+      }
+    }
+  }
+  return notes;
+}
+
+/** Set song draft votes from option A so the explore Ballot matches the pinned menu. */
+export function syncBallotFromExploreMenu(tradeoffs, songs) {
+  const up = (tradeoffs || []).find((t) => t.kind === 'tier-structure');
+  const down = (tradeoffs || []).find((t) => t.kind === 'down-structure');
+  const byIdx = new Map(songs.map((s) => [s.rawOrderIndex, s]));
+  if (up?.options?.[0]?.perSong) {
+    for (const p of up.options[0].perSong) {
+      const s = byIdx.get(p.rawOrderIndex);
+      if (s) s.finalVotes = p.votes || 0;
+    }
+  }
+  if (down?.options?.[0]?.perSong) {
+    for (const p of down.options[0].perSong) {
+      const s = byIdx.get(p.rawOrderIndex);
+      if (s) s.finalDownvotes = p.votes || 0;
+    }
+  }
 }
 
 export function resolveOptionPick(tradeoffs, optionSpec, baseOverrides = {}, cap = Infinity, roundId = null) {

@@ -7,11 +7,11 @@
 // only; the submitter quote block is preserved for context but never parsed for
 // scoring signals.
 
+import { existsSync } from 'node:fs';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
-  allocate,
   buildMarkdown,
   buildJsonPayload,
   enrichProfileWithBudget,
@@ -35,11 +35,12 @@ import {
   parseWeights,
   buildGate,
 } from './parse/cli-flags.mjs';
-import { printPickCli } from './parse/cli-print.mjs';
 import { warnMissingScoresCli, warnMissingFitScoresCli } from './parse/cli-warn.mjs';
 import { parseRoundHtml, slimProfile } from './parse/pipeline.mjs';
 import { reconcileOptionPins, resolveOptionPick } from './round/pick.mjs';
+import { exploreAllocate, finishExploreCli, parseWantsThematicMerge } from './round/explore.mjs';
 import { leagueForRound, leagueNotesLines } from './leagues.mjs';
+import { fitPaths, scoresPaths } from './paths.mjs';
 
 export {
   parsePins,
@@ -81,6 +82,12 @@ export function applyManualFitScoring(profile, songs, { explicitRank = null, wei
   normalizeCombined(songs, combineWeights, profile.gate, { fitTrust: 'manual' });
   if (!explicitRank) profile.rankBy = 'combined';
   return combineWeights;
+}
+
+function resolveExplorePins(args) {
+  if (!args.pin.length) return { overrides: undefined, downOverrides: undefined };
+  const pins = parsePins(args.pin);
+  return { overrides: pins?.overrides, downOverrides: pins?.downOverrides };
 }
 
 function parseArgs(argv) {
@@ -237,9 +244,7 @@ async function main() {
 
   const gate = buildGate(args);
   const weights = parseWeights(args.weights);
-  const pins = parsePins(args.pin);
-  const overrides = pins?.overrides;
-  const downOverrides = pins?.downOverrides;
+  const { overrides, downOverrides } = resolveExplorePins(args);
   const upCap = parsed.budget?.maxUpvotesPerSong ?? Infinity;
   const downCap = parsed.budget?.maxDownvotesPerSong ?? Infinity;
   const capErr = pinCapError(overrides, downOverrides, upCap, downCap);
@@ -275,8 +280,28 @@ async function main() {
   }
 
   const budget = parsed.budget.upvoteBankSize ?? 0;
-  const cap = parsed.budget.maxUpvotesPerSong ?? Infinity;
-  const { tradeoffs } = allocate(parsed.songs, budget, cap, profile);
+  const fitJson = fitPaths(roundId).json;
+  const fitJsonExists = existsSync(fitJson);
+  const thematicMerge = parseWantsThematicMerge(args, fitJsonExists);
+
+  let fitData = null;
+  if (thematicMerge) {
+    try {
+      fitData = JSON.parse(await readFile(fitJson, 'utf8'));
+    } catch (err) {
+      console.error(`Could not read ${fitJson}: ${err.message}. Complete fit research first.`);
+      process.exit(1);
+    }
+  }
+
+  const { tradeoffs, pinNotes } = exploreAllocate({
+    songs: parsed.songs,
+    budget: parsed.budget,
+    profile,
+    fitData,
+    parsed,
+    useMerge: thematicMerge,
+  });
 
   const slim = slimProfile(profile);
   const ctx = { ...parsed, mode: args.mode, tradeoffs, pick: null, roundId, profile: slim };
@@ -293,6 +318,15 @@ async function main() {
     console.log(`Wrote ${paths.json}`);
   }
 
+  if (thematicMerge && fitData) {
+    fitData.tradeoffs = tradeoffs;
+    fitData.combineWeights = profile.weights ?? fitData.combineWeights;
+    const scoresOut = scoresPaths(roundId).json;
+    await mkdir(scoresPaths(roundId).dir, { recursive: true });
+    await writeFile(scoresOut, JSON.stringify(fitData, null, 2), 'utf8');
+    console.log(`Wrote ${scoresOut} (thematic merge from fit.json + parse flags)`);
+  }
+
   const league = leagueForRound({ roundId, leagueName: parsed.round?.league });
   const notes = leagueNotesLines(league, { roundId });
   if (notes.length) console.log(`\n${notes.join('\n')}`);
@@ -300,7 +334,15 @@ async function main() {
   warnMissingScoresCli(parsed.songs);
   warnMissingFitScoresCli(parsed.songs);
 
-  printPickCli(tradeoffs, roundId, parsed.songs, parsed.ownSongs, parsed.budget, slim);
+  finishExploreCli({
+    tradeoffs,
+    roundId,
+    songs: parsed.songs,
+    ownSongs: parsed.ownSongs,
+    budget: parsed.budget,
+    profile,
+    pinNotes,
+  });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
