@@ -83,12 +83,12 @@ Output snapshot regression test (diff-based): see
 16. Improve ballot output some mroe. On CLI I'd like to se votes right next to combined. mod should be next to the score it modifies. Currently not next to the music score. But also what if music and fit scores both were numeric with mods? would they share 1 mod column? is one silently dropped?
 17. Decouple fit, gate, weights, etc flags from parse. add ability to use a shortcut like re-run or plain just run to alter combined score and weightings and output separate from the actual raw file parsing. May mean restructuring music vs fit json? output the table again after each alteration. also a command to manually adjust a raw score without editing or re-pasting the HTML. Similar to pin but update the actual music and fit jsons. if no re-parse of the raw using these new commands, it should stick.
   - **PARTIALLY SHIPPED (A + B + C):** `just rescore <round> [knobs]` re-weights/re-shapes and
-    re-allocates from JSON (no HTML re-read), re-printing the menu and resetting any pick to
-    draft (`scripts/rescore-round.mjs`; see decisions.md 2026-07-10). **(B) SHIPPED
-    (2026-07-21):** `rescore --score <i>:<v>` / `--fit-score <i>:<v>` writes a single raw
-    music/fit score (with `+`/`-`/`?` modifier) into `music.json`/`fit.json` by `rawOrderIndex`
-    and re-allocates with no re-parse (see decisions.md 2026-07-21). **Still open (D):** any
-    music-vs-fit JSON restructure — not needed for B as shipped.
+  re-allocates from JSON (no HTML re-read), re-printing the menu and resetting any pick to
+  draft (`scripts/rescore-round.mjs`; see decisions.md 2026-07-10). **(B) SHIPPED
+  (2026-07-21):** `rescore --score <i>:<v>` / `--fit-score <i>:<v>` writes a single raw
+  music/fit score (with `+`/`-`/`?` modifier) into `music.json`/`fit.json` by `rawOrderIndex`
+  and re-allocates with no re-parse (see decisions.md 2026-07-21). **Still open (D):** any
+  music-vs-fit JSON restructure — not needed for B as shipped.
 18. Testing dry-run / scratch-pad. Agents (and the owner) sometimes need to exercise parse/pick/rescore against a real round to verify behavior, but doing so today overwrites the round's `music.json`/`music.md` (and can silently change weights, as happened when a test re-parse dropped 0.7/0.3 → 0.5/0.5). Provide a safe scratch mode — e.g. a `--scratch`/`--sandbox` flag or a temp working copy — that runs the full pipeline and prints the tables/output WITHOUT writing back to the round's real files (or writes to a throwaway path). Goal: never mutate the owner's committed analysis as a side effect of testing.
 19. Finish splitting up test files and audit tests. Check for unnecessary tests e.g. checking 3rd party libraries or basic code features. Check for assumptions and logical leaps. E.g. compare to the decision file and see if it mentions the explicit edge case or if the agent likely just wrote a test to confirm what it had already assumed. Even the decision file may not be full evidence. Surface anything potentially sketchy, contradictory, or inconsistent in the tests or the decision log.
 20. Create a skill to corral excessive guessing and independent decision making. Agents should not make assumptions about implementation details that affect the outcome or handling of edge cases. There have been instances of large enough assumptions that they got codified in the decision log and taken as evidence of intent by future agents, without me signing off on them. Agents should consult me about any assumptions or edge cases. If it would be a small tweak to change, it is acceptable to pick the best option and then call it out for approval at the end of the step. If it's a larger rewrite to fix, always stop and ask. Either way, ALWAYS list any assumptions made or edge cases handled at the end. Example assumptions include: if the budget can't be met, it is acceptable to go under budget; always sort tables by music score even when combined score is present; manual cutoffs are only allowed on music scores. Even if you didn't make an intentional decision, check with fresh eyes if the code ENFORCES any such constraints that were not confirmed by the user.
@@ -101,18 +101,137 @@ Confirmed defects (repro'd on real rounds). Fix independently of the feature bac
   (2026-07-10).** `--weights` was removed from `pick` (it now errors with a pointer to
    `rescore`); re-weighting lives in `just rescore <round> --weights <f>:<m>`, which re-blends
    `combinedScore` from the stored `score`/`fitScore` without a re-parse. See decisions.md.
-2. `**pickWithBucketOrTierCount` errors with "0 options". `just pick A
+2. `**pickWithBucketOrTierCount` errors with "0 options". `just pick A --bucket-count `(and`--tier-count `) fails: forcing a curve suppresses the` tier-structure`tradeoff (guard in`allocateBell`,` if (!profile.tierCount &&  
+!profile.bucketCount)`), but`pick`still needs a letter to resolve against that now-empty menu (`resolveOptionPick`→`pickUsageError`). So the documented "force a curve" path is unreachable on` pick`; adding a` --pin`doesn't help either. Repro (aaa-cars):` pick A --tier-count 3`and`pick A --pin … --bucket-count 3`both error` Option "A" is not available (this round has 0 option(s))`. Fix: when a count is forced,    bypass the letter requirement (synthesize a single committed option), or keep emitting the    menu with the forced curve as option A. 3. ~~`**bucketCount `semantics vs. intent (`bucketCountIsJustTiersMinusOne`).~~ **RESOLVED    (2026-07-21).`** --bucket-count K `now does real k-means (`ckmeans1dWeighted`into K natural-break    clusters), then assigns a budget-exact monotonic point value per cluster (adjacent clusters may    merge to one level; low clusters may be 0) — "cut the field into K clusters, then decide merges,"    not`tierCount − 1`. See decisions.md 2026-07-21. (Original note: today bucketCount (K) = number of    **funded** point tiers =` tierCount − 1`(the 0 band), a near-duplicate of`tierCount`; expectation    was pre-merge K-means cluster count before the near-tier merge decision.) 4. **Tied combined score in different vote tiers gets no callout.** When two songs share the same combined score but land in different vote bands (one funded/downvoted, the other not), the allocator picks one arbitrarily with no tie-split notice. There is a`tier-split`tradeoff for the up axis, but the **down** axis (and possibly the CLI surfacing) doesn't flag it — repro on`2026-07-07-story-8`, two songs at 69.0 where the flat down bank downvoted one and not the other silently. Fix: emit a tie-split/notice when equal combined scores straddle a vote-tier boundary on either axis. Workaround today:` --pin i:0` to force one out (now supported).
 
---bucket-count `(and`--tier-count `) fails: forcing a curve suppresses the` tier-structure`tradeoff (guard in`allocateBell`,` if (!profile.tierCount &&
-!profile.bucketCount)`), but`pick`still needs a letter to resolve against that now-empty menu (`resolveOptionPick`→`pickUsageError`). So the documented "force a curve" path is unreachable on` pick`; adding a` --pin`doesn't help either. Repro (aaa-cars):` pick A --tier-count 3`and`pick A --pin … --bucket-count 3`both error` Option "A" is not available (this round has 0 option(s))`. Fix: when a count is forced,    bypass the letter requirement (synthesize a single committed option), or keep emitting the    menu with the forced curve as option A. 3. ~~`**bucketCount` semantics vs. intent (`bucketCountIsJustTiersMinusOne`).~~ **RESOLVED
-   (2026-07-21).** `--bucket-count K` now does real k-means (`ckmeans1dWeighted` into K natural-break
-   clusters), then assigns a budget-exact monotonic point value per cluster (adjacent clusters may
-   merge to one level; low clusters may be 0) — "cut the field into K clusters, then decide merges,"
-   not `tierCount − 1`. See decisions.md 2026-07-21. (Original note: today bucketCount (K) = number of
-   **funded** point tiers = `tierCount − 1` (the 0 band), a near-duplicate of `tierCount`; expectation
-   was pre-merge K-means cluster count before the near-tier merge decision.) 4. **Tied combined score in different vote tiers gets no callout.** When two songs share the same combined score but land in different vote bands (one funded/downvoted, the other not), the allocator picks one arbitrarily with no tie-split notice. There is a`tier-split`tradeoff for the up axis, but the **down** axis (and possibly the CLI surfacing) doesn't flag it — repro on`2026-07-07-story-8`, two songs at 69.0 where the flat down bank downvoted one and not the other silently. Fix: emit a tie-split/notice when equal combined scores straddle a vote-tier boundary on either axis. Workaround today:` --pin i:0` to force one out (now supported).
+1. First Love in bg-2017. No number at the beginning. Intended as words-only = disqualified (that's my comment to the submitter about why it's not valid). But the words included '2016' because this league is all about years. So that got counted as 20.1 and threw off the numbers. Need a clearer flag - either music score must be the very first thing, or a clear DQ or similar line that I can include to get rid of that. Maybe also a manual 'mark that one as a fail' so that it DOES reflow the points, unlike pinning it to 0 or adding a gate above it would do in rescore. < think we reworked to ignore years
+2. always print all songs in the output tables, or at least in the upvote table - shouldn't have to check between up and down to figure out the overlap if a couple songs don't appear in up but do appear in down. want to visually see how many blanks are at the bottom to match up with the downvote pool. Also missing downvote table entirely after rescore. And arbitrary pin on rescore didn't work. Wanted to force the top song to 4 points to see what that would do to the distributions but it was ignored.  
+[main ↓ +0 ~1 -0]$ just parse story
+  node scripts/ml.mjs parse story
+  Wrote data/analysis/2026-07-20-story-10/[music.md](http://music.md)
+  Wrote data/analysis/2026-07-20-story-10/music.json
+  League: story-<n> — Collaborative sentence/story built by chaining song TITLES (lyrics do not matter).
+    ⚠ Judge the TITLE only. Grammar of the attach and an interesting next beat are co-primary; music is a bonus (guidance profile `story-continuation`).
+    ⚠ Never grep the song CSVs — use the title scan scripts (they parse only the title column).
+    $ node scripts/title-prefix-scan.mjs <prefix> [...]
+        Find candidate titles that start with the anchor word(s).
+    $ node scripts/title-complement-check.mjs --slot <slot>
+        Tag structural complements for the running stem (default slot: copular).
+    $ node scripts/title-candidate-score.mjs
+        Weighted engagement score (scrobbles + Pandora playlist fields) for candidate titles.
+    See: spec/[leagues.md](http://leagues.md)
+  Up
+      #  Song                      Music  Fit  Combined  Mod  A  B  C  D  E  Comment                     
+      0  What If It’s Right?          90   90      93.1    ·  3  2  2  3  2  9 9                         
+      7  For I Am The Light (And…     65   85      75.5    ·  2  1  2  2  2  65 85                       
+      5  Put Me Down                  70   75      75.5    ·  2  1  2  1  1  7 75                        
+      1  Without a Face             76.5   60      74.8    ·  1  1  1  1  1  765 6                       
+      4  You Can't Help Me Now        66   80      74.5    ·  ·  1  1  1  1  66 8 nice enough but sooo r…
+      6  I Got Lies                   75   60      73.8    ·  ·  1  ·  ·  1  75 6                        
+      8  Fly Away                     72   60      71.9    ·  ·  1  ·  ·  ·  72 6+                       
+         Total                                                8  8  8  8  8                              
+      A. 4 tiers (bucket-count 3) — 3×1 / 2×2 / 1×1 / 0×3
+      B. 2 tiers (bucket-count 2) — 2×1 / 1×6
+      C. 3 tiers (bucket-count 2) — 2×3 / 1×2 / 0×2
+      D. 4 tiers (bucket-count 3) — 3×1 / 2×1 / 1×3 / 0×2
+      E. 3 tiers (bucket-count 2) — 2×2 / 1×4 / 0×1
+  Down
+      #  Song                   Music  Fit  Combined  Mod  cv  cc  Comment                          
+      4  You Can't Help Me Now     66   80      74.5    ·   ·   ·  66 8 nice enough but sooo repeti…
+      6  I Got Lies                75   60      73.8    ·  -1   ·  75 6                             
+      8  Fly Away                  72   60      71.9    ·  -1   ·  72 6+                            
+      2  We're All To Blame        65   40      61.0    ·  -1  -3  65 4                             
+         Total                                             -3  -3                                   
+  just pick <a|b|c> [cv|fl|cc] [--pin <song>:<v>] [--cutoff music:<n>] [--reason "…"]
+  Ballot
+      #  Song                      Music  Fit  Combined  Mod  Votes  Comment                        
+      0  What If It’s Right?          90   90      93.1    ·     +3  9 9                            
+      1  Without a Face             76.5   60      74.8    ·     +1  765 6                          
+      2  We're All To Blame           65   40      61.0    ·     -1  65 4                           
+      3  Let Her Go - Acoustic         —    —         —    ·      —  ·                              
+      4  You Can't Help Me Now        66   80      74.5    ·      ·  66 8 nice enough but sooo repe…
+      5  Put Me Down                  70   75      75.5    ·     +2  7 75                           
+      6  I Got Lies                   75   60      73.8    ·     -1  75 6                           
+      7  For I Am The Light (And…     65   85      75.5    ·     +2  65 85                          
+      8  Fly Away                     72   60      71.9    ·     -1  72 6+                          
+         Total                                                +8/-3                                 
+  bridgetbailey@MacBook-Pro:~/dev/music-league-voting-assistant output=''
+  [main ≡ +0 ~1 -0]$ just rescore --pin 0:4
+  node scripts/ml.mjs rescore --pin 0:4
+  (current round: 2026-07-20-story-10)
+  Wrote data/analysis/2026-07-20-story-10/[music.md](http://music.md)
+  Wrote data/analysis/2026-07-20-story-10/music.json
+  Up
+      #  Song                      Music  Fit  Combined  Mod  A  B  C  D  E  Comment                     
+      0  What If It’s Right?          90   90      93.1    ·  3  2  2  3  2  9 9                         
+      7  For I Am The Light (And…     65   85      75.5    ·  2  1  2  2  2  65 85                       
+      5  Put Me Down                  70   75      75.5    ·  2  1  2  1  1  7 75                        
+      1  Without a Face             76.5   60      74.8    ·  1  1  1  1  1  765 6                       
+      4  You Can't Help Me Now        66   80      74.5    ·  ·  1  1  1  1  66 8 nice enough but sooo r…
+      6  I Got Lies                   75   60      73.8    ·  ·  1  ·  ·  1  75 6                        
+      8  Fly Away                     72   60      71.9    ·  ·  1  ·  ·  ·  72 6+                       
+         Total                                                8  8  8  8  8                              
+      A. 4 tiers (bucket-count 3) — 3×1 / 2×2 / 1×1 / 0×3
+      B. 2 tiers (bucket-count 2) — 2×1 / 1×6
+      C. 3 tiers (bucket-count 2) — 2×3 / 1×2 / 0×2
+      D. 4 tiers (bucket-count 3) — 3×1 / 2×1 / 1×3 / 0×2
+      E. 3 tiers (bucket-count 2) — 2×2 / 1×4 / 0×1
+  Down
+      #  Song                   Music  Fit  Combined  Mod  cv  cc  Comment                          
+      4  You Can't Help Me Now     66   80      74.5    ·   ·   ·  66 8 nice enough but sooo repeti…
+      6  I Got Lies                75   60      73.8    ·  -1   ·  75 6                             
+      8  Fly Away                  72   60      71.9    ·  -1   ·  72 6+                            
+      2  We're All To Blame        65   40      61.0    ·  -1  -3  65 4                             
+         Total                                             -3  -3                                   
+  just pick <a|b|c> [cv|fl|cc] [--pin <song>:<v>] [--cutoff music:<n>] [--reason "…"]
+  Ballot
+      #  Song                      Music  Fit  Combined  Mod  Votes  Comment                        
+      0  What If It’s Right?          90   90      93.1    ·     +3  9 9                            
+      1  Without a Face             76.5   60      74.8    ·     +1  765 6                          
+      2  We're All To Blame           65   40      61.0    ·     -1  65 4                           
+      3  Let Her Go - Acoustic         —    —         —    ·      —  ·                              
+      4  You Can't Help Me Now        66   80      74.5    ·      ·  66 8 nice enough but sooo repe…
+      5  Put Me Down                  70   75      75.5    ·     +2  7 75                           
+      6  I Got Lies                   75   60      73.8    ·     -1  75 6                           
+      7  For I Am The Light (And…     65   85      75.5    ·     +2  65 85                          
+      8  Fly Away                     72   60      71.9    ·     -1  72 6+                          
+         Total                                                +8/-3                                 
+  bridgetbailey@MacBook-Pro:~/dev/music-league-voting-assistant output=''
+  [main ≡ +0 ~1 -0]$ just rescore --weights 6:4
+  node scripts/ml.mjs rescore --weights 6:4
+  (current round: 2026-07-20-story-10)
+  Wrote data/analysis/2026-07-20-story-10/[music.md](http://music.md)
+  Wrote data/analysis/2026-07-20-story-10/music.json
+  Up
+      #  Song                      Music  Fit  Combined  Mod  A  B  C  D  E  Comment                     
+      0  What If It’s Right?          90   90      92.2    ·  2  3  2  3  2  9 9                         
+      7  For I Am The Light (And…     65   85      77.5    ·  1  2  2  2  2  65 85                       
+      5  Put Me Down                  70   75      76.2    ·  1  1  1  2  2  7 75                        
+      4  You Can't Help Me Now        66   80      76.0    ·  1  1  1  1  1  66 8 nice enough but sooo r…
+      1  Without a Face             76.5   60      73.7    ·  1  1  1  ·  1  765 6                       
+      6  I Got Lies                   75   60      72.9    ·  1  ·  1  ·  ·  75 6                        
+      8  Fly Away                     72   60      71.4    ·  1  ·  ·  ·  ·  72 6+                       
+         Total                                                8  8  8  8  8                              
+      A. 2 tiers (bucket-count 2) — 2×1 / 1×6
+      B. 4 tiers (bucket-count 3) — 3×1 / 2×1 / 1×3 / 0×2
+      C. 3 tiers (bucket-count 2) — 2×2 / 1×4 / 0×1
+      D. 4 tiers (bucket-count 3) — 3×1 / 2×2 / 1×1 / 0×3
+      E. 3 tiers (bucket-count 2) — 2×3 / 1×2 / 0×2
+  just pick <a|b|c> [--pin <song>:<v>] [--cutoff music:<n>] [--reason "…"]
+  Ballot
+      #  Song                      Music  Fit  Combined  Mod  Votes  Comment                        
+      0  What If It’s Right?          90   90      92.2    ·     +2  9 9                            
+      1  Without a Face             76.5   60      73.7    ·     +1  765 6                          
+      2  We're All To Blame           65   40      60.1    ·     -3  65 4                           
+      3  Let Her Go - Acoustic         —    —         —    ·      —  ·                              
+      4  You Can't Help Me Now        66   80      76.0    ·     +1  66 8 nice enough but sooo repe…
+      5  Put Me Down                  70   75      76.2    ·     +1  7 75                           
+      6  I Got Lies                   75   60      72.9    ·     +1  75 6                           
+      7  For I Am The Light (And…     65   85      77.5    ·     +1  65 85                          
+      8  Fly Away                     72   60      71.4    ·     +1  72 6+                          
+         Total                                                +8/-3        
 
-First Love in bg-2017. No number at the beginning. Intended as words-only = disqualified (that's my comment to the submitter about why it's not valid). But the words included '2016' because this league is all about years. So that got counted as 20.1 and threw off the numbers. Need a clearer flag - either music score must be the very first thing, or a clear DQ or similar line that I can include to get rid of that. Maybe also a manual 'mark that one as a fail' so that it DOES reflow the points, unlike pinning it to 0 or adding a gate above it would do in rescore.
+
 
 ## Deferred (may not ship)
 
