@@ -435,6 +435,7 @@ export function buildJsonPayload({
   ownSkipped,
   mode,
   tradeoffs,
+  menuTradeoffs = null,
   ownSongs = [],
   pick = null,
   profile = null,
@@ -460,6 +461,9 @@ export function buildJsonPayload({
       isOwn: true,
     })),
     tradeoffs: Array.isArray(tradeoffs) ? tradeoffs : [],
+    ...(Array.isArray(menuTradeoffs) && menuTradeoffs.length
+      ? { menuTradeoffs }
+      : {}),
     songs: songs.map((s) => ({
       rawOrderIndex: s.rawOrderIndex,
       title: s.title,

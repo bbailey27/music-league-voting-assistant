@@ -5,6 +5,7 @@ import { printPickCli } from '../parse/cli-print.mjs';
 import { slimProfile, warnBudgetMismatch } from '../parse/pipeline.mjs';
 import {
   applyPinsToMenuTradeoffs,
+  cloneTradeoffs,
   menuProfile,
   syncBallotFromExploreMenu,
 } from './pick.mjs';
@@ -44,6 +45,7 @@ export function exploreAllocate({
     ({ tradeoffs } = allocate(songs, upBudget, upCap, menu));
   }
 
+  const menuTradeoffs = cloneTradeoffs(tradeoffs);
   const pinNotes = applyPinsToMenuTradeoffs(tradeoffs, {
     overrides: profile.overrides,
     downOverrides: profile.downOverrides,
@@ -52,7 +54,7 @@ export function exploreAllocate({
   });
   syncBallotFromExploreMenu(tradeoffs, songs);
 
-  return { tradeoffs, pinNotes };
+  return { tradeoffs, menuTradeoffs, pinNotes };
 }
 
 /** Print explore tables; warn when a scored field should have surfaced a menu. */

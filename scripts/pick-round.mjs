@@ -29,7 +29,13 @@ import {
   parseDownShape,
   buildGate,
 } from './parse/cli-flags.mjs';
-import { applyOptionPick, recordPickToTrainingLog, menuProfile } from './round/pick.mjs';
+import {
+  applyOptionPick,
+  recordPickToTrainingLog,
+  mergePickPinOverrides,
+  menuProfile,
+  resolvePickMenu,
+} from './round/pick.mjs';
 import { exploreAllocate, finishExploreCli } from './round/explore.mjs';
 import { printAppliedAllocationCli } from './parse/cli-print.mjs';
 import { slimProfile } from './parse/pipeline.mjs';
@@ -167,11 +173,13 @@ function hasAnyPins(profile) {
 }
 
 function resolvePickPins(args, stored) {
-  if (args.pin.length) {
-    const pins = parsePins(args.pin);
-    return { overrides: pins?.overrides, downOverrides: pins?.downOverrides };
+  if (!args.pin.length) {
+    return {
+      overrides: stored?.overrides,
+      downOverrides: stored?.downOverrides,
+    };
   }
-  return { overrides: stored?.overrides, downOverrides: stored?.downOverrides };
+  return mergePickPinOverrides(stored, parsePins(args.pin));
 }
 
 function buildProfile(args, stored, budget, mode) {
@@ -259,21 +267,36 @@ async function main() {
     };
     warnPickWithMissingScores(parsed.songs);
 
-    let { tradeoffs, pinNotes } = exploreAllocate({
+    const mergeProfile = {
+      ...profile,
+      rankBy: args.rank ?? musicData.profile?.rankBy ?? 'combined',
+    };
+    const {
+      menuForPick,
+      menuForDisplay,
+      menuTradeoffs,
+      pinNotes,
+    } = resolvePickMenu({
+      args,
+      storedProfile: musicData.profile,
+      storedTradeoffs: musicData.tradeoffs,
+      storedMenuTradeoffs: musicData.menuTradeoffs,
+      profile: mergeProfile,
       songs: parsed.songs,
       budget: parsed.budget,
-      profile: {
-        ...profile,
-        rankBy: args.rank ?? musicData.profile?.rankBy ?? 'combined',
-      },
       fitData,
       parsed,
       useMerge: true,
+      exploreAllocate: (opts) =>
+        exploreAllocate({
+          ...opts,
+          profile: mergeProfile,
+        }),
     });
 
     if (args.dryRun) {
       finishExploreCli({
-        tradeoffs,
+        tradeoffs: menuForDisplay,
         roundId,
         songs: parsed.songs,
         ownSongs: parsed.ownSongs,
@@ -293,7 +316,7 @@ async function main() {
           overrides,
           downOverrides,
         }).tradeoffs,
-      initialTradeoffs: tradeoffs,
+      initialTradeoffs: menuForPick,
       baseOverrides: profile.overrides,
       downOverrides: profile.downOverrides,
       songs: parsed.songs,
@@ -306,9 +329,10 @@ async function main() {
       else console.log(`Would pick option ${picked.pick?.chosen} (thematic → scores.json)`);
       return;
     }
-    tradeoffs = picked.tradeoffs;
+    const tradeoffs = picked.tradeoffs;
     fitData.pick = picked.pick;
     fitData.tradeoffs = tradeoffs;
+    fitData.menuTradeoffs = menuTradeoffs;
     fitData.profile = slimProfile({ ...profile, rankBy: args.rank ?? musicData.profile?.rankBy ?? 'combined' });
     await mkdir(scoresPaths(roundId).dir, { recursive: true });
     await writeFile(scoresPaths(roundId).json, JSON.stringify(fitData, null, 2), 'utf8');
@@ -327,16 +351,26 @@ async function main() {
   warnPickWithMissingScores(songs);
 
   const upBudget = budget?.upvoteBankSize ?? 0;
-  let { tradeoffs, pinNotes } = exploreAllocate({
+  const {
+    menuForPick,
+    menuForDisplay,
+    menuTradeoffs,
+    pinNotes,
+  } = resolvePickMenu({
+    args,
+    storedProfile: musicData.profile,
+    storedTradeoffs: musicData.tradeoffs,
+    storedMenuTradeoffs: musicData.menuTradeoffs,
+    profile,
     songs,
     budget,
-    profile,
     useMerge: false,
+    exploreAllocate,
   });
 
   if (args.dryRun) {
     finishExploreCli({
-      tradeoffs,
+      tradeoffs: menuForDisplay,
       roundId,
       songs,
       ownSongs: musicData.ownSongs || [],
@@ -351,7 +385,7 @@ async function main() {
     reason: args.reason,
     reallocate: (overrides, downOverrides = profile.downOverrides) =>
       allocate(songs, upBudget, upCap, { ...profile, overrides, downOverrides }).tradeoffs,
-    initialTradeoffs: tradeoffs,
+    initialTradeoffs: menuForPick,
     baseOverrides: profile.overrides,
     downOverrides: profile.downOverrides,
     songs,
@@ -366,7 +400,7 @@ async function main() {
     return;
   }
 
-  tradeoffs = picked.tradeoffs;
+  const tradeoffs = picked.tradeoffs;
   const slim = slimProfile(profile);
   const ctx = {
     round: musicData.round,
@@ -377,6 +411,7 @@ async function main() {
     ownSongs: musicData.ownSongs || [],
     mode: musicData.mode,
     tradeoffs,
+    menuTradeoffs,
     pick: picked.pick,
     roundId,
     profile: slim,

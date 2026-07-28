@@ -172,7 +172,7 @@ async function main() {
     ownSongs: musicData.ownSongs || [],
   };
 
-  const { tradeoffs, pinNotes } = exploreAllocate({
+  const { tradeoffs, menuTradeoffs, pinNotes } = exploreAllocate({
     songs: parsed.songs,
     budget: parsed.budget,
     profile,
@@ -182,6 +182,7 @@ async function main() {
   });
 
   fitData.tradeoffs = tradeoffs;
+  fitData.menuTradeoffs = menuTradeoffs;
   fitData.profile = slimProfile(profile);
 
   await mkdir(scoresPaths(roundId).dir, { recursive: true });

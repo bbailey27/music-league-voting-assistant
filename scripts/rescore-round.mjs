@@ -238,7 +238,7 @@ async function main() {
   }
 
   const parsed = { round: musicData.round, budget, songs, ownSongs };
-  const { tradeoffs, pinNotes } = exploreAllocate({
+  const { tradeoffs, menuTradeoffs, pinNotes } = exploreAllocate({
     songs,
     budget,
     profile: useMerge
@@ -285,6 +285,7 @@ async function main() {
     ownSongs,
     mode: musicData.mode,
     tradeoffs,
+    menuTradeoffs,
     pick: null,
     roundId,
     profile: slim,

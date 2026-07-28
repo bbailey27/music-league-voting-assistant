@@ -11,6 +11,26 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-28 — Pick reuses stored explore menu (cutoff + pins on profile)
+
+**Change.** Explore writes persist an unpinned `menuTradeoffs` snapshot alongside pin-reflowed
+`tradeoffs`. `just pick` reuses that stored menu when profile knobs match, merging stored
+`profile.overrides` / `downOverrides` with any new `--pin` values (CLI wins on index clash)
+before reflowing every option column. Explicit `--cutoff` / `--gate` / shape / tier knobs still
+rebuild the menu. Option-letter resolution diffs against the unpinned menu; the CLI tables
+show the pin-reflowed preview.
+
+**Why.** After `just rescore --cutoff music:74`, option A on screen did not match
+`just pick a`: pick re-ran allocation and letter A pointed at a different staircase.
+Passing `--pin` on pick had the same problem because it forced a full re-allocate instead
+of layering new pins onto the reviewed menu.
+
+**Refs.** `working tree` — `scripts/round/explore.mjs`, `scripts/round/pick.mjs`
+(`resolvePickMenu`, `mergePickPinOverrides`), `scripts/pick-round.mjs`,
+`scripts/score/render.mjs` (`menuTradeoffs`), `tests/rescore-e2e.test.mjs`.
+
+---
+
 ## 2026-07-28 — Release-date spec (`spec/release-dates.md`)
 
 **Change.** Added [`spec/release-dates.md`](release-dates.md): version-specific earliest

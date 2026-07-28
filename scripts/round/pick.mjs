@@ -5,6 +5,12 @@ import { dirname, join } from 'node:path';
 import { buildPickRecord, OPTION_LETTERS } from '../score-core.mjs';
 import { pickUsageError } from '../cli-commands.mjs';
 import { scoresPaths } from '../paths.mjs';
+import {
+  parseTierCount,
+  parseBucketCount,
+  parseOptionCount,
+  parseFavoriteBand,
+} from '../parse/cli-flags.mjs';
 
 const TRADEOFF_OPTION_LETTERS = OPTION_LETTERS;
 
@@ -20,6 +26,110 @@ function resolveOptionIndex(spec, count) {
 /** Strip pin overrides so the tier-structure menu is built unpinned first. */
 export function menuProfile(profile) {
   return { ...profile, overrides: undefined, downOverrides: undefined };
+}
+
+/** True when explicit pick flags would change the explore menu vs the stored profile. */
+export function menuKnobsChanged(args, stored = {}) {
+  if (args.cutoff != null || args.gate != null) return true;
+  if (args.shape != null && args.shape !== (stored.shape ?? 'auto')) return true;
+  if (args.downShape != null && args.downShape !== stored.downShape) return true;
+  if (args.rank != null && args.rank !== (stored.rankBy ?? undefined)) return true;
+  if (parseTierCount(args.tierCount) != null && parseTierCount(args.tierCount) !== stored.tierCount) {
+    return true;
+  }
+  if (
+    parseBucketCount(args.bucketCount) != null &&
+    parseBucketCount(args.bucketCount) !== stored.bucketCount
+  ) {
+    return true;
+  }
+  if (
+    parseOptionCount(args.optionCount) != null &&
+    parseOptionCount(args.optionCount) !== stored.optionCount
+  ) {
+    return true;
+  }
+  if (args.favoriteBand !== null) {
+    const explicit = parseFavoriteBand(args.favoriteBand);
+    const prev = stored.favoriteBand ?? undefined;
+    if (explicit !== prev) return true;
+  }
+  return false;
+}
+
+export function cloneTradeoffs(tradeoffs) {
+  return JSON.parse(JSON.stringify(tradeoffs));
+}
+
+/** Merge stored profile pins with any new `--pin` values (CLI wins on index clash). */
+export function mergePickPinOverrides(stored = {}, incoming = null) {
+  const up = { ...(stored?.overrides || {}), ...(incoming?.overrides || {}) };
+  const down = { ...(stored?.downOverrides || {}), ...(incoming?.downOverrides || {}) };
+  return {
+    overrides: Object.keys(up).length ? up : undefined,
+    downOverrides: Object.keys(down).length ? down : undefined,
+  };
+}
+
+export function profileHasPins(profile) {
+  const up = profile?.overrides && Object.keys(profile.overrides).length;
+  const down = profile?.downOverrides && Object.keys(profile.downOverrides).length;
+  return Boolean(up || down);
+}
+
+/**
+ * Resolve the explore menu for pick: reuse the stored unpinned menu when profile
+ * knobs match, reflow merged pins for display, and return the unpinned menu for
+ * option-letter resolution.
+ */
+export function resolvePickMenu({
+  args,
+  storedProfile,
+  storedTradeoffs,
+  storedMenuTradeoffs,
+  profile,
+  songs,
+  budget,
+  fitData = null,
+  parsed = null,
+  useMerge = false,
+  exploreAllocate,
+}) {
+  const upCap = budget?.maxUpvotesPerSong ?? Infinity;
+  const downCap = budget?.maxDownvotesPerSong ?? Infinity;
+  const rebuild = menuKnobsChanged(args, storedProfile);
+  const needsUnpinned = profileHasPins(profile) || args.pin?.length;
+
+  if (rebuild || !storedTradeoffs?.length) {
+    const result = exploreAllocate({ songs, budget, profile, fitData, parsed, useMerge });
+    return {
+      menuForPick: result.menuTradeoffs ?? cloneTradeoffs(result.tradeoffs),
+      menuForDisplay: result.tradeoffs,
+      menuTradeoffs: result.menuTradeoffs ?? cloneTradeoffs(result.tradeoffs),
+      pinNotes: result.pinNotes,
+    };
+  }
+
+  if (needsUnpinned && !storedMenuTradeoffs?.length) {
+    const result = exploreAllocate({ songs, budget, profile, fitData, parsed, useMerge });
+    return {
+      menuForPick: result.menuTradeoffs ?? cloneTradeoffs(result.tradeoffs),
+      menuForDisplay: result.tradeoffs,
+      menuTradeoffs: result.menuTradeoffs ?? cloneTradeoffs(result.tradeoffs),
+      pinNotes: result.pinNotes,
+    };
+  }
+
+  const unpinned = cloneTradeoffs(storedMenuTradeoffs?.length ? storedMenuTradeoffs : storedTradeoffs);
+  const display = cloneTradeoffs(unpinned);
+  const pinNotes = applyPinsToMenuTradeoffs(display, {
+    overrides: profile.overrides,
+    downOverrides: profile.downOverrides,
+    upCap,
+    downCap,
+  });
+  syncBallotFromExploreMenu(display, songs);
+  return { menuForPick: unpinned, menuForDisplay: display, menuTradeoffs: unpinned, pinNotes };
 }
 
 export function reconcileOptionPins(perSong, pins, cap = Infinity) {

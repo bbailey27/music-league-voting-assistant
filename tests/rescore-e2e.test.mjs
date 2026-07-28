@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm, mkdir, copyFile, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, copyFile, readFile, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -149,6 +149,7 @@ test('rescore --pin reflows every option column and persists overrides on profil
 
     const after = JSON.parse(await readFile(musicJson, 'utf8'));
     assert.deepEqual(after.profile.overrides, { 2: 1, 4: 1 });
+    assert.ok(after.menuTradeoffs?.length, 'rescore --pin persists menuTradeoffs');
     const ts = after.tradeoffs.find((t) => t.kind === 'tier-structure');
     assert.ok(ts?.options?.length, 'tier-structure menu present');
     for (const opt of ts.options) {
@@ -156,6 +157,90 @@ test('rescore --pin reflows every option column and persists overrides on profil
       assert.equal(byIdx[2], 1);
       assert.equal(byIdx[4], 1);
     }
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('pick without menu flags uses stored tradeoffs from the last explore write', async () => {
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-pick-stored-menu-'));
+  const dataDir = join(tmpRoot, 'data');
+  const env = { ...process.env, ML_DATA_DIR: dataDir };
+  try {
+    await mkdir(join(dataDir, 'rounds'), { recursive: true });
+    await copyFile(fixtureHtml, join(dataDir, 'rounds', `${ROUND}.html`));
+    const musicJson = join(dataDir, 'analysis', ROUND, 'music.json');
+
+    await ml(env, 'parse', ROUND);
+    const afterParse = JSON.parse(await readFile(musicJson, 'utf8'));
+    const ts = afterParse.tradeoffs.find((t) => t.kind === 'tier-structure');
+    assert.ok(ts?.options?.length >= 2, 'parse wrote a multi-option menu');
+
+    const storedShape = '9×9 / 0×0';
+    ts.options[0].shape = storedShape;
+    ts.options[0].label = ts.options[0].label.replace(/^[^—]+—\s*/, `marker — ${storedShape}`);
+    for (const p of ts.options[0].perSong) p.votes = 9;
+    afterParse.menuTradeoffs = JSON.parse(JSON.stringify(afterParse.tradeoffs));
+    await writeFile(musicJson, `${JSON.stringify(afterParse, null, 2)}\n`, 'utf8');
+
+    const { stdout } = await ml(env, 'pick', ROUND, 'A', '--dry-run');
+    assert.match(stdout, new RegExp(storedShape.replace(/×/g, '×')));
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('pick --pin merges with stored pins on the stored unpinned menu', async () => {
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-pick-merge-pins-'));
+  const dataDir = join(tmpRoot, 'data');
+  const env = { ...process.env, ML_DATA_DIR: dataDir };
+  try {
+    await mkdir(join(dataDir, 'rounds'), { recursive: true });
+    await copyFile(fixtureHtml, join(dataDir, 'rounds', `${ROUND}.html`));
+    const musicJson = join(dataDir, 'analysis', ROUND, 'music.json');
+
+    await ml(env, 'parse', ROUND);
+    const afterParse = JSON.parse(await readFile(musicJson, 'utf8'));
+    assert.ok(afterParse.menuTradeoffs?.length, 'parse persists menuTradeoffs');
+
+    const storedShape = afterParse.menuTradeoffs.find((t) => t.kind === 'tier-structure')?.options?.[0]?.shape;
+    assert.ok(storedShape, 'stored unpinned option A shape');
+
+    await ml(env, 'rescore', ROUND, '--pin', '2:1');
+    const afterRescore = JSON.parse(await readFile(musicJson, 'utf8'));
+    assert.deepEqual(afterRescore.profile.overrides, { 2: 1 });
+    assert.equal(
+      afterRescore.menuTradeoffs.find((t) => t.kind === 'tier-structure')?.options?.[0]?.shape,
+      storedShape,
+      'rescore --pin keeps the same unpinned option A staircase'
+    );
+
+    const { stdout } = await ml(env, 'pick', ROUND, 'A', '--pin', '0:1', '--dry-run');
+    assert.match(stdout, new RegExp(storedShape.replace(/[×/]/g, (c) => `\\${c}`)));
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('pick --cutoff re-allocates instead of reusing a stale stored menu', async () => {
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-pick-cutoff-realloc-'));
+  const dataDir = join(tmpRoot, 'data');
+  const env = { ...process.env, ML_DATA_DIR: dataDir };
+  try {
+    await mkdir(join(dataDir, 'rounds'), { recursive: true });
+    await copyFile(fixtureHtml, join(dataDir, 'rounds', `${ROUND}.html`));
+    const musicJson = join(dataDir, 'analysis', ROUND, 'music.json');
+
+    await ml(env, 'parse', ROUND);
+    const afterParse = JSON.parse(await readFile(musicJson, 'utf8'));
+    const ts = afterParse.tradeoffs.find((t) => t.kind === 'tier-structure');
+    const storedShape = '9×9 / 0×0';
+    ts.options[0].shape = storedShape;
+    for (const p of ts.options[0].perSong) p.votes = 9;
+    await writeFile(musicJson, `${JSON.stringify(afterParse, null, 2)}\n`, 'utf8');
+
+    const { stdout } = await ml(env, 'pick', ROUND, 'A', '--cutoff', 'music:90', '--dry-run');
+    assert.doesNotMatch(stdout, new RegExp(storedShape.replace(/×/g, '×')));
   } finally {
     await rm(tmpRoot, { recursive: true, force: true });
   }

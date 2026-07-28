@@ -294,7 +294,7 @@ async function main() {
     }
   }
 
-  const { tradeoffs, pinNotes } = exploreAllocate({
+  const { tradeoffs, menuTradeoffs, pinNotes } = exploreAllocate({
     songs: parsed.songs,
     budget: parsed.budget,
     profile,
@@ -304,7 +304,7 @@ async function main() {
   });
 
   const slim = slimProfile(profile);
-  const ctx = { ...parsed, mode: args.mode, tradeoffs, pick: null, roundId, profile: slim };
+  const ctx = { ...parsed, mode: args.mode, tradeoffs, menuTradeoffs, pick: null, roundId, profile: slim };
   const md = buildMarkdown(ctx);
 
   const paths = musicPaths(roundId);
@@ -320,6 +320,7 @@ async function main() {
 
   if (thematicMerge && fitData) {
     fitData.tradeoffs = tradeoffs;
+    fitData.menuTradeoffs = menuTradeoffs;
     fitData.combineWeights = profile.weights ?? fitData.combineWeights;
     const scoresOut = scoresPaths(roundId).json;
     await mkdir(scoresPaths(roundId).dir, { recursive: true });
