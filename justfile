@@ -4,6 +4,10 @@ set positional-arguments
 default:
     @just --list
 
+# Sync browser-safe modules into docs/lib/ (required before deploy — GitHub Pages only publishes docs/)
+sync-web:
+    node scripts/sync-web-lib.mjs
+
 # Parse a round HTML → data/analysis/<round>/music.md + music.json (fuzzy name; flags optional)
 parse *args:
     node scripts/ml.mjs parse "$@"

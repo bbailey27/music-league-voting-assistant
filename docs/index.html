@@ -3,38 +3,46 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Music League Voting Assistant</title>
+    <title>Music League Vote Assistant</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header class="site-header">
-      <h1>Music League Voting Assistant</h1>
-      <p class="tagline">Paste a round → parse scores → allocate draft votes. Runs entirely in your browser.</p>
+      <h1>Music League Vote Assistant</h1>
+      <p class="tagline">Paste your round, check your scores, pick a vote split, copy the result back into Music League.</p>
     </header>
 
     <main>
-      <section class="panel" id="capture-help">
-        <h2>Getting round text on iPhone</h2>
-        <p>
-          Music League often opens in an in-app browser where you <strong>cannot copy page text</strong>.
-          Use screenshots + Live Text instead:
-        </p>
-        <ol class="steps">
-          <li>In the Music League app, scroll through the round and <strong>screenshot each screen</strong> until every song is captured.</li>
-          <li>Open <strong>Photos</strong> → open a screenshot → tap the <strong>Live Text</strong> button (text viewfinder icon).</li>
-          <li><strong>Select All</strong> on the recognized text → <strong>Copy</strong>.</li>
-          <li>Paste below. If you used multiple shots, paste each block in order (or stitch in a photos app first — the parser ignores “Screenshots Stitched” trailers).</li>
-          <li>Enable <strong>Lenient (Live Text)</strong> if the paste lacks <code>Album art</code> blocks but still has <code>N / 1000</code> footers on comments.</li>
-        </ol>
-        <p class="hint">On desktop, prefer saving the full round <code>.html</code> export — paste that here for best accuracy.</p>
+      <section class="panel workflow-step">
+        <details class="iphone-help" open>
+          <summary><span class="step-num">1</span> iPhone: get round text with screenshots + Live Text</summary>
+          <div class="help-body">
+            <p class="lead">
+              Music League’s in-app browser usually <strong>won’t let you copy</strong> the page.
+              Screenshot the round, then OCR the text:
+            </p>
+            <ol>
+              <li>Scroll through the round in Music League and <strong>screenshot every screen</strong> until all songs are captured.</li>
+              <li>Open <strong>Photos</strong> → a screenshot → tap <strong>Live Text</strong> (text icon in the corner).</li>
+              <li><strong>Select All</strong> → <strong>Copy</strong>.</li>
+              <li>Come back here and paste into step 2. Multiple shots? Paste each block in order.</li>
+              <li>Turn on <strong>Live Text mode</strong> below if you see <code>4/1000</code>-style footers but no <code>Album art</code> lines.</li>
+            </ol>
+            <p class="note">On a computer with a saved round <code>.html</code> file, paste that instead — more accurate.</p>
+          </div>
+        </details>
       </section>
 
-      <section class="panel">
-        <h2>Paste round</h2>
-        <textarea id="input" rows="10" placeholder="Paste saved round HTML or Live Text output…"></textarea>
+      <section class="panel workflow-step">
+        <h2><span class="step-num">2</span> Paste round &amp; parse your scores</h2>
+        <textarea id="input" rows="8" placeholder="Paste Live Text output or saved round HTML here…"></textarea>
         <div class="controls">
+          <label class="checkbox prominent">
+            <input type="checkbox" id="lenient" checked />
+            Live Text mode (lenient parser)
+          </label>
           <label>
-            Mode
+            Comment mode
             <select id="mode">
               <option value="objective">Objective</option>
               <option value="subjective">Subjective</option>
@@ -49,7 +57,7 @@
             </select>
           </label>
           <label>
-            Shape
+            Curve
             <select id="shape">
               <option value="auto">Auto</option>
               <option value="bell">Bell</option>
@@ -59,25 +67,40 @@
               <option value="relative">Relative</option>
             </select>
           </label>
-          <label class="checkbox">
-            <input type="checkbox" id="lenient" />
-            Lenient (Live Text)
-          </label>
-          <button type="button" id="run" class="primary">Parse &amp; allocate</button>
+          <button type="button" id="run" class="primary">Parse scores</button>
         </div>
         <p id="status" class="status" aria-live="polite"></p>
       </section>
 
-      <section class="panel hidden" id="results">
-        <h2 id="round-title"></h2>
+      <section class="panel workflow-step hidden" id="scores-section">
+        <h2><span class="step-num">3</span> Your scores <span class="sub">— tap a comment to fix blanks or typos</span></h2>
         <p id="round-meta" class="meta"></p>
-
         <div id="blockers" class="blockers hidden"></div>
+        <div class="table-wrap">
+          <table id="scores-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Song</th>
+                <th>Your comment / score</th>
+                <th>Parsed</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <button type="button" id="reallocate" class="secondary">Re-run allocation after edits</button>
+      </section>
 
-        <h3>Options</h3>
+      <section class="panel workflow-step hidden" id="pick-section">
+        <h2><span class="step-num">4</span> Pick a vote distribution</h2>
+        <p class="sub">Same A/B/C options as <code>just pick</code> on the CLI. Tap one to apply it.</p>
         <div id="options" class="options"></div>
+      </section>
 
-        <h3>Ballot (raw order)</h3>
+      <section class="panel workflow-step hidden" id="output-section">
+        <h2><span class="step-num">5</span> Copy votes back into Music League</h2>
+        <p id="budget-line" class="meta"></p>
         <div class="table-wrap">
           <table id="ballot-table">
             <thead>
@@ -85,36 +108,22 @@
                 <th>#</th>
                 <th>Song</th>
                 <th>Music</th>
-                <th>Mod</th>
                 <th>Votes</th>
-                <th>Comment</th>
               </tr>
             </thead>
             <tbody></tbody>
-          </table>
-        </div>
-        <button type="button" id="copy-ballot" class="secondary">Copy vote column</button>
-
-        <h3>Ranked</h3>
-        <div class="table-wrap">
-          <table id="ranked-table">
-            <thead>
+            <tfoot>
               <tr>
-                <th>Song</th>
-                <th>Artist</th>
-                <th>Music</th>
-                <th>Votes</th>
+                <td colspan="3">Total up</td>
+                <td id="vote-total"></td>
               </tr>
-            </thead>
-            <tbody></tbody>
+            </tfoot>
           </table>
         </div>
+        <button type="button" id="copy-ballot" class="primary">Copy votes for Music League</button>
+        <p class="copy-hint">Copies one vote per line in submission order (<code># title → votes</code>).</p>
       </section>
     </main>
-
-    <footer>
-      <p id="core-status" class="core-status"></p>
-    </footer>
     <script type="module" src="app.js"></script>
   </body>
 </html>
