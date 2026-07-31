@@ -19,10 +19,10 @@ isProject: false
 | [release-date-airtable-sync.plan.md](release-date-airtable-sync.plan.md)       | Push release dates to Airtable + scrobble→Airtable reconciliation (access method TBD)         |
 | [followup-2-web-app-mobile.plan.md](followup-2-web-app-mobile.plan.md)         | Sections 1–6 pending — allocation engine (Plan A) shipped; no `docs/` yet                     |
 
-**Recently shipped (delete plan files per lifecycle):**
+**Recently shipped (plan files deleted):**
 
 - ~~improve-just-cli-and-docs~~ — all phases shipped 2026-07-08
-- ~~menu-wide-pin-reflow~~ — `exploreAllocate`, rescore `--pin`, stored menu on pick (2026-07-28–31)
+- ~~menu-wide-pin-reflow~~ — exploreAllocate, rescore `--pin`, stored menu on pick (2026-07-28–31)
 
 ## Optional polish (no dedicated plan file)
 

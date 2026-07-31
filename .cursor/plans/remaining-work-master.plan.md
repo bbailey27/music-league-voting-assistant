@@ -27,7 +27,7 @@ Phase 1, CLI docs). Living backlog without a dedicated plan:
 | --- | --- | --- |
 | ~~preserve-manual-fit-scores~~ | **shipped** 2026-06-27 | Wave 1 — peel-first parse, `--fit-words` |
 | [followup-5-specs-and-tests](followup-5-specs-and-tests.plan.md) | partial | **Waves 2–3** — specs, extract tests, snapshot regression |
-| ~~improve-just-cli-and-docs~~ | **shipped** 2026-07-08 | Wave 2 — plan file ready to delete |
+| ~~improve-just-cli-and-docs~~ | **shipped** 2026-07-08 | Wave 2 — deleted |
 | [split-score-core-into-modules](split-score-core-into-modules.plan.md) | partial | **Wave 4** — Phases 2+4 shipped; Phase 3 (split tests) open |
 | [future-plans](future-plans.plan.md) | living | **Wave 5** backlog |
 | [deferred-allocation-r3-r4](deferred-allocation-r3-r4.plan.md) | deferred | **May not ship** — R3/R4 allocator refinements |
@@ -196,7 +196,7 @@ Wave 4 until Wave 2 snapshot test exists**.
 | — | remaining-work-master | in_progress |
 | 1 | preserve-manual-fit-scores | **shipped** (plan deleted) |
 | 2 | followup-5-specs-and-tests | snapshot slice **shipped** 2026-07-08; spec slice open |
-| 2 | improve-just-cli-and-docs | Phase 3 **shipped** 2026-07-08 |
+| 2 | ~~improve-just-cli-and-docs~~ | **shipped** 2026-07-08 (deleted) |
 | 3 | followup-5-specs-and-tests | partial (spec slice) |
 | 4 | split-score-core-into-modules | partial (Phases 2–4) |
 | 5 | future-plans items 5–6 | backlog |
