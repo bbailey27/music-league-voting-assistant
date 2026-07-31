@@ -1,0 +1,57 @@
+---
+description: Keep CLI help, README, and shared outputs in sync when flags or user-visible behavior change
+alwaysApply: true
+---
+
+# CLI docs and output parity
+
+## CLI help and README
+
+When you **add, rename, or change** a CLI flag, subcommand, or user-facing command
+behavior, update in the **same pass**:
+
+1. [`scripts/cli-help.mjs`](../scripts/cli-help.mjs) — `HELP` topic for the command,
+   the shared flag blurb (`PIN`, `SCORE_OVERRIDE`, …) if reused, `just help flags`
+   matrix, and examples.
+2. [`README.md`](../README.md) — command table and flag summary for the affected stage(s).
+
+`just help` is the discoverability layer (`spec/decisions.md` 2026-06-26). Do not ship code-only flag changes and defer help.
+
+Also touch [`spec/point-allocation.md`](../spec/point-allocation.md) when allocation or
+profile flags change (existing spec convention).
+
+## Output parity across commands
+
+Shared **outputs** and **pipelines** must stay consistent everywhere they are used.
+When you fix or improve user-visible output (table columns, warnings, formatting,
+wording, a shared helper's behavior), apply the change to **every command** that uses
+that output — not just the one you were working on.
+
+Typical shared surfaces (grep before finishing):
+
+| Surface                                                         | Used by                                        |
+| --------------------------------------------------------------- | ---------------------------------------------- |
+| [`scripts/parse/cli-print.mjs`](../scripts/parse/cli-print.mjs) | parse, merge, rescore, pick (tables, ballot)   |
+| [`scripts/parse/cli-warn.mjs`](../scripts/parse/cli-warn.mjs)   | parse, merge, rescore, pick (blocker warnings) |
+| [`scripts/round/explore.mjs`](../scripts/round/explore.mjs)     | parse, merge, rescore (menu + explore write)   |
+| [`scripts/tradeoff-rows.mjs`](../scripts/tradeoff-rows.mjs)     | option / up / down tables                      |
+| [`scripts/score/render.mjs`](../scripts/score/render.mjs)       | music.md/json payload, markdown reports        |
+| [`scripts/cli-help.mjs`](../scripts/cli-help.mjs)               | all documented flags                           |
+
+**Default:** apply parity everywhere — the owner expects the same tables, warnings, and
+flag semantics whether they ran `parse`, `merge`, or `rescore`.
+
+**Ask first** only when stages are **intentionally** different (documented in spec or
+decisions) or when matching would change committed pick semantics / artifact shape in a
+way that is not obviously correct. If unsure whether divergence is intentional, ask
+rather than silently leaving one command stale.
+
+## Checklist (same pass as the code change)
+
+- [ ] Flag or command change → `cli-help.mjs` + README
+- [ ] Shared output/helper change → all importing commands updated
+- [ ] Behavior change → `spec/decisions.md` (per decision-log rule)
+- [ ] Major workflow change → `spec/diagrams/` if applicable (per workflow-diagrams rule)
+
+Do not log help-only wording tweaks in `spec/decisions.md` unless they document a
+behavior change already recorded there.

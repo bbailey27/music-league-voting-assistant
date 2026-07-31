@@ -71,6 +71,7 @@ Prefer `just` (forwards to `ml.mjs`); equivalent: `npm run ml -- <cmd>`.
 ```bash
 just help                   # workflow overview
 just help pick              # per-stage flags + example
+just help rescore           # re-weight, --score overrides, --pin
 just run tarot              # next scriptable step
 just status                 # checklist for all rounds
 just status tarot           # one round, full checklist + next step
