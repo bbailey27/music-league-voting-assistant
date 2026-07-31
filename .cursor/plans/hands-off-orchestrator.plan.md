@@ -17,10 +17,10 @@ todos:
     status: pending
   - id: waveC-scorecore
     content: "Wave C — score-core Phases 2–4 (renderer dedup, split score.test.mjs, helper dedup) — gated on Wave A"
-    status: pending
+    status: partial
   - id: waveD-release-dates
     content: "Wave D — release-date-enrichment Phase 1 only: spec/release-dates.md + cache schema. STOP before fetch providers (needs creds)"
-    status: pending
+    status: completed
 ---
 
 # Hands-off orchestrator

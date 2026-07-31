@@ -1,8 +1,8 @@
 ---
 name: "Follow-up 2: Client-side web app (desktop + mobile, no CLI)"
 overview: A zero-build, fully client-side GitHub Pages app that runs the existing deterministic flow (extract → score → allocate) with no CLI, plus a fit-only copy-prompt and a paste-back merge step. Built in independently-shippable sections so progress is visible on a phone from the very first one.
-status: pending
-depends_on: "Plan A (deterministic allocation engine) — DONE; Follow-up 1 (text/Live-Text parser) — DONE"
+status: ready
+depends_on: "Plan A (deterministic allocation engine) — DONE; Follow-up 1 (text/Live-Text parser) — DONE; CLI explore/pin pipeline — DONE (2026-07-31)"
 isProject: false
 ---
 

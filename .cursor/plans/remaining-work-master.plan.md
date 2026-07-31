@@ -27,11 +27,11 @@ Phase 1, CLI docs). Living backlog without a dedicated plan:
 | --- | --- | --- |
 | ~~preserve-manual-fit-scores~~ | **shipped** 2026-06-27 | Wave 1 — peel-first parse, `--fit-words` |
 | [followup-5-specs-and-tests](followup-5-specs-and-tests.plan.md) | partial | **Waves 2–3** — specs, extract tests, snapshot regression |
-| [improve-just-cli-and-docs](improve-just-cli-and-docs.plan.md) | partial | **Wave 2** — `ml.test`, e2e fixture |
-| [split-score-core-into-modules](split-score-core-into-modules.plan.md) | partial | **Wave 4** — renderer dedup, test split, helper dedup |
+| ~~improve-just-cli-and-docs~~ | **shipped** 2026-07-08 | Wave 2 — plan file ready to delete |
+| [split-score-core-into-modules](split-score-core-into-modules.plan.md) | partial | **Wave 4** — Phases 2+4 shipped; Phase 3 (split tests) open |
 | [future-plans](future-plans.plan.md) | living | **Wave 5** backlog |
 | [deferred-allocation-r3-r4](deferred-allocation-r3-r4.plan.md) | deferred | **May not ship** — R3/R4 allocator refinements |
-| [web-app-and-allocation-engine](web-app-and-allocation-engine.plan.md) | partial | **Deferred** — [followup-2](followup-2-web-app-mobile.plan.md) |
+| [web-app-and-allocation-engine](web-app-and-allocation-engine.plan.md) | partial | Plan A **shipped**; Plan B (browser UI) **ready** — [followup-2](followup-2-web-app-mobile.plan.md) |
 | [followup-3-thematic-mode](followup-3-thematic-mode.plan.md) | pending | **Deferred** — agent loop largely exists |
 | [uncertainty-band-allocation](uncertainty-band-allocation.plan.md) | pending | **Deferred** — not blocking daily use |
 
@@ -160,7 +160,7 @@ Do **not** schedule these on a wave; do **not** implement preemptively.
 
 | Work | Why wait |
 | --- | --- |
-| [web-app / followup-2](followup-2-web-app-mobile.plan.md) | Large; Wave 1–3 stabilize JSON contract and specs first |
+| [web-app / followup-2](followup-2-web-app-mobile.plan.md) | Plan A shipped; CLI stable — **unblocked for Sections 1–3**; full fit loop (5–6) still benefits from Wave 3 spec sync |
 | [followup-3-thematic-mode](followup-3-thematic-mode.plan.md) | Agent fit loop works via skills + manual `fit.json` |
 | [uncertainty-band-allocation](uncertainty-band-allocation.plan.md) | Allocator stable; `?` band is refinement |
 | `scripts/one-off/` fold-in review | Opportunistic during Wave 5 or when touching related code |
@@ -201,4 +201,4 @@ Wave 4 until Wave 2 snapshot test exists**.
 | 4 | split-score-core-into-modules | partial (Phases 2–4) |
 | 5 | future-plans items 5–6 | backlog |
 | defer | deferred-allocation-r3-r4 | deferred (may not ship) |
-| defer | web-app, followup-3, uncertainty | blocked |
+| defer | web-app, followup-3, uncertainty | web app **ready** (Sections 1–3); thematic/uncertainty still deferrable |

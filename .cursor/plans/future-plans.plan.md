@@ -13,11 +13,16 @@ isProject: false
 
 | Plan                                                                           | Remaining                                                                                     |
 | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| [followup-5-specs-and-tests.plan.md](followup-5-specs-and-tests.plan.md)       | Full spec sync, output snapshot regression test (diff-based), regression prose, extract tests |
-| [split-score-core-into-modules.plan.md](split-score-core-into-modules.plan.md) | Phases 2–4: renderer dedup, split tests, helper dedup — full steps in plan                    |
-| [improve-just-cli-and-docs.plan.md](improve-just-cli-and-docs.plan.md)         | Phase 3: `tests/ml.test.mjs`, e2e fixture — full spec in plan                                 |
-| [release-date-enrichment.plan.md](release-date-enrichment.plan.md)             | Round year-gate shipped; open: fetch providers, CSV enrichment, deluxe schema/spec            |
+| [followup-5-specs-and-tests.plan.md](followup-5-specs-and-tests.plan.md)       | Spec sync (`round-input-parsing.md`, rules refresh); snapshot regression **shipped** 2026-07-08 |
+| [split-score-core-into-modules.plan.md](split-score-core-into-modules.plan.md) | Phase 3 only: split `tests/score.test.mjs` by module (Phases 2 + 4 shipped 2026-07-08)       |
+| [release-date-enrichment.plan.md](release-date-enrichment.plan.md)             | Round year-gate + `spec/release-dates.md` shipped; open: fetch providers, CSV enrichment      |
 | [release-date-airtable-sync.plan.md](release-date-airtable-sync.plan.md)       | Push release dates to Airtable + scrobble→Airtable reconciliation (access method TBD)         |
+| [followup-2-web-app-mobile.plan.md](followup-2-web-app-mobile.plan.md)         | Sections 1–6 pending — allocation engine (Plan A) shipped; no `docs/` yet                     |
+
+**Recently shipped (delete plan files per lifecycle):**
+
+- ~~improve-just-cli-and-docs~~ — all phases shipped 2026-07-08
+- ~~menu-wide-pin-reflow~~ — `exploreAllocate`, rescore `--pin`, stored menu on pick (2026-07-28–31)
 
 ## Optional polish (no dedicated plan file)
 
@@ -108,7 +113,7 @@ Output snapshot regression test (diff-based): see
 18. Testing dry-run / scratch-pad. Agents (and the owner) sometimes need to exercise parse/pick/rescore against a real round to verify behavior, but doing so today overwrites the round's `music.json`/`music.md` (and can silently change weights, as happened when a test re-parse dropped 0.7/0.3 → 0.5/0.5). Provide a safe scratch mode — e.g. a `--scratch`/`--sandbox` flag or a temp working copy — that runs the full pipeline and prints the tables/output WITHOUT writing back to the round's real files (or writes to a throwaway path). Goal: never mutate the owner's committed analysis as a side effect of testing.
 19. Finish splitting up test files and audit tests. Check for unnecessary tests e.g. checking 3rd party libraries or basic code features. Check for assumptions and logical leaps. E.g. compare to the decision file and see if it mentions the explicit edge case or if the agent likely just wrote a test to confirm what it had already assumed. Even the decision file may not be full evidence. Surface anything potentially sketchy, contradictory, or inconsistent in the tests or the decision log.
 20. Create a skill to corral excessive guessing and independent decision making. Agents should not make assumptions about implementation details that affect the outcome or handling of edge cases. There have been instances of large enough assumptions that they got codified in the decision log and taken as evidence of intent by future agents, without me signing off on them. Agents should consult me about any assumptions or edge cases. If it would be a small tweak to change, it is acceptable to pick the best option and then call it out for approval at the end of the step. If it's a larger rewrite to fix, always stop and ask. Either way, ALWAYS list any assumptions made or edge cases handled at the end. Example assumptions include: if the budget can't be met, it is acceptable to go under budget; always sort tables by music score even when combined score is present; manual cutoffs are only allowed on music scores. Even if you didn't make an intentional decision, check with fresh eyes if the code ENFORCES any such constraints that were not confirmed by the user.
-21. Split out active vs concluded vs recurring leagues in the leagues.mjs file so context isn't bloated with outdated details.
+21. Split out active vs concluded vs recurring leagues in the leagues.mjs file so context isn't bloated with outdated details. Also because these simplified slugs are likely to be reused. That's why dates are included in file names. So there needs to be logic about only matching a partial round name in CLI if it's a new or active round, not falling back to old rounds with similar names. And league notes and rules should probably save their active date range so they don't get applied to future leagues with similar names.
 
 ## Bugs
 

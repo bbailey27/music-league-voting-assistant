@@ -1,27 +1,27 @@
 ---
 name: Menu-wide pin reflow
 overview: "Menu-wide pin reflow on all explore commands, plus a shared explore pipeline so parse/merge/rescore always print updated Up/Down/Ballot tables when profile knobs (--pin, --weights, etc.) change."
-status: pending
+status: shipped
 isProject: false
 todos:
   - id: explore-pipeline
     content: Extract shared exploreRound() — allocate(menuProfile) → applyPinsToMenuTradeoffs → sync ballot → printPickCli → write artifacts
-    status: pending
+    status: completed
   - id: reconcile-down
     content: Add reconcileDownOptionPins + applyPinsToMenuTradeoffs in scripts/round/pick.mjs (dedup, shape relabel, budget guard)
-    status: pending
+    status: completed
   - id: wire-commands
     content: Wire exploreRound into parse (auto-merge when fit.json + weights/rank/gate), merge, rescore (--pin), pick dry-run
-    status: pending
+    status: completed
   - id: persist-profile
     content: Extend slimProfile to persist overrides/downOverrides + weights; sync ballot preview from option A
-    status: pending
+    status: completed
   - id: tests
     content: Unit tests (pin reflow up/down, dedup, idempotent pick) + e2e (rescore --pin, parse --weights prints tables on thematic round)
-    status: pending
+    status: completed
   - id: docs
     content: Update spec/point-allocation.md, cli-help, decisions.md
-    status: pending
+    status: completed
 ---
 
 # Menu-wide pin reflow + consistent explore tables

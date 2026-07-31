@@ -1,7 +1,7 @@
 ---
 name: improve-just-cli-and-docs
-overview: Three-stage pipeline CLI/docs — Phases 0–2 shipped (parse/merge/pick, ml help, README, status). Remaining Phase 3 tests.
-status: partial
+overview: Three-stage pipeline CLI/docs — all phases shipped (parse/merge/pick, ml help, README, status, dispatcher + e2e tests).
+status: shipped
 isProject: false
 todos:
   - id: ml-dispatcher-tests
