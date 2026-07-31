@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Music League Voting Assistant</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <h1>Music League Voting Assistant</h1>
+      <p class="tagline">Paste a round → parse scores → allocate draft votes. Runs entirely in your browser.</p>
+    </header>
+
+    <main>
+      <section class="panel" id="capture-help">
+        <h2>Getting round text on iPhone</h2>
+        <p>
+          Music League often opens in an in-app browser where you <strong>cannot copy page text</strong>.
+          Use screenshots + Live Text instead:
+        </p>
+        <ol class="steps">
+          <li>In the Music League app, scroll through the round and <strong>screenshot each screen</strong> until every song is captured.</li>
+          <li>Open <strong>Photos</strong> → open a screenshot → tap the <strong>Live Text</strong> button (text viewfinder icon).</li>
+          <li><strong>Select All</strong> on the recognized text → <strong>Copy</strong>.</li>
+          <li>Paste below. If you used multiple shots, paste each block in order (or stitch in a photos app first — the parser ignores “Screenshots Stitched” trailers).</li>
+          <li>Enable <strong>Lenient (Live Text)</strong> if the paste lacks <code>Album art</code> blocks but still has <code>N / 1000</code> footers on comments.</li>
+        </ol>
+        <p class="hint">On desktop, prefer saving the full round <code>.html</code> export — paste that here for best accuracy.</p>
+      </section>
+
+      <section class="panel">
+        <h2>Paste round</h2>
+        <textarea id="input" rows="10" placeholder="Paste saved round HTML or Live Text output…"></textarea>
+        <div class="controls">
+          <label>
+            Mode
+            <select id="mode">
+              <option value="objective">Objective</option>
+              <option value="subjective">Subjective</option>
+            </select>
+          </label>
+          <label>
+            Rank by
+            <select id="rankBy">
+              <option value="music">Music</option>
+              <option value="combined">Combined</option>
+              <option value="fit">Fit</option>
+            </select>
+          </label>
+          <label>
+            Shape
+            <select id="shape">
+              <option value="auto">Auto</option>
+              <option value="bell">Bell</option>
+              <option value="balanced">Balanced</option>
+              <option value="top-heavy">Top-heavy</option>
+              <option value="compressed">Compressed</option>
+              <option value="relative">Relative</option>
+            </select>
+          </label>
+          <label class="checkbox">
+            <input type="checkbox" id="lenient" />
+            Lenient (Live Text)
+          </label>
+          <button type="button" id="run" class="primary">Parse &amp; allocate</button>
+        </div>
+        <p id="status" class="status" aria-live="polite"></p>
+      </section>
+
+      <section class="panel hidden" id="results">
+        <h2 id="round-title"></h2>
+        <p id="round-meta" class="meta"></p>
+
+        <div id="blockers" class="blockers hidden"></div>
+
+        <h3>Options</h3>
+        <div id="options" class="options"></div>
+
+        <h3>Ballot (raw order)</h3>
+        <div class="table-wrap">
+          <table id="ballot-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Song</th>
+                <th>Music</th>
+                <th>Mod</th>
+                <th>Votes</th>
+                <th>Comment</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <button type="button" id="copy-ballot" class="secondary">Copy vote column</button>
+
+        <h3>Ranked</h3>
+        <div class="table-wrap">
+          <table id="ranked-table">
+            <thead>
+              <tr>
+                <th>Song</th>
+                <th>Artist</th>
+                <th>Music</th>
+                <th>Votes</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p id="core-status" class="core-status"></p>
+    </footer>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

@@ -1,7 +1,7 @@
 ---
 name: "Follow-up 2: Client-side web app (desktop + mobile, no CLI)"
 overview: A zero-build, fully client-side GitHub Pages app that runs the existing deterministic flow (extract → score → allocate) with no CLI, plus a fit-only copy-prompt and a paste-back merge step. Built in independently-shippable sections so progress is visible on a phone from the very first one.
-status: ready
+status: partial
 depends_on: "Plan A (deterministic allocation engine) — DONE; Follow-up 1 (text/Live-Text parser) — DONE; CLI explore/pin pipeline — DONE (2026-07-31)"
 isProject: false
 ---
@@ -39,7 +39,25 @@ Dependencies: 2→1, 3→2, 4→3, 5a→2 (only needs parsed songs; can be pulle
 
 ---
 
-## Section 1 — App shell + hosting
+## Section 1 — App shell + hosting ✅ shipped 2026-07-31
+
+- `docs/index.html`, `docs/styles.css`, `docs/app.js` — mobile-first shell, ES module imports from `scripts/`.
+- README: local preview (`npx serve`), GitHub Pages `/docs`, iPhone Live Text workflow.
+- **Acceptance:** page loads; core modules import without console errors.
+
+## Section 2 — Paste & parse ✅ shipped 2026-07-31
+
+- Paste textarea; HTML vs text auto-detect; lenient toggle.
+- Parsed raw-order ballot table; blocker banner for blanks/DQ/review.
+- **Acceptance:** sample HTML + `livetext-kpop-group.txt` parse in-browser (smoke-tested via Node).
+
+## Section 3 — Allocation & output display ✅ shipped 2026-07-31
+
+- Profile controls: rankBy, shape; `allocate` + option A ballot preview.
+- Ranked table + copy vote column button.
+- **Acceptance:** budget-exact allocation for music-only paste; option cards listed.
+
+## Section 1 — App shell + hosting (original spec)
 
 Stand up the page and deployment first so the rest is testable on device.
 

@@ -48,6 +48,35 @@ Without access to the private repo, `data/` stays empty and the scripts have not
 operate on — the code still builds, lints, and passes tests (which use the synthetic
 `tests/fixtures/sample-round/`).
 
+## Web app (browser)
+
+A zero-build client lives in [`docs/`](docs/). It imports the same
+`extract-html.mjs`, `parse-text.mjs`, and `score-core.mjs` modules as the CLI.
+
+**Local preview:** serve the repo root (modules resolve from `docs/` → `scripts/`):
+
+```bash
+npx --yes serve -p 8080 .
+# open http://localhost:8080/docs/
+```
+
+**GitHub Pages:** repo **Settings → Pages → Build from branch `main` / folder `/docs`**.
+
+### iPhone: screenshots → Live Text → paste
+
+Music League’s in-app browser usually **blocks selecting page text**. To vote on
+phone without the CLI:
+
+1. Screenshot each screen of the round (scroll until every song is captured).
+2. In **Photos**, open a shot → **Live Text** (text viewfinder) → **Select All** → **Copy**.
+3. Paste into the web app. Paste multiple shots in order if needed.
+4. Enable **Lenient (Live Text)** when the paste has `N / 1000` comment footers but
+   no `Album art` blocks (typical OCR output).
+5. Tap **Parse & allocate**, review flagged rows, then **Copy vote column**.
+
+Full input rules: [spec/round-input-parsing.md](spec/round-input-parsing.md#mobile-capture-live-text).
+Desktop rounds: still prefer saving the full `.html` export when you can.
+
 ## Workflow
 
 The pipeline has **four stages**. Only **parse** reads HTML; everything else is JSON.

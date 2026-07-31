@@ -11,6 +11,19 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-31 — Web app Sections 1–3 (paste, parse, allocate)
+
+**Change.** Added [`docs/`](docs/) GitHub Pages shell: `index.html`, `styles.css`,
+`app.js` importing `extract-html.mjs`, `parse-text.mjs`, and `score-core.mjs`
+unchanged. Paste HTML or Live Text, run deterministic allocate, show option menu +
+ballot/ranked tables + copy votes. README documents iPhone screenshot → Live Text
+→ paste workflow and Pages hosting.
+
+**Why.** Mobile in-app browser cannot copy round text; browser UI closes the loop
+for music-only rounds without a CLI.
+
+**Refs.** `working tree` — `docs/`, `README.md`, `spec/round-input-parsing.md`.
+
 ## 2026-07-31 — Forced `--tier-count` / `--bucket-count` emit a pickable option A
 
 **Change.** [`allocateBell`](../scripts/score/allocate.mjs) always pushes a
