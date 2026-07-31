@@ -24,6 +24,7 @@ mergeFit
 mergeFitJson
 normalizeCombined
 normalizeDownShape
+rankSortByProfile
 rankValue
 rankedSort
 resolveFitTrust
