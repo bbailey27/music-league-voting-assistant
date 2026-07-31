@@ -9,7 +9,7 @@ todos:
     status: completed
   - id: phase-3-split-tests
     content: Split tests/score.test.mjs into comment/allocate/merge test files
-    status: pending
+    status: completed
   - id: phase-4-dedup-helpers
     content: Export normalizeDownShape + OPTION_LETTERS from score modules; delegate parse-round
     status: completed

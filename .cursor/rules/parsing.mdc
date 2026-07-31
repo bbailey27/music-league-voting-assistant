@@ -1,8 +1,24 @@
 # Parsing Rules
-Numeric parsing ALWAYS occurs before evaluation.
-755→75.5, 745→74.5, 735→73.5, 725→72.5, 715→71.5.
-73= is treated as 73+ (common typing error).
-? indicates uncertainty only.
-7?→70.0 with uncertainty flag.
-'-' by itself means below consideration/not worth scoring.
-Never cluster by string similarity.
+
+Authoritative spec: [`spec/round-input-parsing.md`](../../spec/round-input-parsing.md),
+[`spec/score-parsing.md`](../../spec/score-parsing.md).
+
+## Hard rules
+
+- **Numeric parsing before evaluation** — digit scaling, modifiers, then rank/tier.
+- **`userComment` only** — never score from `submitterComment`.
+- **Own songs skipped** — `mine: true` / own marker; still list in raw-order table.
+- **HTML preferred** — use saved `.html` when available; lenient text is fallback.
+- **Peel-first comments** — scoring line is before the first newline; see score-parsing.
+- **Years are not scores** — bare 19XX/20XX skipped when scanning for music number.
+- **Bare `-`** — disqualified / below consideration (not a numeric score).
+- **Never cluster by string similarity** — 715 ≠ 735.
+
+## Paths
+
+| Input | Command hint |
+| --- | --- |
+| `.html` | `just parse <round>` |
+| Live Text paste | `just parse <round> --lenient` or web app paste |
+
+If this file disagrees with **spec/**, follow the spec.

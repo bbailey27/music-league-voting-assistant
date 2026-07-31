@@ -1,7 +1,28 @@
 # Output Rules
 
-Include ranked table.
-Preserve submitter comments and user comments verbatim whenever practical.
-Highlight cutoff songs, uncertainty cases, fit/music disagreements, and songs that depend heavily on interpretation.
-Fit output is the generated HTML report (`scripts/render-fit-html.mjs` rendered from the fit JSON sidecar), not a markdown table.
-When an allocation exists (`draftVotes` set), end both the HTML and the markdown companion with a raw-order vote-transfer table: just `#` / title / artist / points + total, for copying back into Music League. The HTML renders this automatically.
+Authoritative spec: [`spec/analysis-artifacts.md`](../../spec/analysis-artifacts.md),
+[`spec/point-allocation.md`](../../spec/point-allocation.md).
+
+## Tables
+
+- **Ranked table** — sort by allocation rank; include artist when useful.
+- **Raw-order vote-transfer table** — `#`, title, points; copy-back into Music League.
+- **Explore output** — Up options (A–E), Down options, Ballot preview after parse/merge/rescore.
+- **Excluded songs** — BLANK/DQ/gate-fail visible in CLI tables, not silently dropped.
+
+## Highlights
+
+Surface in markdown/HTML/CLI when present:
+
+- Cutoff / gate failures
+- `needsUserInput` blank scores (blocker — lead with these)
+- `needsReview` / uncertainty (`?` band — see `spec/uncertainty.md`)
+- Fit/music disagreements
+- Pin-reflowed option columns vs committed ballot
+
+## Fit rounds
+
+Fit research output is `fit.json` + rendered `fit.html` / `scores.html` — not a
+markdown fit table. After pick, `music.md` carries the committed allocation.
+
+Preserve user and submitter comments verbatim when practical.

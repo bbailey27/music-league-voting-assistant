@@ -1,13 +1,16 @@
 # Comment Interpretation
 
-Comments may belong to:
+## User vs submitter (scoring contract)
 
-1. Submitter
-2. User
+| Field | Role |
+| --- | --- |
+| **User comment** (`userComment`) | **Sole scoring source** — music/fit numbers, gates, modifiers |
+| **Submitter comment** (`submitterComment`) | Context only — why they submitted; never changes scores or allocation |
 
-Do not assume ownership if unclear.
+Do not infer scores from the submitter quote. Preserve both strings verbatim in
+outputs when practical. Full input rules: [round-input-parsing.md](round-input-parsing.md).
 
-Preserve user comments verbatim in outputs whenever practical.
+Comments may belong to the submitter or the user; do not assume ownership if unclear.
 
 Comments may contain:
 

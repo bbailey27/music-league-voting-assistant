@@ -4,6 +4,8 @@ overview: Bring the spec/rules in line with implemented behavior and add regress
 status: partial
 depends_on: MVP
 isProject: false
+
+**Snapshot regression:** shipped 2026-07-08. **Spec slice:** `spec/round-input-parsing.md` added 2026-07-31; rules refreshed.
 ---
 
 # Follow-up 5: Specs, rules, and tests
