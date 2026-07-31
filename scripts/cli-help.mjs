@@ -23,6 +23,16 @@ const PIN = `  --pin <index>:<votes>
                           Other songs reflow so each bank stays exact. On pick,
                           pins reconcile at the margin against the chosen option.`;
 
+const SCORE_OVERRIDE = `  --score <index>:<value>
+                          Write a music score onto music.json (no HTML re-parse).
+                          Index = raw submission order. Value accepts modifier
+                          suffixes: 74.5+, 76-, 75?, 74.5+? (same as parsed
+                          comments). Clears needsUserInput — song enters allocation
+                          normally. Repeatable; comma-separate.
+  --fit-score <index>:<value>
+                          Same for fitScore on fit.json (thematic) or the song
+                          record on music-only rounds.`;
+
 const SHAPE = `  --shape <preset>
                           Allocation curve preset: auto (default — enumerates
                           budget-exact staircases), bell, balanced (alias for
@@ -89,6 +99,7 @@ Commands:
   ml parse | merge | pick | rescore | fit | scores | final | run | status | tidy | leagues | config | help
 
 Re-weight/re-shape a parsed round from JSON (no HTML re-read): just rescore <name> --weights 5:5.
+Set a missing or wrong raw score: just rescore <name> --score <i>:<v> (see just help rescore).
 
 <name> is optional after the first explicit use — stored in data/.current-round.
 Omit it to continue the same round (e.g. just parse --fit, just run, just merge).
@@ -109,7 +120,9 @@ Format:  --pin <index>:<votes>     (repeatable; comma-separate: --pin 9:2,12:1)
           • positive → upvotes   (9:2  = give song #9 exactly 2 upvotes)
           • negative → downvotes when the round has downvotes enabled (6:-2 = 2 down on #6)
 
-Blank-score songs (needsUserInput) may be pinned on pick — manual ballot slot.
+Blank-score songs (needsUserInput) may be pinned on pick — a ballot-only workaround
+that assigns votes without a music score. To fill the score and run allocation
+normally, use just rescore --score <i>:<v> instead (see just help rescore).
 Own, disqualified, and unknown indices are rejected at pick.
 
 Other songs are re-allocated around the pin so the vote bank is still spent exactly.
@@ -237,12 +250,15 @@ Flags:
   ${DOWN_SHAPE}
   ${TIER_KNOBS}
   ${PIN}
+  ${SCORE_OVERRIDE}
   ${FAVORITE_BAND}
   --dry-run                Report the re-weight target without writing files.
 
 Example:
   just rescore tarot --weights 5:5    # re-blend 50/50, reset pick to draft
   just rescore --pin 8:1,5:1          # reflow every option column around pins
+  just rescore --score 17:78+         # fill a blank box; re-tier + re-allocate
+  just rescore --score 5:74.5+,7:75   # break a tiebreak-limited flat field
   just rescore --shape bell           # re-shape the current round's menu`,
 
   final: `just final [<name>] [flags]
@@ -374,7 +390,9 @@ Render (fit / scores / final):
 
 Rescore-only (re-blend/re-allocate from JSON; resets pick to draft):
   just rescore <name> --weights fit:music | --shape | --rank | --gate | --down-shape
-                                    | --tier-count | --bucket-count | --pin | --favorite-band | --dry-run
+                                    | --tier-count | --bucket-count | --pin
+                                    | --score i:v | --fit-score i:v | --favorite-band | --dry-run
+                                    (--score / --fit-score write raw scores; not vote pins)
 
 Other commands:
   just tidy     --dry-run | --no-name | --no-archive | --age <days>

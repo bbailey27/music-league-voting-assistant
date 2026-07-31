@@ -178,7 +178,16 @@ Deprecated on parse (warns): `--option`, `--reason` — use `just merge` and
 **Rescore only** (`just rescore` — re-blend/re-allocate from JSON, resets any pick to
 draft; never reads HTML): takes the shared allocation/profile flags above (`--weights`,
 `--shape`, `--rank`, `--gate`, `--down-shape`, `--tier-count`, `--bucket-count`,
-`--favorite-band`) plus `--dry-run`.
+`--pin`, `--favorite-band`) plus:
+
+| Flag          | Values            | Effect                                                                                                     |
+| ------------- | ----------------- | ---------------------------------------------------------------------------------------------------------- |
+| `--score`     | `<index>:<value>` | Write a music score to `music.json` (modifiers `+`/`-`/`?` OK). Clears `needsUserInput`; no HTML re-parse. |
+| `--fit-score` | `<index>:<value>` | Write fit score to `fit.json` (thematic) or song record (music-only).                                      |
+| `--dry-run`   | —                 | Preview re-score without writing files.                                                                    |
+
+See `just help rescore` for examples. Vote pins (`--pin`) and raw score overrides
+(`--score`) are different — use `--score` to fill a blank box and re-tier normally.
 
 **Render** (`just fit`, `just scores`, `just final`):
 
@@ -216,6 +225,8 @@ draft; never reads HTML): takes the shared allocation/profile flags above (`--we
 >
 > `just rescore <round> --weights 5:5` re-blends `combinedScore` from the stored
 > `score`/`fitScore`, re-runs the draft menu, and rewrites `music.md`/`music.json`.
+> To set or fix a raw music score without re-parsing HTML:
+> `just rescore <round> --score <i>:<v>` (e.g. `--score 17:78+`).
 > It resets any committed pick to draft (re-run `just pick`) and never touches
 > `picks.jsonl`. `pick --weights` is inert and now errors with this pointer.
 

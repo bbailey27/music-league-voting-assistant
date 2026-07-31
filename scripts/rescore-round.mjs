@@ -122,6 +122,7 @@ function applyScoreOverrides(songs, overrides) {
     s.uncertain = ov.uncertain;
     s.plusUncertain = ov.plusUncertain;
     s.minusUncertain = ov.minusUncertain;
+    s.needsUserInput = false;
   }
   return true;
 }
