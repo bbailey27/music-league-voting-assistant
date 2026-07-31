@@ -2,6 +2,7 @@
 
 import { TRADEOFF_OPTION_LETTERS } from '../round/pick.mjs';
 import { downShapeShort, formatPickSpec, pickSyntaxReminder } from '../cli-commands.mjs';
+import { rankSortByProfile } from '../score-core.mjs';
 import {
   cliScoreCells,
   cliScoreHeaders,
@@ -158,19 +159,14 @@ function baselineNetMap(baseline, pick) {
   return m;
 }
 
-/** Non-own songs ranked by combined (or music) score desc; unscored/excluded last. */
-function rankedComparisonSongs(songs, showCombined, profile) {
-  const scoreOf = (s) => (showCombined ? s.combinedScore : s.score);
+/** Non-own songs ranked like the Up option table (rankValue, then +/− mod, then title). */
+function rankedComparisonSongs(songs, profile) {
+  const sortFn = rankSortByProfile(profile ?? {});
   return [...songs].sort((a, b) => {
     const ea = isExcludedFromAllocation(a, profile);
     const eb = isExcludedFromAllocation(b, profile);
     if (ea !== eb) return ea ? 1 : -1;
-    const sa = scoreOf(a);
-    const sb = scoreOf(b);
-    if (sa == null && sb == null) return (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0);
-    if (sa == null) return 1;
-    if (sb == null) return -1;
-    return sb - sa || (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0);
+    return sortFn(a, b);
   });
 }
 
@@ -192,7 +188,7 @@ export function printOptionPinComparisonCli(
   const baseFor = (idx) => base.get(idx) || { up: 0, down: 0 };
   const showCombined = cliShowsCombined(songs, ownSongs);
   const scoreHdrs = cliScoreHeaders(showCombined);
-  const rows = rankedComparisonSongs(songs, showCombined, profile);
+  const rows = rankedComparisonSongs(songs, profile);
   const anyDown = rows.some(
     (s) => baseFor(s.rawOrderIndex).down > 0 || (s.finalDownvotes || 0) > 0
   );
@@ -221,6 +217,7 @@ export function printOptionPinComparisonCli(
       });
     }
   }
+  if (!diffs.length) return { rendered: false, changed: false };
 
   const mkRow = (commentMax) =>
     rows.map((s) => {
@@ -313,15 +310,13 @@ export function printAppliedAllocationCli(
   ownSongs = [],
   pick = null,
   budget = null,
-  { hadPins = false, profile = null, baseline = null } = {}
+  { profile = null, baseline = null } = {}
 ) {
   const rows = rawOrderRows(songs, ownSongs);
   if (!rows.length) return;
   const signed = (budget?.downvoteBankSize ?? 0) > 0;
-  const hasTweaks = (pick?.tweaks?.length ?? 0) > 0 || (pick?.downTweaks?.length ?? 0) > 0;
-  if (hadPins || hasTweaks) {
-    const { rendered, changed } = printOptionPinComparisonCli(songs, ownSongs, pick, profile, baseline);
-    if (rendered && !changed && hadPins) console.log('    Pins produced no changes');
+  if (pick?.chosen) {
+    printOptionPinComparisonCli(songs, ownSongs, pick, profile, baseline);
   }
   printRawBallotTable('Applied', rows, cliShowsCombined(songs, ownSongs), signed);
 }

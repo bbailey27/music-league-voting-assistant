@@ -182,11 +182,15 @@ function tierKey(s, profile) {
 }
 
 // Order songs for ranking/tiering, highest first.
-function rankSort(profile) {
+export function rankSortByProfile(profile) {
   return (a, b) =>
     (rankValue(b, profile) ?? -Infinity) - (rankValue(a, profile) ?? -Infinity) ||
     tiebreakRank(b) - tiebreakRank(a) ||
     String(a.title).localeCompare(String(b.title));
+}
+
+function rankSort(profile) {
+  return rankSortByProfile(profile);
 }
 
 // Lowest-ranked first — the downvote tail of the continuous tier spectrum.

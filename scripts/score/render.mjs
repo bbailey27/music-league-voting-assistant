@@ -16,13 +16,15 @@ export function buildPickRecord({
   reason = null,
   downOverrides = null,
   pickedAt = new Date().toISOString(),
+  referencePerSong = null,
 }) {
   const letter = (i) => String.fromCharCode(65 + i);
   const chosen = options[chosenIndex];
   if (!chosen) return null;
   const finalByIdx = new Map(songs.map((s) => [s.rawOrderIndex, s.finalVotes ?? 0]));
+  const tweakSource = referencePerSong ?? chosen.perSong;
   const tweaks = [];
-  for (const ps of chosen.perSong) {
+  for (const ps of tweakSource) {
     const fin = finalByIdx.get(ps.rawOrderIndex) ?? 0;
     if (fin !== ps.votes) {
       tweaks.push({ rawOrderIndex: ps.rawOrderIndex, title: ps.title, from: ps.votes, to: fin });

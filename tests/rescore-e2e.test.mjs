@@ -112,6 +112,36 @@ test('rescore --score --dry-run does not write music.json', async () => {
   }
 });
 
+test('rescore --score on a blank box clears needsUserInput and allocates normally', async () => {
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-rescore-score-blank-'));
+  const dataDir = join(tmpRoot, 'data');
+  const env = { ...process.env, ML_DATA_DIR: dataDir };
+  try {
+    await mkdir(join(dataDir, 'rounds'), { recursive: true });
+    await copyFile(fixtureHtml, join(dataDir, 'rounds', `${ROUND}.html`));
+    const musicJson = join(dataDir, 'analysis', ROUND, 'music.json');
+
+    await ml(env, 'parse', ROUND);
+    const parsed = JSON.parse(await readFile(musicJson, 'utf8'));
+    const blank = songByIndex(parsed, 2);
+    blank.score = null;
+    blank.plus = false;
+    blank.minus = false;
+    blank.needsUserInput = true;
+    await writeFile(musicJson, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+
+    await ml(env, 'rescore', ROUND, '--score', '2:78+');
+    const after = JSON.parse(await readFile(musicJson, 'utf8'));
+    const s2 = songByIndex(after, 2);
+    assert.equal(s2.score, 78);
+    assert.equal(s2.plus, true);
+    assert.equal(s2.needsUserInput, false, '--score clears needsUserInput');
+    assert.ok((s2.finalVotes || 0) > 0, 'scored song enters normal upvote allocation');
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
 test('rescore --dry-run does not write and reports the reset', async () => {
   const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-rescore-dry-'));
   const dataDir = join(tmpRoot, 'data');
@@ -217,6 +247,26 @@ test('pick --pin merges with stored pins on the stored unpinned menu', async () 
 
     const { stdout } = await ml(env, 'pick', ROUND, 'A', '--pin', '0:1', '--dry-run');
     assert.match(stdout, new RegExp(storedShape.replace(/[×/]/g, (c) => `\\${c}`)));
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('pick after rescore --pin without pick --pin skips the pin comparison table', async () => {
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-pick-stored-pins-no-compare-'));
+  const dataDir = join(tmpRoot, 'data');
+  const env = { ...process.env, ML_DATA_DIR: dataDir };
+  try {
+    await mkdir(join(dataDir, 'rounds'), { recursive: true });
+    await copyFile(fixtureHtml, join(dataDir, 'rounds', `${ROUND}.html`));
+    const musicJson = join(dataDir, 'analysis', ROUND, 'music.json');
+
+    await ml(env, 'parse', ROUND);
+    await ml(env, 'rescore', ROUND, '--pin', '2:1');
+    const { stdout } = await ml(env, 'pick', ROUND, 'A', '--reason', 'stored pins only');
+    assert.doesNotMatch(stdout, /Original/, 'no comparison when pick matches the pinned menu');
+    assert.doesNotMatch(stdout, /Pins produced no changes/);
+    assert.ok(stdout.includes('Applied'), 'applied ballot still prints');
   } finally {
     await rm(tmpRoot, { recursive: true, force: true });
   }

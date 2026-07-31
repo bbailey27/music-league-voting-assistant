@@ -13,6 +13,7 @@ export {
 } from './score/comment.mjs';
 export {
   rankValue,
+  rankSortByProfile,
   estimateCenter,
   enrichProfileWithBudget,
   allocate,

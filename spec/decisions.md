@@ -11,6 +11,66 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-31 — Pick pin comparison only when pick changes the presented menu
+
+**Change.** [`applyOptionPick`](../scripts/round/pick.mjs) snapshots the pin comparison
+baseline from the **display menu** (the pin-reflowed Up column the owner already saw),
+not the unpinned option letter. [`printOptionPinComparisonCli`](../scripts/parse/cli-print.mjs)
+renders only when net votes differ; stored explore pins no longer trigger
+`Original`/`Altered` on a plain `just pick B`. [`buildPickRecord`](../scripts/score/render.mjs)
+diffs tweaks against the display column too.
+
+**Why.** After `rescore --pin`, picking B without new `--pin` applied the same ballot
+the menu already showed, but the CLI re-printed a misleading unpinned-vs-pinned
+comparison.
+
+**Refs.** `working tree` — `scripts/round/pick.mjs`, `scripts/parse/cli-print.mjs`,
+`scripts/pick-round.mjs`, `tests/cli-print.test.mjs`, `tests/rescore-e2e.test.mjs`.
+
+## 2026-07-31 — Pin comparison table uses same rank sort as Up options
+
+**Change.** [`rankedComparisonSongs`](../scripts/parse/cli-print.mjs) (the `B + pin`
+comparison table) now sorts via exported [`rankSortByProfile`](../scripts/score/allocate.mjs)
+— `rankValue`, then `+`/`-` modifier (`tiebreakRank`), then title — instead of score
+then raw submission order. Excluded songs still append last.
+
+**Why.** At tied scores the pin table fell through to `#` order / alphabetical title
+while the Up option table honored `+` first; the owner expects one consistent rank
+order across CLI tables.
+
+**Refs.** `working tree` — `scripts/parse/cli-print.mjs`, `scripts/score/allocate.mjs`,
+`tests/cli-print.test.mjs`.
+
+## 2026-07-31 — `rescore --score` clears `needsUserInput`; help documents score overrides
+
+**Change.** [`applyScoreOverrides`](../scripts/rescore-round.mjs) sets `needsUserInput:
+false` when `--score` writes a music score, so the song enters normalization and
+allocation like a parsed comment. [`scripts/cli-help.mjs`](../scripts/cli-help.mjs)
+documents `--score` / `--fit-score` on `just help rescore` and `just help flags`;
+`just help pin` cross-links to score overrides for blank boxes.
+
+**Why.** Manual score entry had been writing `score` but leaving `needsUserInput`
+true, so allocation still treated the song as blank. The flags shipped in code and
+spec (2026-07-21) but were never added to CLI help — only vote `--pin` was documented
+there, which conflated ballot pins with raw-score edits.
+
+**Refs.** `working tree` — `scripts/rescore-round.mjs`, `scripts/cli-help.mjs`,
+`tests/rescore-e2e.test.mjs`.
+
+## 2026-07-29 — just recipes: positional-arguments for quoted flag values
+
+**Change.** `justfile` sets `positional-arguments` and every pass-through recipe forwards
+with `"$@"` instead of `{{args}}`. Added `tests/just-args.test.mjs` (spaced `--reason` via
+`just pick`).
+
+**Why.** `{{args}}` interpolates space-separated tokens without shell quoting, so
+`just pick d --reason "Closest alignment with the numeric clumps"` split the reason into
+extra argv words (`Unexpected argument "alignment"`). Same bug affected every variadic
+recipe (`parse`, `merge`, `rescore`, `fit`, `scores`, `final`, `run`, `status`, `tidy`,
+`config`, `test-regression`, `help`).
+
+**Refs.** `working tree` — `justfile`, `tests/just-args.test.mjs`.
+
 ## 2026-07-28 — Pick reuses stored explore menu (cutoff + pins on profile)
 
 **Change.** Explore writes persist an unpinned `menuTradeoffs` snapshot alongside pin-reflowed

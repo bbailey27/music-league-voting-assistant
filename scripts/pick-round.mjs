@@ -165,13 +165,7 @@ function songsFromPayload(data) {
   return (data.songs || []).map((s) => ({ ...s }));
 }
 
-/** True when the pick carries a manual pin on either the up or down axis. */
-function hasAnyPins(profile) {
-  const up = profile.overrides && Object.keys(profile.overrides).length;
-  const down = profile.downOverrides && Object.keys(profile.downOverrides).length;
-  return Boolean(up || down);
-}
-
+/** Merge stored profile pins with any new `--pin` values (CLI wins on index clash). */
 function resolvePickPins(args, stored) {
   if (!args.pin.length) {
     return {
@@ -323,6 +317,7 @@ async function main() {
       cap: upCap,
       exitOnError: !args.dryRun,
       roundId,
+      displayTradeoffs: menuForDisplay,
     });
     if (args.dryRun) {
       if (picked.error) console.error(picked.error);
@@ -338,7 +333,6 @@ async function main() {
     await writeFile(scoresPaths(roundId).json, JSON.stringify(fitData, null, 2), 'utf8');
     console.log(`Wrote ${scoresPaths(roundId).json}`);
     printAppliedAllocationCli(parsed.songs, parsed.ownSongs, picked.pick, parsed.budget, {
-      hadPins: hasAnyPins(profile),
       profile: slimProfile({ ...profile, rankBy: args.rank ?? musicData.profile?.rankBy ?? 'combined' }),
       baseline: picked.baseline,
     });
@@ -392,6 +386,7 @@ async function main() {
     cap: upCap,
     exitOnError: !args.dryRun,
     roundId,
+    displayTradeoffs: menuForDisplay,
   });
 
   if (args.dryRun) {
@@ -429,7 +424,6 @@ async function main() {
   await writeFile(paths.json, JSON.stringify(payload, null, 2), 'utf8');
   console.log(`Wrote ${paths.json}`);
   printAppliedAllocationCli(songs, musicData.ownSongs || [], picked.pick, budget, {
-    hadPins: hasAnyPins(profile),
     profile: slim,
     baseline: picked.baseline,
   });

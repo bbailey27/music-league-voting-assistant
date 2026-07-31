@@ -370,6 +370,7 @@ export function applyOptionPick({
   cap = Infinity,
   exitOnError = true,
   roundId = null,
+  displayTradeoffs = null,
 }) {
   // Pin reconciliation diffs against the unpinned menu (`initialTradeoffs`). Callers
   // must not pass pin overrides into the merge/allocate that builds that menu — a
@@ -388,22 +389,41 @@ export function applyOptionPick({
     }
     return { error, tradeoffs: initialTradeoffs, pick: null, baseline: null };
   }
-  // Clean baseline for the pin comparison: the chosen option's own up split with
-  // the down shape allocated around it, and NO pins on either axis. Down eligibility
-  // depends on the up split, so this must force the option's exact upvotes (not the
-  // menu default) before capturing the baseline downvotes. Run it first, snapshot,
-  // then reallocate with pins so `songs` ends in the applied (altered) state.
   const chosen = presented[idx];
   const optionOverrides = Object.fromEntries(
     (chosen?.perSong || []).map((p) => [p.rawOrderIndex, p.votes])
   );
-  reallocate(optionOverrides, {});
-  const baseline = new Map(
-    songs.map((s) => [s.rawOrderIndex, { up: s.finalVotes || 0, down: s.finalDownvotes || 0 }])
-  );
+
+  // Baseline for the pin comparison: the chosen column from the menu the owner
+  // already reviewed (pin-reflowed Up/Down tables). Only pick-time `--pin` tweaks
+  // should diff against this — not stored explore pins the menu already reflects.
+  let baseline;
+  let referencePerSong = chosen?.perSong;
+  if (displayTradeoffs) {
+    const displayUp =
+      displayTradeoffs.find((t) => t.kind === 'tier-structure')?.options?.[idx]?.perSong || [];
+    referencePerSong = displayUp.length ? displayUp : referencePerSong;
+    const displayOverrides = Object.fromEntries(displayUp.map((p) => [p.rawOrderIndex, p.votes]));
+    reallocate(displayOverrides, downOverrides);
+    baseline = new Map(
+      songs.map((s) => [s.rawOrderIndex, { up: s.finalVotes || 0, down: s.finalDownvotes || 0 }])
+    );
+  } else {
+    reallocate(optionOverrides, {});
+    baseline = new Map(
+      songs.map((s) => [s.rawOrderIndex, { up: s.finalVotes || 0, down: s.finalDownvotes || 0 }])
+    );
+  }
 
   const tradeoffs = reallocate(overrides, downOverrides);
-  const pick = buildPickRecord({ options: presented, chosenIndex: idx, songs, reason, downOverrides });
+  const pick = buildPickRecord({
+    options: presented,
+    chosenIndex: idx,
+    songs,
+    reason,
+    downOverrides,
+    referencePerSong,
+  });
   console.log(
     `Applied option ${pick.chosen} — ${pick.tierCount} tier${pick.tierCount === 1 ? '' : 's'}, ${pick.shape}.` +
       (pick.tweaks.length ? ` (${pick.tweaks.length} manual tweak${pick.tweaks.length === 1 ? '' : 's'})` : '') +

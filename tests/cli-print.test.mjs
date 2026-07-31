@@ -65,10 +65,84 @@ const sampleBaseline = new Map([
   [12, { up: 2, down: 0 }],
 ]);
 
+test('printAppliedAllocationCli ranks pin comparison like the Up table (+ before plain at same score)', () => {
+  const songs = [
+    {
+      rawOrderIndex: 5,
+      title: 'Zebra Plain',
+      score: 74,
+      combinedScore: 74,
+      gate: 'pass',
+      finalVotes: 2,
+    },
+    {
+      rawOrderIndex: 3,
+      title: 'Alpha Plus',
+      score: 74,
+      plus: true,
+      combinedScore: 74,
+      gate: 'pass',
+      finalVotes: 2,
+    },
+  ];
+  const baseline = new Map([
+    [3, { up: 1, down: 0 }],
+    [5, { up: 1, down: 0 }],
+  ]);
+  const pick = {
+    chosen: 'A',
+    options: [{ letter: 'A', isChosen: true, perSong: [] }],
+  };
+  const out = captureLog(() =>
+    printAppliedAllocationCli(songs, [], pick, { downvoteBankSize: 0 }, {
+      profile: { rankBy: 'combined' },
+      baseline,
+    })
+  );
+  const tableStart = out.indexOf('A + pin');
+  const alphaIdx = out.indexOf('Alpha Plus', tableStart);
+  const zebraIdx = out.indexOf('Zebra Plain', tableStart);
+  assert.ok(alphaIdx >= 0 && zebraIdx >= 0, 'both songs in comparison table');
+  assert.ok(alphaIdx < zebraIdx, '+ song ranks above plain at tied score (not raw order / alpha)');
+});
+
+test('printAppliedAllocationCli skips pin comparison when baseline matches applied', () => {
+  const songs = [
+    {
+      rawOrderIndex: 11,
+      title: 'You Problem',
+      score: 77,
+      combinedScore: 79.6,
+      gate: 'pass',
+      finalVotes: 2,
+    },
+    {
+      rawOrderIndex: 12,
+      title: 'TUNNEL VISION',
+      score: 77,
+      combinedScore: 79.6,
+      gate: 'pass',
+      finalVotes: 2,
+    },
+  ];
+  const pick = {
+    chosen: 'B',
+    options: [{ letter: 'B', isChosen: true, perSong: [] }],
+  };
+  const baseline = new Map([
+    [11, { up: 2, down: 0 }],
+    [12, { up: 2, down: 0 }],
+  ]);
+  const out = captureLog(() =>
+    printAppliedAllocationCli(songs, [], pick, { downvoteBankSize: 0 }, { baseline })
+  );
+  assert.doesNotMatch(out, /Original/, 'no comparison when nothing changed');
+  assert.ok(out.includes('\nApplied'), 'applied ballot still prints');
+});
+
 test('printAppliedAllocationCli lists net diffs under comparison table before Applied', () => {
   const out = captureLog(() =>
     printAppliedAllocationCli(sampleSongs, [], samplePick, { downvoteBankSize: 0 }, {
-      hadPins: true,
       baseline: sampleBaseline,
     })
   );
@@ -81,24 +155,18 @@ test('printAppliedAllocationCli lists net diffs under comparison table before Ap
   assert.ok(appliedIdx > diffIdx, 'Applied ballot follows diffs');
 });
 
-test('printAppliedAllocationCli warns when pins produce no changes', () => {
-  // Baseline matches the applied ballot exactly (both +3) → no net change.
+test('printAppliedAllocationCli omits comparison when pick matches the presented menu', () => {
   const baseline = new Map([
     [11, { up: 3, down: 0 }],
     [12, { up: 3, down: 0 }],
   ]);
   const pick = { ...samplePick, tweaks: [] };
   const out = captureLog(() =>
-    printAppliedAllocationCli(sampleSongs, [], pick, { downvoteBankSize: 0 }, {
-      hadPins: true,
-      baseline,
-    })
+    printAppliedAllocationCli(sampleSongs, [], pick, { downvoteBankSize: 0 }, { baseline })
   );
-  assert.match(out, /Pins produced no changes/);
-  const warnIdx = out.indexOf('Pins produced no changes');
-  const appliedIdx = out.indexOf('\nApplied');
-  assert.ok(warnIdx > out.indexOf('B + pin'));
-  assert.ok(appliedIdx > warnIdx);
+  assert.doesNotMatch(out, /Original/, 'matching baseline skips comparison');
+  assert.doesNotMatch(out, /Pins produced no changes/);
+  assert.ok(out.includes('\nApplied'));
 });
 
 test('printAppliedAllocationCli renders a shared table for down-only pins', () => {
@@ -134,7 +202,6 @@ test('printAppliedAllocationCli renders a shared table for down-only pins', () =
   };
   const out = captureLog(() =>
     printAppliedAllocationCli(songs, [], pick, { downvoteBankSize: 1 }, {
-      hadPins: true,
       profile: { downShape: 'curved' },
       baseline,
     })
