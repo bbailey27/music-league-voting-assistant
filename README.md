@@ -52,7 +52,7 @@ operate on — the code still builds, lints, and passes tests (which use the syn
 
 The **vote assistant** lives in [`docs/`](docs/) in git — that folder name is a GitHub
 Pages convention, not a documentation site. When published, it **is** the app: paste
-round → edit scores → pick A/B/C → copy votes.
+round → edit scores → pick A/B/C.
 
 **Before deploy or after changing `scripts/score*`:** run `just sync-web` so
 `docs/lib/` has a copy of the pipeline modules (Pages cannot load `../scripts/`).
@@ -60,8 +60,16 @@ round → edit scores → pick A/B/C → copy votes.
 **Publish:** GitHub → Settings → Pages → branch `main`, folder **`/docs`**. Your URL
 is `https://<user>.github.io/<repo>/` — open that on your phone.
 
-**Local preview:** `just sync-web && npx --yes serve -p 8080 .` then open
-`http://localhost:8080/docs/`
+**Local preview:**
+
+```bash
+just sync-web
+npx --yes serve docs
+# → http://localhost:3000/  (app is the site root; port varies if busy)
+```
+
+If you serve the whole repo (`npx serve .`), open **`/docs/`** on that port — or use the
+root `index.html` redirect.
 
 iPhone capture steps are **on the app page** (step 1). Input rules:
 [spec/round-input-parsing.md](spec/round-input-parsing.md).

@@ -8,6 +8,11 @@ default:
 sync-web:
     node scripts/sync-web-lib.mjs
 
+# Preview the phone/web vote assistant locally (serves docs/ as site root)
+web:
+    just sync-web
+    npx --yes serve docs
+
 # Parse a round HTML → data/analysis/<round>/music.md + music.json (fuzzy name; flags optional)
 parse *args:
     node scripts/ml.mjs parse "$@"

@@ -53,15 +53,28 @@ Examples:
   _Surreal_.
 - ATEEZ _Fireworks (I'm The One)_ → March 2021 EP/single date.
 
-### `album-body` — album / EP body only (singles disregarded)
+### `earliest-album-release` — earliest release on an album body (singles excluded)
 
-**Used by:** _(none wired yet — document for rounds that say "from a {year} album".)_
+**Used by:** _(upcoming year-themed league — not wired in the gate script yet.)_
 
-The target year is the release of the **album or EP** the track belongs to. Standalone
-singles, pre-release drops, or MV-only dates **before** that album/EP do **not** count — even
-if the same recording later appears on the album.
+**Cache field:** `earliestAlbumReleaseDate`.
 
-Use when the league prompt is about albums/eras, not "anything that existed in {year}".
+The target year is the **earliest official release of this song on an EP, mini album, or full
+album**. Standalone singles, pre-release singles, and MV-only drops **before** that album/EP
+**do not** count — even if the same recording later appears on the album.
+
+Deluxe / repackage / reissue rows **do not** reset the date if the song already appeared on
+the standard album. A track genuinely **new** on a deluxe counts from that deluxe's album date
+(bonus-track rule). The gate is **not** the linked Spotify row — find the earliest qualifying
+album-body release even when the submitter linked a later edition.
+
+Examples:
+
+- Digital single Mar 2022 → full album May 2022 → **May 2022** (single ignored).
+- Submitter links Jul 2022 deluxe; song was on May 2022 standard album → **May 2022**.
+- B-side that only exists on a repackage → repackage album date.
+- Song never appeared on any album/EP (single-only career) → **fail** / ineligible for this
+  league.
 
 ### Precision
 
@@ -75,24 +88,39 @@ when month/day are unknown — flag with `confidence: fuzzy` or `needs-review`.
 
 ---
 
-## Two dates per cache entry
+## Three dates per cache entry
 
-Every cached track carries two concepts:
+Two gate fields (one per league family) plus a linked-row audit field:
 
-| Field                 | Meaning                                                                                                                                               |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `earliestReleaseDate` | What the active **gate rule** tests (see above). For `version-earliest`, the first official release of **this** recording.                            |
-| `albumReleaseDate`    | Release date of the **specific album/EP/single** this Spotify track row sits on. Audit only — a repackage, deluxe, or compilation can be years later. |
+| Field                       | Role      | Meaning                                                                                                                                 |
+| --------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `earliestReleaseDate`       | **Gate**  | `version-earliest` (`bg-years`): first official release of **this recording** — **singles count**.                                      |
+| `earliestAlbumReleaseDate`  | **Gate**  | `earliest-album-release` (upcoming): earliest release on an **EP / mini / full album** — **singles do not count**; not the linked row.  |
+| `albumReleaseDate`          | **Audit** | **Linked album release date** — date on the exact album/EP/single row this Spotify URI points at. No gate opinion; no other versions.   |
 
-`albumEdition` describes that specific album row:
+**How the two leagues differ:** same song, single Mar 2022 → album May 2022:
+
+- `version-earliest` → **Mar 2022** (`earliestReleaseDate`)
+- `earliest-album-release` → **May 2022** (`earliestAlbumReleaseDate`)
+
+Prose alias for the audit field: **linked album release date**. JSON key stays
+`albumReleaseDate` for backward compatibility.
+
+Only one gate field is tested per round — whichever matches the league's `releaseDateRule`.
+
+`albumEdition` describes the **linked** row only:
 
 `standard` · `deluxe` · `repackage` · `reissue` · `compilation`
 
-A compilation trap in either direction still needs human judgment:
+Edition traps when setting gate fields:
 
-- Album says 2018, earliest release of this recording is 2016 → **pass** a 2016 year gate
-  under `version-earliest`.
-- Album says 2016, earliest release is 2015 → **fail** a 2016 year gate.
+- Linked row says 2018, `earliestReleaseDate` is 2016 → **pass** a 2016 gate under
+  `version-earliest`.
+- Linked row says 2016, `earliestReleaseDate` is 2015 → **fail** a 2016 gate.
+- Single Mar 2022, album May 2022: `earliestAlbumReleaseDate` is **May 2022** regardless of
+  linked row.
+- Submitter links 2023 deluxe, song on 2022 standard album → `earliestAlbumReleaseDate` is
+  **2022**, not the deluxe linked date.
 
 ---
 
@@ -100,18 +128,22 @@ A compilation trap in either direction still needs human judgment:
 
 Keyed by `spotify:track:…` (the URI from parsed `music.json`). Shape per track:
 
-| Field                 | Required | Notes                                                     |
-| --------------------- | -------- | --------------------------------------------------------- |
-| `artist`, `title`     | yes      | Echo for humans; not a lookup key.                        |
-| `earliestReleaseDate` | gate     | ISO `YYYY`, `YYYY-MM`, or `YYYY-MM-DD`. Prefer full date. |
-| `earliestSource`      | yes      | URL or citation for the gate date.                        |
-| `albumTitle`          | audit    | Album name on this Spotify row.                           |
-| `albumReleaseDate`    | audit    | ISO date of that album row.                               |
-| `albumType`           | audit    | `single` · `ep` · `album` · `compilation` · …             |
-| `albumEdition`        | audit    | See vocab above.                                          |
-| `confidence`          | yes      | `verified` · `album-date` · `fuzzy` · `needs-review`      |
-| `verifiedAt`          | yes      | `YYYY-MM-DD` when last checked.                           |
-| `note`                | optional | Version traps, remix vs original, manual overrides.       |
+| Field                     | Required | Notes                                                                                          |
+| ------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `artist`, `title`         | yes      | Echo for humans; not a lookup key.                                                             |
+| `earliestReleaseDate`        | gate     | `version-earliest` leagues. ISO `YYYY`, `YYYY-MM`, or `YYYY-MM-DD`. Prefer full date.     |
+| `earliestAlbumReleaseDate`   | gate     | `earliest-album-release` leagues (when populated). Same ISO precision.                    |
+| `earliestSource`             | yes*     | Citation for `earliestReleaseDate`.                                                       |
+| `earliestAlbumSource`        | yes*     | Citation for `earliestAlbumReleaseDate`.                                                  |
+| `albumTitle`              | audit    | Album name on the **linked** Spotify row.                                                      |
+| `albumReleaseDate`        | audit    | **Linked album release date** — ISO date on that row only; never used as a gate by itself.     |
+| `albumType`               | audit    | `single` · `ep` · `album` · `compilation` · … on the linked row.                               |
+| `albumEdition`            | audit    | Edition of the **linked** row (see vocab above).                                               |
+| `confidence`              | yes      | `verified` · `linked-album-date` · `fuzzy` · `needs-review` (see below).                       |
+| `verifiedAt`              | yes      | `YYYY-MM-DD` when last checked.                                                                |
+| `note`                    | optional | Version traps, remix vs original, manual overrides.                                            |
+
+\*Required when a gate date is set.
 
 Populated by `release-year-gate.mjs --fetch`, hand edits, or future CSV enrichment. Never
 overwrite `confidence: verified` entries from automated fuzzy matches.
@@ -123,7 +155,7 @@ overwrite `confidence: verified` entries from automated fuzzy matches.
 | Level          | Meaning                                                                                    |
 | -------------- | ------------------------------------------------------------------------------------------ |
 | `verified`     | Human or strong primary source (label site, Wikipedia with date, official MV description). |
-| `album-date`   | Only the Spotify/album row date is known; earliest may differ (compilations).              |
+| `linked-album-date` | Only the **linked** row date is known; used as a gate fallback — unsafe (compilations, deluxes). Legacy value `album-date` may appear in older cache rows. |
 | `fuzzy`        | Year-only or weak match — do not auto-pass a gate without review.                          |
 | `needs-review` | Conflicting sources or version ambiguity.                                                  |
 

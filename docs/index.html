@@ -9,7 +9,7 @@
   <body>
     <header class="site-header">
       <h1>Music League Vote Assistant</h1>
-      <p class="tagline">Paste your round, check your scores, pick a vote split, copy the result back into Music League.</p>
+      <p class="tagline">Paste your round, check your scores, pick a vote split.</p>
     </header>
 
     <main>
@@ -25,7 +25,7 @@
               <li>Scroll through the round in Music League and <strong>screenshot every screen</strong> until all songs are captured.</li>
               <li>Open <strong>Photos</strong> → a screenshot → tap <strong>Live Text</strong> (text icon in the corner).</li>
               <li><strong>Select All</strong> → <strong>Copy</strong>.</li>
-              <li>Come back here and paste into step 2. Multiple shots? Paste each block in order.</li>
+              <li>Come back here and paste into step 2. Multiple shots? Paste each block in order or merge them into one first.</li>
               <li>Turn on <strong>Live Text mode</strong> below if you see <code>4/1000</code>-style footers but no <code>Album art</code> lines.</li>
             </ol>
             <p class="note">On a computer with a saved round <code>.html</code> file, paste that instead — more accurate.</p>
@@ -92,38 +92,29 @@
         <button type="button" id="reallocate" class="secondary">Re-run allocation after edits</button>
       </section>
 
-      <section class="panel workflow-step hidden" id="pick-section">
+      <section class="panel workflow-step panel-wide hidden" id="pick-section">
         <h2><span class="step-num">4</span> Pick a vote distribution</h2>
-        <p class="sub">Same A/B/C options as <code>just pick</code> on the CLI. Tap one to apply it.</p>
-        <div id="options" class="options"></div>
+        <p class="sub">Same Up/Down tables as <code>just pick</code>. Tap an <strong>A</strong>/<strong>B</strong>/<strong>C</strong> column to apply it.</p>
+        <div id="tradeoff-tables" class="tradeoff-tables"></div>
       </section>
 
-      <section class="panel workflow-step hidden" id="output-section">
-        <h2><span class="step-num">5</span> Copy votes back into Music League</h2>
+      <section class="panel workflow-step panel-wide hidden" id="output-section">
+        <h2><span class="step-num">5</span> Applied ballot</h2>
+        <p class="sub">Your chosen option — export/download coming next.</p>
         <p id="budget-line" class="meta"></p>
-        <div class="table-wrap">
-          <table id="ballot-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Song</th>
-                <th>Music</th>
-                <th>Votes</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-            <tfoot>
-              <tr>
-                <td colspan="3">Total up</td>
-                <td id="vote-total"></td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-        <button type="button" id="copy-ballot" class="primary">Copy votes for Music League</button>
-        <p class="copy-hint">Copies one vote per line in submission order (<code># title → votes</code>).</p>
+        <div id="ballot-table" class="ballot-table"></div>
       </section>
     </main>
-    <script type="module" src="app.js"></script>
+    <p id="load-error" class="load-error" hidden></p>
+    <script type="module">
+      import('./app.js').catch((err) => {
+        const el = document.getElementById('load-error');
+        el.hidden = false;
+        el.textContent =
+          'App failed to load (missing module?). Hard-refresh or run just sync-web if developing locally. ' +
+          (err?.message || String(err));
+        console.error(err);
+      });
+    </script>
   </body>
 </html>

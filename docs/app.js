@@ -8,6 +8,7 @@ import {
 } from './lib/score-core.mjs';
 import { parseRoundDocument } from './lib/extract-html.mjs';
 import { parseRoundText } from './lib/parse-text.mjs';
+import { buildBallotTable, buildPickTables } from './lib/web-table.mjs';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -87,9 +88,163 @@ function applySelectedOption() {
       if (s) s.finalDownvotes = p.votes || 0;
     }
   }
-  renderOptions();
+  renderTradeoffTables();
   renderBallot();
   renderBlockers();
+}
+
+function numericCols(headers) {
+  const numeric = new Set(['#', 'Score', 'Music', 'Fit', 'Combined', 'Mod', 'Votes']);
+  const cols = new Set();
+  headers.forEach((h, i) => {
+    if (numeric.has(h) || /^[A-F]$/.test(h) || /^(cv|fl|cc)$/.test(h)) cols.add(i);
+  });
+  return cols;
+}
+
+function mountCliTable(table, { selectableOption = false, selectedOption = 0, onSelectOption = null } = {}) {
+  const wrap = document.createElement('div');
+  wrap.className = 'cli-table-block';
+
+  const heading = document.createElement('h3');
+  heading.className = 'cli-table-title';
+  heading.textContent = table.title;
+  wrap.appendChild(heading);
+
+  const tableEl = document.createElement('table');
+  tableEl.className = 'cli-table';
+
+  const numCols = numericCols(table.headers);
+  const thead = document.createElement('thead');
+  const headTr = document.createElement('tr');
+  table.headers.forEach((h, colIdx) => {
+    const th = document.createElement('th');
+    th.textContent = h;
+    if (numCols.has(colIdx)) th.classList.add('num');
+    const isOptionCol =
+      selectableOption &&
+      !table.down &&
+      colIdx >= table.optionStartCol &&
+      colIdx < table.optionStartCol + table.optionColCount;
+    if (isOptionCol) {
+      const optIdx = colIdx - table.optionStartCol;
+      th.classList.add('option-col');
+      if (optIdx === selectedOption) th.classList.add('selected');
+      th.title = `Apply option ${h}`;
+      th.addEventListener('click', () => onSelectOption?.(optIdx));
+    }
+    headTr.appendChild(th);
+  });
+  thead.appendChild(headTr);
+  tableEl.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  for (const row of table.rows) {
+    const tr = document.createElement('tr');
+    if (row.excluded) tr.classList.add('row-excluded');
+    row.cells.forEach((cell, colIdx) => {
+      const td = document.createElement('td');
+      td.textContent = cell;
+      if (numCols.has(colIdx)) td.classList.add('num');
+      if (
+        selectableOption &&
+        !table.down &&
+        colIdx >= table.optionStartCol &&
+        colIdx < table.optionStartCol + table.optionColCount
+      ) {
+        const optIdx = colIdx - table.optionStartCol;
+        td.classList.add('option-col');
+        if (optIdx === selectedOption) td.classList.add('selected');
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  }
+  if (table.totals?.length) {
+    const tr = document.createElement('tr');
+    tr.className = 'totals-row';
+    table.totals.forEach((cell, colIdx) => {
+      const td = document.createElement('td');
+      td.textContent = cell;
+      if (numCols.has(colIdx)) td.classList.add('num');
+      if (
+        selectableOption &&
+        !table.down &&
+        colIdx >= table.optionStartCol &&
+        colIdx < table.optionStartCol + table.optionColCount
+      ) {
+        const optIdx = colIdx - table.optionStartCol;
+        td.classList.add('option-col');
+        if (optIdx === selectedOption) td.classList.add('selected');
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  }
+  tableEl.appendChild(tbody);
+  wrap.appendChild(tableEl);
+
+  if (table.legends?.length) {
+    const ul = document.createElement('ul');
+    ul.className = 'option-legends';
+    for (const { letter, label } of table.legends) {
+      const li = document.createElement('li');
+      li.innerHTML = `<strong>${esc(letter)}.</strong> ${esc(label)}`;
+      ul.appendChild(li);
+    }
+    wrap.appendChild(ul);
+  }
+
+  if (table.tiebreakLimited) {
+    const note = document.createElement('p');
+    note.className = 'tiebreak-note';
+    note.textContent =
+      "Can't add more distinct tiers without a tiebreak — adjust a score in step 3, then re-run allocation.";
+    wrap.appendChild(note);
+  }
+
+  return wrap;
+}
+
+function renderTradeoffTables() {
+  if (!state) return;
+  const container = $('#tradeoff-tables');
+  container.innerHTML = '';
+  const profile = menuProfile(buildProfile());
+  const tables = buildPickTables(state.tradeoffs, state.songs, state.ownSongs, profile);
+  if (!tables.length) {
+    container.textContent = 'No distributions yet — fix blank scores first.';
+    return;
+  }
+  for (const table of tables) {
+    container.appendChild(
+      mountCliTable(table, {
+        selectableOption: !table.down,
+        selectedOption: state.selectedOption,
+        onSelectOption: (i) => {
+          state.selectedOption = i;
+          applySelectedOption();
+          setStatus(`Applied option ${String.fromCharCode(65 + i)}.`);
+          $('#output-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        },
+      })
+    );
+  }
+}
+
+function renderBallot() {
+  if (!state) return;
+  const signed = (state.budget?.downvoteBankSize ?? 0) > 0;
+  const table = buildBallotTable(state.songs, state.ownSongs, { signed });
+  const container = $('#ballot-table');
+  container.innerHTML = '';
+  if (!table) return;
+  container.appendChild(mountCliTable(table));
+
+  const budget = state.budget?.upvoteBankSize;
+  $('#budget-line').textContent = budget
+    ? `Budget ${budget} · allocated ${table.upTotal}${table.upTotal === budget ? ' ✓' : ''}`
+    : '';
 }
 
 function esc(s) {
@@ -163,59 +318,6 @@ function renderScoresTable() {
   }
 }
 
-function renderOptions() {
-  if (!state) return;
-  const ts = state.tradeoffs.find((t) => t.kind === 'tier-structure');
-  const container = $('#options');
-  container.innerHTML = '';
-  if (!ts?.options?.length) {
-    container.textContent = 'No distributions yet — fix blank scores first.';
-    return;
-  }
-  ts.options.forEach((opt, i) => {
-    const letter = String.fromCharCode(65 + i);
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'option-card' + (i === state.selectedOption ? ' selected' : '');
-    btn.textContent = `${letter}. ${opt.label || opt.shape || 'option'}`;
-    btn.addEventListener('click', () => {
-      state.selectedOption = i;
-      applySelectedOption();
-      setStatus(`Applied option ${letter}.`);
-      $('#output-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-    container.appendChild(btn);
-  });
-}
-
-function renderBallot() {
-  if (!state) return;
-  const rows = [...state.songs, ...(state.ownSongs || [])].sort(
-    (a, b) => (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0)
-  );
-  const tbody = $('#ballot-table tbody');
-  tbody.innerHTML = '';
-  let total = 0;
-  for (const s of rows) {
-    const eligible = !s.isOwn && !s.isDisqualified && !s.needsUserInput;
-    const votes = eligible ? s.finalVotes ?? 0 : null;
-    if (eligible) total += votes;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${s.rawOrderIndex}</td>
-      <td>${esc(s.title)}</td>
-      <td>${s.score != null ? formatScore(s.score) : '—'}</td>
-      <td class="votes">${votes == null ? '—' : votes > 0 ? '+' + votes : votes}</td>
-    `;
-    tbody.appendChild(tr);
-  }
-  $('#vote-total').textContent = String(total);
-  const budget = state.budget?.upvoteBankSize;
-  $('#budget-line').textContent = budget
-    ? `Budget ${budget} · allocated ${total}${total === budget ? ' ✓' : ''}`
-    : '';
-}
-
 function setStatus(msg, isError = false) {
   const el = $('#status');
   el.textContent = msg;
@@ -226,31 +328,6 @@ function showResults() {
   $('#scores-section').classList.remove('hidden');
   $('#pick-section').classList.remove('hidden');
   $('#output-section').classList.remove('hidden');
-}
-
-function copyLines() {
-  if (!state) return [];
-  return [...state.songs, ...(state.ownSongs || [])]
-    .sort((a, b) => (a.rawOrderIndex ?? 0) - (b.rawOrderIndex ?? 0))
-    .map((s) => {
-      if (s.isOwn || s.isDisqualified || s.needsUserInput) {
-        return `#${s.rawOrderIndex} ${s.title}\t—`;
-      }
-      return `#${s.rawOrderIndex} ${s.title}\t${s.finalVotes ?? 0}`;
-    });
-}
-
-async function copyText(text) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-  const ta = document.createElement('textarea');
-  ta.value = text;
-  document.body.appendChild(ta);
-  ta.select();
-  document.execCommand('copy');
-  ta.remove();
 }
 
 if (/iPhone|iPad|Android/i.test(navigator.userAgent)) {
@@ -290,7 +367,7 @@ $('#run').addEventListener('click', () => {
     renderScoresTable();
     renderBlockers();
     showResults();
-    setStatus(`Parsed ${state.songs.length} songs. Pick an option (step 4), then copy votes (step 5).`);
+    setStatus(`Parsed ${state.songs.length} songs. Pick an option in step 4.`);
     $('#scores-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (err) {
     console.error(err);
@@ -303,9 +380,4 @@ $('#reallocate').addEventListener('click', () => {
   runAllocate();
   renderScoresTable();
   setStatus('Allocation refreshed.');
-});
-
-$('#copy-ballot').addEventListener('click', async () => {
-  await copyText(copyLines().join('\n'));
-  setStatus('Votes copied — use submission order in Music League.');
 });

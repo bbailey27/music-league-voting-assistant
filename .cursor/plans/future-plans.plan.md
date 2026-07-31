@@ -17,7 +17,7 @@ isProject: false
 | [split-score-core-into-modules.plan.md](split-score-core-into-modules.plan.md) | Phase 3 only: split `tests/score.test.mjs` by module (Phases 2 + 4 shipped 2026-07-08)       |
 | [release-date-enrichment.plan.md](release-date-enrichment.plan.md)             | Round year-gate + `spec/release-dates.md` shipped; open: fetch providers, CSV enrichment      |
 | [release-date-airtable-sync.plan.md](release-date-airtable-sync.plan.md)       | Push release dates to Airtable + scrobble→Airtable reconciliation (access method TBD)         |
-| [followup-2-web-app-mobile.plan.md](followup-2-web-app-mobile.plan.md)         | Sections 1–6 pending — allocation engine (Plan A) shipped; no `docs/` yet                     |
+| [followup-2-web-app-mobile.plan.md](followup-2-web-app-mobile.plan.md)         | Sections 1–3 shipped; **§4 next:** slug + ZIP export (`music.json`, `music.md`, `picks.jsonl` patch) + `just import-web` |
 
 **Recently shipped (plan files deleted):**
 

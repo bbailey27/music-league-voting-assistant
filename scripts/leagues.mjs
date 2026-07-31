@@ -31,7 +31,7 @@ import { bareSlugOf } from './paths.mjs';
  * @property {string[]} [skills]    Relevant `.cursor/skills/*` ids.
  * @property {string[]} [fitProfiles] `spec/fit-guidance.md` profile ids.
  * @property {string[]} [refs]      Relevant spec files.
- * @property {'version-earliest'|'album-body'} [releaseDateRule]
+ * @property {'version-earliest'|'earliest-album-release'} [releaseDateRule]
  *                                   Which release-date gate rule applies (spec/release-dates.md).
  */
 

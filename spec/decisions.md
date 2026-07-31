@@ -117,11 +117,29 @@ of layering new pins onto the reviewed menu.
 
 ---
 
+## 2026-07-31 — Release-date naming: linked row vs gate fields
+
+**Change.** Renamed league rule `album-body` → `earliest-album-release` with cache field
+`earliestAlbumReleaseDate` (earliest EP/mini/full album release; **singles excluded**; not
+the linked deluxe row). Kept `version-earliest` / `earliestReleaseDate` for bg-years
+(**singles count**). Clarified `albumReleaseDate` as **linked album release date** — exact
+Spotify row, audit only. Confidence fallback label `album-date` → `linked-album-date` in new
+writes.
+
+**Why.** Two year leagues differ on whether pre-album singles count; `albumReleaseDate`
+read like a gate field when it only records what the URI points at.
+
+**Refs.** `working tree` — `spec/release-dates.md`, `scripts/leagues.mjs`,
+`scripts/release-year-gate.mjs`, `data/ref/release-dates.json`
+
+---
+
 ## 2026-07-28 — Release-date spec (`spec/release-dates.md`)
 
 **Change.** Added [`spec/release-dates.md`](release-dates.md): version-specific earliest
 release (a 2020 remix of a 2018 original counts for 2020), league-specific gate rules
-(`version-earliest` for `bg-years`; `album-body` documented for album-only leagues),
+(`version-earliest` for `bg-years`; `earliest-album-release` documented for the upcoming
+album-only league),
 date-precision guidance (store `YYYY-MM-DD` when known), cache schema, and confidence
 levels. `bg-years` carries `releaseDateRule: version-earliest` in
 [`scripts/leagues.mjs`](../scripts/leagues.mjs); cache `_doc` and

@@ -1,6 +1,6 @@
 ---
 name: "Follow-up 2: Client-side web app (desktop + mobile, no CLI)"
-overview: A zero-build, fully client-side GitHub Pages app that runs the existing deterministic flow (extract → score → allocate) with no CLI, plus a fit-only copy-prompt and a paste-back merge step. Built in independently-shippable sections so progress is visible on a phone from the very first one.
+overview: A zero-build, fully client-side GitHub Pages app that runs the existing deterministic flow (extract → score → allocate) with slugged offline export for later CLI import, plus fit-only copy-prompt. Sections 1–3 shipped; Section 4 (export bundle) is next.
 status: partial
 depends_on: "Plan A (deterministic allocation engine) — DONE; Follow-up 1 (text/Live-Text parser) — DONE; CLI explore/pin pipeline — DONE (2026-07-31)"
 isProject: false
@@ -25,17 +25,20 @@ split so the copy-out half ships before the paste-back half.
 1. App shell + hosting   ──▶ 2. Paste & parse ──▶ 3. Allocation & output
                                      │                      │
                                      │                      ▼
-                                     │             4. Tradeoffs & decisions
+                                     │             4. Slug + export bundle  ◀── NEXT
+                                     │                      │
+                                     │                      ▼
+                                     │             5. Tradeoffs, pins, rescore UI
                                      ▼                      │
-                              5a. Fit copy-prompt ──▶ 5b. Paste fit JSON back
+                              6a. Fit copy-prompt ──▶ 6b. Paste fit JSON back
                                      │
                                      ▼
-                              6. Mobile polish + docs
+                              7. Mobile polish + import docs
 ```
 
-Dependencies: 2→1, 3→2, 4→3, 5a→2 (only needs parsed songs; can be pulled earlier),
-5b→3+5a, 6→1+2. Sections 1–3 give a complete tool for plain/objective rounds;
-4 adds decision handling; 5 adds the LLM fit loop; 6 hardens mobile.
+Dependencies: 2→1, 3→2, **4→3**, 5→4, 6a→2, 6b→3+5a+6a, 7→1–5. Sections 1–3 =
+music-only on phone (clipboard only). **Section 4** = named rounds + downloadable
+artifacts for desktop import. Section 5 = CLI parity (pins, etc.) on phone.
 
 ---
 
@@ -57,61 +60,95 @@ Dependencies: 2→1, 3→2, 4→3, 5a→2 (only needs parsed songs; can be pulle
 - Ranked table + copy vote column button.
 - **Acceptance:** budget-exact allocation for music-only paste; option cards listed.
 
-## Section 1 — App shell + hosting (original spec)
+---
 
-Stand up the page and deployment first so the rest is testable on device.
+## Section 4 — Slug + offline export bundle ◀ **NEXT**
 
-- `docs/index.html`: single page, mobile-first responsive layout, light/dark
-  (reuse the `render-fit-html.mjs` design language — card layout, tier hues,
-  `prefers-color-scheme`). Loads `docs/app.js` as `<script type="module">`.
-- `docs/app.js`: ES-module entry that `import`s `../scripts/score-core.mjs` and
-  `../scripts/extract-html.mjs` directly (they're already browser-safe ESM). A
-  smoke "it loaded + core is wired" indicator.
-- **Hosting**: enable GitHub Pages, Source = `main` `/docs` →
-  `https://<user>.github.io/<repo>/`. Document the exact clicks in `README.md`.
-- Decide module loading: import `scripts/*.mjs` via relative path from `docs/`
-  (no copy/duplication). Confirm `parse-text.mjs` / `extract-html.mjs` only use
-  standard DOM + JS (they do) so no shim is needed.
+Phone sessions stay isolated from `data/` until the user explicitly exports.
+Type a **bare slug** (e.g. `bg-2021`, `story-10` — same families as
+[round-slug-naming.mdc](../rules/round-slug-naming.mdc); no date prefix typed by
+hand). The app stamps **`YYYY-MM-DD-<bareSlug>`** using the same date rules as
+`maintain-rounds.mjs` (`effectiveDate`, 5am local rollover → yesterday before 5am).
+Show the computed `roundId` on screen before export.
 
-**Acceptance:** page loads on desktop + iOS Safari with no console errors, no
-network requests, no build; core functions are callable from the page.
+### UI (web)
 
-## Section 2 — Paste & parse
+- **Round slug** field at top of workflow (step 2 or persistent header) — bare slug
+  only; validate `[a-z0-9-]+`.
+- **Optional pick reason** text field (stored in `pick.reason` like `just pick --reason`).
+- **Export** button (enabled after parse + option chosen): triggers a browser
+  download saveable to iOS **Files** / macOS Downloads / iCloud.
+- **Session list** (optional same section): `localStorage` index of exported +
+  in-progress slugs so you can work multiple rounds on one phone before syncing
+  desktop (export clears or marks complete).
 
-Turn pasted input into the canonical song list + round metadata.
+### Export artifact: one ZIP per round
 
-- Paste `<textarea>` + a round-mode selector (objective / subjective / thematic).
-- Auto-detect input type: HTML (saved round) vs text (Live Text). HTML → native
-  `DOMParser` then `parseRoundDocument(document, mode)`; text → `parseRoundText`
-  (strict if anchors present, else the footer-anchored lenient path).
-- Render the extracted **raw-order table** (#, title, artist, album, comment,
-  parsed score/flags) plus the **needs-score / disqualified / needs-review**
-  lists. Lenient rows visibly flagged "verify".
-- Show parse confidence (strict vs lenient; budget found or not).
+Single file e.g. `2026-07-31-bg-2021-web-export.zip` via `Blob` + ZIP
+(`fflate` or `CompressionStream` — stay zero-build, no server). Contents:
 
-**Acceptance:** pasting a saved HTML round and the Live Text K-pop sample both
-produce the same songs/scores the CLI does (cross-check against the regression
-fixture); empty boxes show as needs-input, `7-?` → 70 −/?.
+| File | Source | Purpose |
+| --- | --- | --- |
+| `manifest.json` | new | `roundId`, `bareSlug`, `exportedAt` (ISO), `inputKind`, `mode`, `profile`, `webAppVersion` |
+| `music.json` | `buildJsonPayload()` | Same shape CLI `parse`/`pick` writes — includes `pick`, `tradeoffs`, `menuTradeoffs`, `profile`, songs with `finalVotes` |
+| `music.md` | `buildMarkdown()` | Human-readable report (optional but cheap) |
+| `picks.jsonl` | one line | **Append patch** — single JSONL line identical to `recordPickToTrainingLog` entry (`round`, `pickedAt`, `chosen`, `options`, `field`, …) |
+| `round-input.txt` | raw paste | Optional preserved input for `data/rounds/<roundId>.txt` re-parse on desktop |
 
-## Section 3 — Allocation & output display
+Wire pick export through existing browser-safe helpers (add to `docs/lib/` sync):
+`buildJsonPayload`, `buildMarkdown`, `buildPickRecord` from `score/render.mjs`;
+port `effectiveDate` / `formatDateSlug` from `maintain-rounds.mjs` into
+`docs/lib/date-slug.mjs` (no `node:fs`).
 
-Run the deterministic allocator and present votes.
+**Requires:** when exporting, call `buildPickRecord` with the chosen option index,
+presented menu, and songs (same as `applyOptionPick`) so `music.json` and the
+picks line match CLI semantics.
 
-- Allocation-profile controls: `rankBy` (music/fit/combined), `shape`
-  (auto/bell/compressed/balanced/top-heavy/relative), optional `gate`
-  (cutoff axis+min / passFail / passFailMaybe), weights for combined.
-- Call `allocate(songs, budget, cap, profile)`; render the **ranked table** and
-  the **raw-order vote-transfer table** with a total, mirroring the markdown/HTML
-  reports. Per-song final votes + tier coloring.
-- Copy buttons: vote-transfer table (the copy-back-into-Music-League view).
-- Surface budget/cap and "X of N eligible" summary.
+### Desktop import (companion CLI — same effort)
 
-**Acceptance:** votes total the budget exactly; output matches the CLI for the
-same round + profile; switching shape/rankBy updates live.
+New command: `just import-web <path-to.zip>` → `scripts/import-web-export.mjs`
 
-## Section 4 — Tradeoffs & user-interaction / decision flows
+1. Unzip to temp; read `manifest.json`.
+2. Write `data/analysis/<roundId>/music.json` + `music.md`.
+3. **Merge `picks.jsonl` patch:** append the exported line to
+   `data/analysis/picks.jsonl`, **replacing any prior line with the same
+   `round`** (same dedup rule as `recordPickToTrainingLog` in
+   `scripts/round/pick.mjs`).
+4. If `round-input.txt` present → `data/rounds/<roundId>.txt`.
+5. Print next steps: `just status <bareSlug>`, `just final <bareSlug>`, remind
+   to commit **`data` repo first** then parent pointer.
 
-Make the `tradeoffs[]` the allocator emits interactive instead of informational.
+If `data/analysis/` already has a folder for the same bare slug with a **different
+date**, import does **not** silently overwrite — warn and offer `--merge-into
+<existing-roundId>` or let `just tidy` fold on next parse (document choice in
+import help).
+
+### Acceptance
+
+- [ ] Type `bg-2021` on phone → UI shows `2026-07-31-bg-2021` (date matches local
+      effectiveDate rules).
+- [ ] Export downloads one ZIP; Files app receives it.
+- [ ] `just import-web ~/Downloads/…zip` places artifacts under
+      `data/analysis/<roundId>/` and appends/replaces one picks.jsonl row.
+- [ ] Re-importing the same round replaces that round's picks line, does not
+      duplicate.
+- [ ] Two different slugs exported same day → two dated folders / two pick lines.
+- [ ] Imported `music.json` loads in `just status` / `just final` without re-pick.
+
+### Out of scope (Section 4)
+
+- Auto-upload to cloud / git (manual Files → iCloud → desktop import only).
+- Thematic `fit.json` / `scores.json` (Section 6b).
+- Pin/rescore UI (Section 5).
+
+---
+
+## Section 5 — Tradeoffs, pins, and rescore UI
+
+Make `tradeoffs[]` interactive; expose CLI explore knobs (`--pin`, `--weights`,
+`--cutoff`, `--tier-count`, …) as mobile controls. Reuse `exploreAllocate` /
+`applyPinsToMenuTradeoffs` (sync via `docs/lib/`). Export (Section 4) must include
+`profile.overrides` / `menuTradeoffs` when pins are used.
 
 - Render each tradeoff as a choice card by `kind`:
   - `tier-split` — pick who gets the indivisible extra (sets an `override`).
@@ -119,14 +156,13 @@ Make the `tradeoffs[]` the allocator emits interactive instead of informational.
     (sets `gate.leniency` or `includeCount`).
   - `preallocation-overflow` — choose which floored song to lower.
   - `forced-spill` — acknowledge / reassign the leftover.
-- Selecting an option re-runs `allocate` with the updated profile/overrides and
-  re-renders (the engine already supports `overrides` for exactly this).
-- Show a clear before/after and a "reset to auto" affordance.
+- Pin UI: index:vote inputs, reflow all option columns, sync ballot preview.
+- Selecting an option or pin change re-runs allocate and re-renders.
 
-**Acceptance:** each tradeoff kind renders, a choice deterministically changes the
-allocation and re-renders, and the budget still totals exactly.
+**Acceptance:** pin reflow matches CLI `rescore --pin`; export bundle includes pinned
+menu; budget stays exact.
 
-## Section 5a — Fit-only copy-as-prompt (+ fallback toggle)
+## Section 6a — Fit-only copy-as-prompt (+ fallback toggle)
 
 For thematic/subjective rounds that need external research, build the prompt to
 paste into any LLM (no recurring cost, nothing about music scores by default).
@@ -146,7 +182,7 @@ paste into any LLM (no recurring cost, nothing about music scores by default).
 own song, includes your prior fit notes, and specifies the fit-JSON shape; the
 fallback toggle adds music + rules.
 
-## Section 5b — Paste fit JSON back → merge + allocate → render
+## Section 6b — Paste fit JSON back → merge + allocate → render
 
 Close the loop in-page.
 
@@ -154,26 +190,20 @@ Close the loop in-page.
 - Run `mergeFitJson(parsed, fitData, profile)` in the browser (manual fit wins,
   LLM fills fit-silent songs, combined computed, draftVotes written back).
 - Render the result reusing the `render-fit-html` card layout (tiers, themes,
-  rationale, scores) + the vote-transfer table; re-surface tradeoffs (Section 4).
+  rationale, scores) + the vote-transfer table; re-surface tradeoffs (Section 5).
 
 **Acceptance:** pasting a fit JSON yields the same allocation as
 `parse-round.mjs --fit` for the same round/profile.
 
-## Section 6 — Mobile polish + docs
+## Section 7 — Mobile polish + import docs (was §6)
 
-- Verify the OS Live Text paste path end-to-end on iOS (the motivating
-  constraint: Music League's third-party login forces an in-app browser where
-  page text can't be selected, so Live Text/Lens is the bridge — extraction only,
-  no in-app OCR, no LLM).
-- Responsive pass: tables collapse to cards on narrow screens, large tap targets,
-  copy buttons reachable one-handed.
-- README: hosting steps, the mobile capture workflow, and the fit-prompt loop.
-
-**Acceptance:** a full round can be pasted, scored, allocated, and the votes
-copied back — entirely on a phone, offline after first load.
+- Verify Live Text path on iOS end-to-end.
+- Document export → Files → iCloud → `just import-web` loop in README and on-page
+  help (step 6 after export ships).
+- Responsive pass: tables → cards, large tap targets.
 
 ## Notes / deferred
 
-- Vision-LLM screenshot input and in-app OCR (Tesseract.js) remain out of scope
-  (no recurring cost for routine runs). The copy-prompt covers the opt-in LLM case.
-- Downvote support follows the engine's MVP-skippable status.
+- Vision-LLM / in-app OCR remain out of scope.
+- Downvote support follows engine MVP-skippable status.
+- Web app never writes `data/` directly — export/import bridge only (Section 4).
