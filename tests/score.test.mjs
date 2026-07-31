@@ -926,10 +926,12 @@ test('--tier-count forces the number of final point tiers (friendly knob)', () =
     const res = allocate(forced, 14, 5, { shape: 'auto', tierCount: want });
     assert.equal(sum(forced), 14);
     assert.equal(distinctVotes(forced), want, `--tier-count ${want} produces ${want} point tiers`);
-    assert.ok(
-      !res.tradeoffs.some((t) => t.kind === 'tier-structure'),
-      'pinned count is not re-surfaced'
-    );
+    const ts = res.tradeoffs.find((t) => t.kind === 'tier-structure');
+    assert.ok(ts, '--tier-count surfaces a single-option menu for pick');
+    assert.equal(ts.options.length, 1, 'forced curve is option A only');
+    const { idx, error } = resolveOptionPick(res.tradeoffs, 'A');
+    assert.equal(idx, 0);
+    assert.equal(error, null);
     // Forcing a count overrides the smoothness-preferring default (a field may
     // not support that many tiers smoothly), so only monotonicity is guaranteed.
     const by = [...forced].sort((a, b) => b.score - a.score);
@@ -944,7 +946,12 @@ test('--bucket-count forces the score-cluster count K (lower-level knob)', () =>
   const forced = mk(scores);
   const res = allocate(forced, 14, 5, { shape: 'auto', bucketCount: 2 });
   assert.equal(sum(forced), 14);
-  assert.ok(!res.tradeoffs.some((t) => t.kind === 'tier-structure'), 'forced bucket count is not re-surfaced');
+  const ts = res.tradeoffs.find((t) => t.kind === 'tier-structure');
+  assert.ok(ts, '--bucket-count surfaces a single-option menu for pick');
+  assert.equal(ts.options.length, 1);
+  const { idx, error } = resolveOptionPick(res.tradeoffs, 'A');
+  assert.equal(idx, 0);
+  assert.equal(error, null);
   // Forcing a coarse bucketing overrides the smoothness-preferring default, so we
   // only require monotonicity (a higher score never earns fewer points), not
   // smoothness — the user opted into the coarser shape.

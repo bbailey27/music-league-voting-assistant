@@ -11,6 +11,19 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-07-31 — Forced `--tier-count` / `--bucket-count` emit a pickable option A
+
+**Change.** [`allocateBell`](../scripts/score/allocate.mjs) always pushes a
+`tier-structure` tradeoff when a curve is chosen — including forced-count profiles.
+Forced curves surface as a single option A so `just pick A --tier-count N` (and
+`--bucket-count`) resolve instead of erroring with "0 options".
+
+**Why.** The guard that skipped the menu when a count was forced left
+`resolveOptionPick` with no letter to match, breaking the documented force-a-curve
+path on pick.
+
+**Refs.** `working tree` — `scripts/score/allocate.mjs`, `tests/score.test.mjs`.
+
 ## 2026-07-31 — Pick pin comparison only when pick changes the presented menu
 
 **Change.** [`applyOptionPick`](../scripts/round/pick.mjs) snapshots the pin comparison

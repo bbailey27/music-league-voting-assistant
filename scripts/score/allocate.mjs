@@ -1735,7 +1735,18 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
   // value is the bucket count (K) that uniquely reproduces the curve
   // (`--bucket-count`); the label names the tier count and bucket count separately
   // so the two aren't conflated.
-  if (!profile.tierCount && !profile.bucketCount) {
+  const summarize = (c) => c.runs.map((r) => `${r.level}×${r.count}`).join(' / ');
+  const tierWord = (k) => `${k} tier${k > 1 ? 's' : ''}`;
+  const record =
+    'Record with just pick <round> <a|b|c> --reason "…" (or just pick <round> a --tier-count <n> / --bucket-count <n> to force a curve).';
+  const forcedCurve = profile.tierCount || profile.bucketCount;
+
+  let combined = [];
+  let tiebreakLimited = false;
+
+  if (forcedCurve) {
+    combined = [chosen];
+  } else {
     const seen = new Set();
     const distinctCands = [];
     for (const c of [chosen, ...ordered]) {
@@ -1744,10 +1755,6 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
       distinctCands.push(c);
     }
     if (distinctCands.length >= 1) {
-      const small = spread <= 6;
-      const summarize = (c) => c.runs.map((r) => `${r.level}×${r.count}`).join(' / ');
-      const tierWord = (k) => `${k} tier${k > 1 ? 's' : ''}`;
-
       // The primary enumeration only offers staircases whose adjacent distinct tiers
       // differ by exactly 1, so a flat field can collapse to one option (mostly 1s).
       // Backfill toward `optionCount` (default 5) in two passes, best kind first:
@@ -1783,65 +1790,53 @@ function allocateBell(cands, budget, cap, shape, profile, tradeoffs) {
         }).map((c) => ({ ...c, separated: true }));
       }
 
-      const combined = [...distinctCands, ...jumpExtras, ...splitExtras].slice(0, optionCount);
-      const single = combined.length === 1;
-      const hasJump = combined.some((c) => c.jumped);
-      const hasSplit = combined.some((c) => c.separated);
-      // Further separation is tiebreak-limited when the clean (no-tiebreak) options —
-      // the primary staircase plus any group-atomic merges — couldn't fill the menu, so
-      // we either fell back to tie-splits or ran short. The CLI turns this into a
-      // "set a tiebreak score" hint (see cli-print).
+      combined = [...distinctCands, ...jumpExtras, ...splitExtras].slice(0, optionCount);
       const cleanCount = distinctCands.length + jumpExtras.length;
-      const tiebreakLimited = hasSplit || cleanCount < optionCount;
-      const record =
-        'Record with just pick <round> <a|b|c> --reason "…" (or just pick <round> a --tier-count <n> / --bucket-count <n> to force a curve).';
-      const question = single
+      tiebreakLimited = combined.some((c) => c.separated) || cleanCount < optionCount;
+    }
+  }
+
+  if (combined.length >= 1) {
+    const small = spread <= 6;
+    const single = combined.length === 1;
+    const hasJump = combined.some((c) => c.jumped);
+    const hasSplit = combined.some((c) => c.separated);
+    const question = forcedCurve
+      ? `Forced curve: ${tierWord(chosen.distinct)} (bucket-count ${chosen.K}) — ${summarize(chosen)}. Option A records this split. ${record}`
+      : single
         ? `Point split: ${tierWord(chosen.distinct)} (option A) is the only clean staircase for this budget. ${record}`
         : `Which point split? Option A is the default ${tierWord(chosen.distinct)} staircase.${
             hasJump ? ' Coarser alternatives merge/jump a tier (no tiebreak needed).' : ''
           }${hasSplit ? ' Taller alternatives split a tie by a point (each needs a tiebreak).' : ''}${
             small ? ' Scores are tightly clustered (small range), so this is a judgment call.' : ''
           } ${record}`;
-      tradeoffs.push({
-        kind: 'tier-structure',
-        tiebreakLimited,
-        options: combined.map((c) => ({
-          label:
-            `${tierWord(c.distinct)} (bucket-count ${c.K}) — ${summarize(c)}` +
-            (c.jumped ? ` · merges a tier (${c.jumpFromTo} jump, no tiebreak)` : '') +
-            (c.separated && c.arbitrarySplits
-              ? ` · needs a tiebreak (splits ${c.arbitrarySplits} tie${c.arbitrarySplits > 1 ? 's' : ''})`
-              : ''),
-          value: c.K,
-          tierCount: c.distinct,
-          bucketCount: c.K,
-          // Vote-count signature (e.g. "2×4 / 1×2 / 0×5") — the part that actually
-          // distinguishes two options that share a tier/bucket count, so legends and
-          // labels never look identical.
-          shape: summarize(c),
-          // Whether this option breaks a tie the primary split kept together, so a
-          // pick here is a deliberate coin flip (renderer/CLI can flag it).
-          ...(c.separated ? { separated: true, arbitrarySplits: c.arbitrarySplits } : {}),
-          // Whether this option jumps/merges a tier (coarser than the +1 staircase) —
-          // no tiebreak, just a wider gap; the CLI/renderer can note the jump.
-          ...(c.jumped ? { jumped: true, jump: c.jumpFromTo } : {}),
-          // Per-song votes (best-first / combined order) for the side-by-side
-          // comparison table; index-aligned across every option.
-          perSong: c.perSong,
-          // Structured rows for a points / songs / score-range table (renderer).
-          // `scores` lists the precise raw scores (with +/−/? modifiers) in the
-          // tier, shown when any are modified.
-          tiers: c.runs.map((r) => ({
-            points: r.level,
-            count: r.count,
-            scoreHi: r.hi,
-            scoreLo: r.lo,
-            scores: r.tokens,
-          })),
+    tradeoffs.push({
+      kind: 'tier-structure',
+      tiebreakLimited,
+      options: combined.map((c) => ({
+        label:
+          `${tierWord(c.distinct)} (bucket-count ${c.K}) — ${summarize(c)}` +
+          (c.jumped ? ` · merges a tier (${c.jumpFromTo} jump, no tiebreak)` : '') +
+          (c.separated && c.arbitrarySplits
+            ? ` · needs a tiebreak (splits ${c.arbitrarySplits} tie${c.arbitrarySplits > 1 ? 's' : ''})`
+            : ''),
+        value: c.K,
+        tierCount: c.distinct,
+        bucketCount: c.K,
+        shape: summarize(c),
+        ...(c.separated ? { separated: true, arbitrarySplits: c.arbitrarySplits } : {}),
+        ...(c.jumped ? { jumped: true, jump: c.jumpFromTo } : {}),
+        perSong: c.perSong,
+        tiers: c.runs.map((r) => ({
+          points: r.level,
+          count: r.count,
+          scoreHi: r.hi,
+          scoreLo: r.lo,
+          scores: r.tokens,
         })),
-        question,
-      });
-    }
+      })),
+      question,
+    });
   }
 
   // R2: when the merged ≥80 favorite band is a meaningful share of the funded
