@@ -17,14 +17,20 @@ const ROOT_FILES = [
   'tradeoff-rows.mjs',
   'text-width.mjs',
   'web-table.mjs',
+  'web-pick-core.mjs',
+  'web-explore.mjs',
+  'web-profile.mjs',
 ];
 
 await mkdir(lib, { recursive: true });
 await cp(join(root, 'scripts/score'), join(lib, 'score'), { recursive: true, force: true });
 await cp(join(root, 'scripts/parse/cli-table.mjs'), join(lib, 'cli-table.mjs'), { force: true });
-let cliTable = await readFile(join(lib, 'cli-table.mjs'), 'utf8');
-cliTable = cliTable.replace(/from '\.\.\//g, "from './");
-await writeFile(join(lib, 'cli-table.mjs'), cliTable);
+await cp(join(root, 'scripts/parse/cli-flags.mjs'), join(lib, 'cli-flags.mjs'), { force: true });
+for (const f of ['cli-table.mjs', 'cli-flags.mjs']) {
+  let src = await readFile(join(lib, f), 'utf8');
+  src = src.replace(/from '\.\.\//g, "from './");
+  await writeFile(join(lib, f), src);
+}
 for (const f of ROOT_FILES) {
   await cp(join(root, 'scripts', f), join(lib, f), { force: true });
 }

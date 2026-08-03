@@ -42,29 +42,10 @@
             Live Text mode (lenient parser)
           </label>
           <label>
-            Comment mode
+            Comment mode (<code>--mode</code>)
             <select id="mode">
               <option value="objective">Objective</option>
               <option value="subjective">Subjective</option>
-            </select>
-          </label>
-          <label>
-            Rank by
-            <select id="rankBy">
-              <option value="music">Music</option>
-              <option value="combined">Combined</option>
-              <option value="fit">Fit</option>
-            </select>
-          </label>
-          <label>
-            Curve
-            <select id="shape">
-              <option value="auto">Auto</option>
-              <option value="bell">Bell</option>
-              <option value="balanced">Balanced</option>
-              <option value="top-heavy">Top-heavy</option>
-              <option value="compressed">Compressed</option>
-              <option value="relative">Relative</option>
             </select>
           </label>
           <button type="button" id="run" class="primary">Parse scores</button>
@@ -89,12 +70,100 @@
             <tbody></tbody>
           </table>
         </div>
-        <button type="button" id="reallocate" class="secondary">Re-run allocation after edits</button>
+
+        <details class="knob-panel" id="knob-panel">
+          <summary>Allocation settings <span class="sub">— same flags as <code>just parse</code> / <code>just rescore</code></span></summary>
+          <div class="knob-grid">
+            <label>
+              Rank by
+              <select id="rankBy">
+                <option value="music">Music</option>
+                <option value="combined">Combined</option>
+                <option value="fit">Fit</option>
+              </select>
+            </label>
+            <label>
+              Up curve (<code>--shape</code>)
+              <select id="shape">
+                <option value="auto">Auto</option>
+                <option value="bell">Bell</option>
+                <option value="balanced">Balanced</option>
+                <option value="top-heavy">Top-heavy</option>
+                <option value="compressed">Compressed</option>
+                <option value="relative">Relative</option>
+              </select>
+            </label>
+            <label>
+              Down curve (<code>--down-shape</code>)
+              <select id="down-shape">
+                <option value="">Auto</option>
+                <option value="curved">Curved (cv)</option>
+                <option value="flat">Flat (fl)</option>
+                <option value="concentrated">Concentrated (cc)</option>
+              </select>
+            </label>
+            <label>
+              Weights (<code>--weights</code>)
+              <input type="text" id="weights" placeholder="7:3" inputmode="text" />
+            </label>
+            <label>
+              Gate (<code>--gate</code>)
+              <select id="gate">
+                <option value="">None</option>
+                <option value="passFail">passFail</option>
+                <option value="passFailMaybe">passFailMaybe</option>
+              </select>
+            </label>
+            <label>
+              Cutoff (<code>--cutoff</code>)
+              <input type="text" id="cutoff" placeholder="fit:70" />
+            </label>
+            <label>
+              Tier count
+              <input type="number" id="tier-count" min="1" step="1" placeholder="—" />
+            </label>
+            <label>
+              Bucket count
+              <input type="number" id="bucket-count" min="1" step="1" placeholder="—" />
+            </label>
+            <label>
+              Menu options
+              <input type="number" id="option-count" min="1" step="1" placeholder="5" />
+            </label>
+            <label>
+              Favorite band min
+              <input type="number" id="favorite-band" min="1" step="1" placeholder="—" />
+            </label>
+            <label class="checkbox knob-check">
+              <input type="checkbox" id="no-favorite-band" />
+              <code>--no-favorite-band</code>
+            </label>
+            <label class="knob-wide">
+              Pins (<code>--pin</code>)
+              <input type="text" id="pins" placeholder="8:1,5:1 or 6:-2" />
+            </label>
+            <label class="knob-wide">
+              Score overrides (<code>--score</code>)
+              <input type="text" id="score-overrides" placeholder="17:78+,7:75?" />
+            </label>
+            <label class="knob-wide">
+              Fit score overrides (<code>--fit-score</code>)
+              <input type="text" id="fit-score-overrides" placeholder="5:85" />
+            </label>
+            <label class="knob-wide">
+              Pick reason (<code>--reason</code>)
+              <input type="text" id="pick-reason" placeholder="for export / picks.jsonl" />
+            </label>
+          </div>
+        </details>
+
+        <button type="button" id="reallocate" class="secondary">Re-run allocation</button>
+        <div id="allocator-notes" class="allocator-notes hidden"></div>
       </section>
 
       <section class="panel workflow-step panel-wide hidden" id="pick-section">
         <h2><span class="step-num">4</span> Pick a vote distribution</h2>
-        <p class="sub">Same Up/Down tables as <code>just pick</code>. Tap an <strong>A</strong>/<strong>B</strong>/<strong>C</strong> column to apply it.</p>
+        <p class="sub">Same Up/Down tables as <code>just pick</code>. Tap an up <strong>A/B/C</strong> or down <strong>cv/fl/cc</strong> column to apply.</p>
         <div id="tradeoff-tables" class="tradeoff-tables"></div>
       </section>
 

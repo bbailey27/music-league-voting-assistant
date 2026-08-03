@@ -15,6 +15,10 @@ const ROOT_FILES = [
   'tradeoff-rows.mjs',
   'text-width.mjs',
   'web-table.mjs',
+  'web-pick-core.mjs',
+  'web-explore.mjs',
+  'web-profile.mjs',
+  'cli-flags.mjs',
 ];
 
 test('docs/lib has browser transitive deps', () => {

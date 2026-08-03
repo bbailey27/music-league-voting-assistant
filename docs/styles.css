@@ -233,7 +233,70 @@ button.secondary {
   margin: 0.35rem 0;
 }
 
-.blockers {
+.knob-panel {
+  margin: 0.75rem 0 0;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  background: var(--bg);
+}
+
+.knob-panel summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.knob-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem 0.65rem;
+  margin-top: 0.65rem;
+}
+
+.knob-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.knob-grid input,
+.knob-grid select {
+  font: inherit;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.knob-wide {
+  grid-column: 1 / -1;
+}
+
+.knob-check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.35rem !important;
+  color: var(--text);
+}
+
+.allocator-notes {
+  margin-top: 0.55rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.allocator-notes div + div {
+  margin-top: 0.25rem;
+}
+
   background: var(--warn-bg);
   border: 1px solid var(--warn-border);
   border-radius: 0.5rem;

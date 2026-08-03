@@ -1,18 +1,21 @@
 // Music League vote assistant — browser UI over the same parse + allocate core as the CLI.
 
 import {
-  allocate,
-  enrichProfileWithBudget,
+  applyNumericFitAutoDetect,
   formatScore,
   scoreComment,
 } from './lib/score-core.mjs';
 import { parseRoundDocument } from './lib/extract-html.mjs';
 import { parseRoundText } from './lib/parse-text.mjs';
 import { buildBallotTable, buildPickTables } from './lib/web-table.mjs';
+import { exploreAllocate } from './lib/web-explore.mjs';
+import { prepareRoundForAllocate } from './lib/web-profile.mjs';
 
 const $ = (sel) => document.querySelector(sel);
 
-/** @type {{ songs: object[], ownSongs: object[], budget: object, round: object, tradeoffs: object[], selectedOption: number, mode: string, inputKind: string } | null} */
+const PICK_TRADEOFF_KINDS = new Set(['tier-structure', 'down-structure']);
+
+/** @type {{ songs: object[], ownSongs: object[], budget: object, round: object, tradeoffs: object[], selectedOption: number, selectedDownOption: number, mode: string, inputKind: string, pickReason: string|null, pinNotes: string[], profile: object|null } | null} */
 let state = null;
 
 function looksLikeHtml(text) {
@@ -27,15 +30,6 @@ function looksLikeHtml(text) {
 
 function menuProfile(profile) {
   return { ...profile, overrides: undefined, downOverrides: undefined };
-}
-
-function buildProfile() {
-  const profile = {
-    shape: $('#shape').value,
-    rankBy: $('#rankBy').value,
-  };
-  if (state?.budget) enrichProfileWithBudget(profile, state.budget);
-  return profile;
 }
 
 function parseInput(text, mode, lenient) {
@@ -55,14 +49,32 @@ function rescoreSong(song, mode) {
 
 function runAllocate() {
   if (!state) return;
-  const profile = buildProfile();
-  const upBudget = state.budget?.upvoteBankSize ?? 0;
-  const cap = state.budget?.maxUpvotesPerSong ?? Infinity;
-  const { tradeoffs } = allocate(state.songs, upBudget, cap, menuProfile(profile));
-  state.tradeoffs = tradeoffs;
-  const optCount = tradeoffs.find((t) => t.kind === 'tier-structure')?.options?.length ?? 0;
-  if (state.selectedOption >= optCount) state.selectedOption = 0;
-  applySelectedOption();
+  try {
+    const { profile, pickReason } = prepareRoundForAllocate({
+      songs: state.songs,
+      budget: state.budget,
+      mode: state.mode,
+      $,
+    });
+    state.profile = profile;
+    state.pickReason = pickReason;
+    const { tradeoffs, pinNotes } = exploreAllocate({
+      songs: state.songs,
+      budget: state.budget,
+      profile,
+    });
+    state.tradeoffs = tradeoffs;
+    state.pinNotes = pinNotes;
+    const upOpts = tradeoffs.find((t) => t.kind === 'tier-structure')?.options?.length ?? 0;
+    const downOpts = tradeoffs.find((t) => t.kind === 'down-structure')?.options?.length ?? 0;
+    if (state.selectedOption >= upOpts) state.selectedOption = 0;
+    if (state.selectedDownOption >= downOpts) state.selectedDownOption = 0;
+    applySelectedOption();
+    renderAllocatorNotes();
+  } catch (err) {
+    console.error(err);
+    setStatus(err.message || String(err), true);
+  }
 }
 
 function applySelectedOption() {
@@ -80,7 +92,8 @@ function applySelectedOption() {
       if (s) s.finalVotes = p.votes || 0;
     }
   }
-  const down = state.tradeoffs.find((t) => t.kind === 'down-structure')?.options?.[0];
+  const downT = state.tradeoffs.find((t) => t.kind === 'down-structure');
+  const down = downT?.options?.[state.selectedDownOption];
   if (down?.perSong) {
     const byIdx = new Map(state.songs.map((s) => [s.rawOrderIndex, s]));
     for (const p of down.perSong) {
@@ -93,6 +106,24 @@ function applySelectedOption() {
   renderBlockers();
 }
 
+function renderAllocatorNotes() {
+  if (!state) return;
+  const el = $('#allocator-notes');
+  const parts = [];
+  for (const n of state.pinNotes || []) parts.push(n);
+  for (const t of state.tradeoffs || []) {
+    if (PICK_TRADEOFF_KINDS.has(t.kind)) continue;
+    if (t.question) parts.push(t.question);
+  }
+  if (!parts.length) {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+  el.classList.remove('hidden');
+  el.innerHTML = parts.map((p) => `<div>${esc(p)}</div>`).join('');
+}
+
 function numericCols(headers) {
   const numeric = new Set(['#', 'Score', 'Music', 'Fit', 'Combined', 'Mod', 'Votes']);
   const cols = new Set();
@@ -102,7 +133,7 @@ function numericCols(headers) {
   return cols;
 }
 
-function mountCliTable(table, { selectableOption = false, selectedOption = 0, onSelectOption = null } = {}) {
+function mountCliTable(table, { selectable = false, selectedCol = 0, onSelectCol = null } = {}) {
   const wrap = document.createElement('div');
   wrap.className = 'cli-table-block';
 
@@ -115,6 +146,7 @@ function mountCliTable(table, { selectableOption = false, selectedOption = 0, on
   tableEl.className = 'cli-table';
 
   const numCols = numericCols(table.headers);
+  const canSelect = selectable && ((selectable === 'down' && table.down) || (selectable === 'up' && !table.down));
   const thead = document.createElement('thead');
   const headTr = document.createElement('tr');
   table.headers.forEach((h, colIdx) => {
@@ -122,16 +154,15 @@ function mountCliTable(table, { selectableOption = false, selectedOption = 0, on
     th.textContent = h;
     if (numCols.has(colIdx)) th.classList.add('num');
     const isOptionCol =
-      selectableOption &&
-      !table.down &&
+      canSelect &&
       colIdx >= table.optionStartCol &&
       colIdx < table.optionStartCol + table.optionColCount;
     if (isOptionCol) {
       const optIdx = colIdx - table.optionStartCol;
       th.classList.add('option-col');
-      if (optIdx === selectedOption) th.classList.add('selected');
-      th.title = `Apply option ${h}`;
-      th.addEventListener('click', () => onSelectOption?.(optIdx));
+      if (optIdx === selectedCol) th.classList.add('selected');
+      th.title = `Apply ${table.down ? 'down' : 'up'} option ${h}`;
+      th.addEventListener('click', () => onSelectCol?.(optIdx));
     }
     headTr.appendChild(th);
   });
@@ -147,14 +178,13 @@ function mountCliTable(table, { selectableOption = false, selectedOption = 0, on
       td.textContent = cell;
       if (numCols.has(colIdx)) td.classList.add('num');
       if (
-        selectableOption &&
-        !table.down &&
+        canSelect &&
         colIdx >= table.optionStartCol &&
         colIdx < table.optionStartCol + table.optionColCount
       ) {
         const optIdx = colIdx - table.optionStartCol;
         td.classList.add('option-col');
-        if (optIdx === selectedOption) td.classList.add('selected');
+        if (optIdx === selectedCol) td.classList.add('selected');
       }
       tr.appendChild(td);
     });
@@ -168,14 +198,13 @@ function mountCliTable(table, { selectableOption = false, selectedOption = 0, on
       td.textContent = cell;
       if (numCols.has(colIdx)) td.classList.add('num');
       if (
-        selectableOption &&
-        !table.down &&
+        canSelect &&
         colIdx >= table.optionStartCol &&
         colIdx < table.optionStartCol + table.optionColCount
       ) {
         const optIdx = colIdx - table.optionStartCol;
         td.classList.add('option-col');
-        if (optIdx === selectedOption) td.classList.add('selected');
+        if (optIdx === selectedCol) td.classList.add('selected');
       }
       tr.appendChild(td);
     });
@@ -210,21 +239,26 @@ function renderTradeoffTables() {
   if (!state) return;
   const container = $('#tradeoff-tables');
   container.innerHTML = '';
-  const profile = menuProfile(buildProfile());
+  const profile = menuProfile(state.profile || {});
   const tables = buildPickTables(state.tradeoffs, state.songs, state.ownSongs, profile);
   if (!tables.length) {
     container.textContent = 'No distributions yet — fix blank scores first.';
     return;
   }
   for (const table of tables) {
+    const kind = table.down ? 'down' : 'up';
     container.appendChild(
       mountCliTable(table, {
-        selectableOption: !table.down,
-        selectedOption: state.selectedOption,
-        onSelectOption: (i) => {
-          state.selectedOption = i;
+        selectable: kind,
+        selectedCol: table.down ? state.selectedDownOption : state.selectedOption,
+        onSelectCol: (i) => {
+          if (table.down) state.selectedDownOption = i;
+          else state.selectedOption = i;
           applySelectedOption();
-          setStatus(`Applied option ${String.fromCharCode(65 + i)}.`);
+          const label = table.down
+            ? table.headers[table.optionStartCol + i]
+            : String.fromCharCode(65 + i);
+          setStatus(`Applied ${kind} option ${label}.`);
           $('#output-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
         },
       })
@@ -351,9 +385,14 @@ $('#run').addEventListener('click', () => {
       round: parsed.round || {},
       tradeoffs: [],
       selectedOption: 0,
+      selectedDownOption: 0,
+      pickReason: null,
+      pinNotes: [],
+      profile: null,
       mode,
       inputKind: parsed.inputKind,
     };
+    applyNumericFitAutoDetect(state.songs);
     const upBudget = state.budget?.upvoteBankSize ?? 0;
     $('#round-meta').textContent = [
       state.round?.prompt || state.round?.title || 'Round',
@@ -381,3 +420,32 @@ $('#reallocate').addEventListener('click', () => {
   renderScoresTable();
   setStatus('Allocation refreshed.');
 });
+
+for (const sel of [
+  '#rankBy',
+  '#shape',
+  '#down-shape',
+  '#weights',
+  '#gate',
+  '#cutoff',
+  '#tier-count',
+  '#bucket-count',
+  '#option-count',
+  '#favorite-band',
+  '#no-favorite-band',
+  '#pins',
+  '#score-overrides',
+  '#fit-score-overrides',
+]) {
+  $(sel)?.addEventListener('change', () => {
+    if (!state) return;
+    runAllocate();
+  });
+}
+for (const sel of ['#pins', '#score-overrides', '#fit-score-overrides', '#weights', '#cutoff']) {
+  $(sel)?.addEventListener('input', () => {
+    if (!state) return;
+    clearTimeout($(sel)._debounce);
+    $(sel)._debounce = setTimeout(() => runAllocate(), 400);
+  });
+}
