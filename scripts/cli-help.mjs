@@ -334,7 +334,7 @@ The matched league's reminders + scripts also print automatically after "just pa
 and "just status <round>" shows which league a round belongs to.
 
 Example:
-  just leagues bg-years      # boy-group-years: groups/soloists/subunits; DQ girl groups; release-year gate
+  just leagues bg-years      # boy-group-years: groups/soloists/subunits; DQ girl/female solo/co-ed; release-year gate
   just leagues story         # story chain: title-scan scripts + story-continuation`,
 
   config: `just config [comment-width [auto|<n>|unset]]

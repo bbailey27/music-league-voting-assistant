@@ -11,12 +11,12 @@ isProject: false
 
 ## Active partial plans
 
-| Plan                                                                           | Remaining                                                                                     |
-| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| [followup-5-specs-and-tests.plan.md](followup-5-specs-and-tests.plan.md)       | Spec sync (`round-input-parsing.md`, rules refresh); snapshot regression **shipped** 2026-07-08 |
-| [split-score-core-into-modules.plan.md](split-score-core-into-modules.plan.md) | Phase 3 only: split `tests/score.test.mjs` by module (Phases 2 + 4 shipped 2026-07-08)       |
-| [release-date-enrichment.plan.md](release-date-enrichment.plan.md)             | Round year-gate + `spec/release-dates.md` shipped; open: fetch providers, CSV enrichment      |
-| [release-date-airtable-sync.plan.md](release-date-airtable-sync.plan.md)       | Push release dates to Airtable + scrobble→Airtable reconciliation (access method TBD)         |
+| Plan                                                                           | Remaining                                                                                                                |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| [followup-5-specs-and-tests.plan.md](followup-5-specs-and-tests.plan.md)       | Spec sync (`round-input-parsing.md`, rules refresh); snapshot regression **shipped** 2026-07-08                          |
+| [split-score-core-into-modules.plan.md](split-score-core-into-modules.plan.md) | Phase 3 only: split `tests/score.test.mjs` by module (Phases 2 + 4 shipped 2026-07-08)                                   |
+| [release-date-enrichment.plan.md](release-date-enrichment.plan.md)             | Round year-gate + `spec/release-dates.md` shipped; open: fetch providers, CSV enrichment                                 |
+| [release-date-airtable-sync.plan.md](release-date-airtable-sync.plan.md)       | Push release dates to Airtable + scrobble→Airtable reconciliation (access method TBD)                                    |
 | [followup-2-web-app-mobile.plan.md](followup-2-web-app-mobile.plan.md)         | Sections 1–3 shipped; **§4 next:** slug + ZIP export (`music.json`, `music.md`, `picks.jsonl` patch) + `just import-web` |
 
 **Recently shipped (plan files deleted):**
@@ -114,6 +114,8 @@ Output snapshot regression test (diff-based): see
 19. Finish splitting up test files and audit tests. Check for unnecessary tests e.g. checking 3rd party libraries or basic code features. Check for assumptions and logical leaps. E.g. compare to the decision file and see if it mentions the explicit edge case or if the agent likely just wrote a test to confirm what it had already assumed. Even the decision file may not be full evidence. Surface anything potentially sketchy, contradictory, or inconsistent in the tests or the decision log.
 20. Create a skill to corral excessive guessing and independent decision making. Agents should not make assumptions about implementation details that affect the outcome or handling of edge cases. There have been instances of large enough assumptions that they got codified in the decision log and taken as evidence of intent by future agents, without me signing off on them. Agents should consult me about any assumptions or edge cases. If it would be a small tweak to change, it is acceptable to pick the best option and then call it out for approval at the end of the step. If it's a larger rewrite to fix, always stop and ask. Either way, ALWAYS list any assumptions made or edge cases handled at the end. Example assumptions include: if the budget can't be met, it is acceptable to go under budget; always sort tables by music score even when combined score is present; manual cutoffs are only allowed on music scores. Even if you didn't make an intentional decision, check with fresh eyes if the code ENFORCES any such constraints that were not confirmed by the user.
 21. Split out active vs concluded vs recurring leagues in the leagues.mjs file so context isn't bloated with outdated details. Also because these simplified slugs are likely to be reused. That's why dates are included in file names. So there needs to be logic about only matching a partial round name in CLI if it's a new or active round, not falling back to old rounds with similar names. And league notes and rules should probably save their active date range so they don't get applied to future leagues with similar names.
+22. For combined scores, always print the current applied weights alongside the option table. I forget the defaults and then have to run manually to make sure it's using the fit weights I expect in CLI. Could do similar for all active pins, cutoffs, curve types, etc.
+23. --reset flag. On rescore and other using the stored 'profile'. To clear the profile after testing out combinations of pins to get back to the original distributions. Currently no way to un-pin after trying things. maybe an interactive prompt, arg, or separate flag to reset just pins without resetting weights, or weights + pins but not --score and --fit-score. need to account for the other knobs as well.
 
 ## Bugs
 
@@ -246,6 +248,33 @@ Ballot # Song Music Fit Combined Mod Votes Comment
 7 For I Am The Light (And… 65 85 77.5 · +1 65 85
 8 Fly Away 72 60 71.4 · +1 72 6+
 Total +8/-3
+
+---
+
+Bug: --score and --fit-score should use the usual normalization e.g. 7+ > 70 mod: +
+This should have transformed 9 to 90, not taken it as a literal 9
+❯ just rescore --score 4:9
+node scripts/ml.mjs rescore "$@"
+(current round: 2026-08-04-aaa-window)
+Wrote data/analysis/2026-08-04-aaa-window/music.md
+Wrote data/analysis/2026-08-04-aaa-window/music.json
+
+Up # Song Music Fit Combined Mod A B C D E Comment  
+ 1 革命を覚えた日 90 92 84.7 · 5 4 5 4 6 9 92  
+ 5 走 85 91 83.5 · 4 4 4 3 5 85 91  
+ 0 Hitchcoke 60 90 80.8 · 4 3 3 3 4 6 9  
+ 4 Sky Over Tokyo 9 90 76.8 · 3 3 2 3 3 85 9  
+ 6 TANK 70 74 69.7 · 2 2 2 3 2 7 74  
+ 7 THE FINAL 60 70 65.9 · 1 2 2 2 · 6 7  
+ 3 The fifth season (SSFWL) 80 65 63.7 · 1 2 2 2 · 8 65  
+ Total 20 20 20 20 20  
+ A. 5 tiers (bucket-count 5) — 5×1 / 4×2 / 3×1 / 2×1 / 1×2
+B. 3 tiers (bucket-count 3) — 4×2 / 3×2 / 2×3
+C. 4 tiers (bucket-count 4) — 5×1 / 4×1 / 3×1 / 2×4
+D. 3 tiers (bucket-count 3) — 4×1 / 3×4 / 2×2
+E. 6 tiers (bucket-count 5) — 6×1 / 5×1 / 4×1 / 3×1 / 2×1 / 0×2 · merges a tier (2→0 jump, no tiebreak)
+
+---
 
 ## Deferred (may not ship)
 

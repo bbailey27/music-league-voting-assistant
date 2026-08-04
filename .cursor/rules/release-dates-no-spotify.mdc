@@ -1,0 +1,27 @@
+# Release dates — no Spotify API
+
+**Do not suggest setting up Spotify API credentials** (`SPOTIFY_CLIENT_ID`,
+`SPOTIFY_CLIENT_SECRET`) for release-date lookups. That integration is **not implemented**
+for this workspace and is **not planned** — treat any stub code as a possible future path only.
+
+## Lookup order (bg-years / `release-year-gate.mjs`)
+
+1. Local cache (`data/ref/release-dates.json`)
+2. With `--fetch`: **MusicBrainz** (artist + title search)
+3. If MusicBrainz misses or looks wrong (compilation/repackage trap): **Wikipedia** song
+   article — cite the wiki URL
+
+## Reporting year checks to the user
+
+Split results into **confirmed** vs **needs check**:
+
+- **Confirmed** — date from cache/MB/wiki with a cited source; safe to pass/fail the gate.
+- **Needs check** — no date yet, MB only matched a compilation/repackage, or sources disagree.
+  List these explicitly with wiki/search links. **Never present an unverified date as final.**
+
+Hand-verify ambiguous rows, then add dates to the cache or re-run `--fetch`.
+
+## Related
+
+- `spec/release-dates.md`
+- `scripts/release-year-gate.mjs`

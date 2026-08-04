@@ -57,7 +57,7 @@ Authoritative list in [`scripts/leagues.mjs`](../scripts/leagues.mjs); this tabl
 
 | id            | Slug family      | Mode      | Standing notes / machinery                                                                 |
 | ------------- | ---------------- | --------- | ------------------------------------------------------------------------------------------ |
-| `bg-years`    | `bg-<year>`      | objective | Boy groups, male soloists, subunits; DQ girl groups; `version-earliest` release-year gate. |
+| `bg-years`    | `bg-<year>`      | objective | Boy groups, male soloists (feat. OK), subunits; DQ girl groups, female soloists, co-ed groups; `version-earliest` release-year gate. |
 | `story-chain` | `story-<n>`      | thematic  | Title-only; `title-*-scan` scripts; profile `story-continuation`.                          |
 | `tarot`       | `tarot-<arcana>` | thematic  | Profiles `traits-over-symbols` + `lyrics-first`.                                           |
 | `astrology`   | `<sign>`         | thematic  | Chill Western Astrology League; `traits-over-symbols` + `lyrics-first`.                    |

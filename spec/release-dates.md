@@ -7,7 +7,9 @@ track URI). **Do not grep that file for titles** — query it by URI or use
 
 **Tools:** [`scripts/release-year-gate.mjs`](../scripts/release-year-gate.mjs) reads a parsed
 round's `music.json`, resolves dates from the cache, and writes a pass/fail `fit.json`.
-Offline by default; `--fetch` enriches cache misses (Spotify + MusicBrainz).
+Offline by default; `--fetch` enriches cache misses via **MusicBrainz**, then **Wikipedia**
+when MB misses or looks like a compilation trap. **Spotify API is not implemented** — do not
+configure or suggest credentials (see `.cursor/rules/release-dates-no-spotify.mdc`).
 
 League-specific eligibility (boy groups, soloists, etc.) is in [`leagues.md`](leagues.md);
 this doc is only about **which date** counts for a submission.
@@ -159,7 +161,25 @@ overwrite `confidence: verified` entries from automated fuzzy matches.
 | `fuzzy`        | Year-only or weak match — do not auto-pass a gate without review.                          |
 | `needs-review` | Conflicting sources or version ambiguity.                                                  |
 
-Cache miss or `fuzzy` / `needs-review` → gate emits `maybe` (NEEDS LOOKUP), never a silent pass.
+Cache miss, `fuzzy`, `needs-review`, or `needs-check` → gate emits `maybe` (NEEDS CHECK),
+never a silent pass.
+
+---
+
+## Lookup providers (`--fetch`)
+
+| Provider        | Status        | Role                                                                 |
+| --------------- | ------------- | -------------------------------------------------------------------- |
+| **MusicBrainz** | **Shipped**   | Default. Artist+title search → earliest release across MB releases.  |
+| **Wikipedia**   | **Shipped**   | Fallback when MB misses, or when MB earliest fails the target year   |
+|                 |               | (compilation/repackage trap). Cite the song-article URL.             |
+| **Spotify API** | **Not planned** | Stub code only — **do not configure** `SPOTIFY_CLIENT_*`. Never   |
+|                 |               | suggest setting up Spotify for release dates in this workspace.      |
+
+Agent rule: [`.cursor/rules/release-dates-no-spotify.mdc`](../.cursor/rules/release-dates-no-spotify.mdc).
+
+When reporting year checks (CLI or chat), split **confirmed** pass/fail from **needs check**
+rows. Unverified dates must not be presented as final.
 
 ---
 

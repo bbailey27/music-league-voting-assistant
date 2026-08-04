@@ -19,7 +19,8 @@ Airtable songs DB can be mass-labeled.
 - `scripts/release-year-gate.mjs` — reads `data/analysis/<round>/music.json`, resolves each
   track from the cache, gates on earliest-release **year** vs a target, writes a **pure
   passFail** `fit.json` (gate-only: NO numeric fitScore, so passing songs are scored purely on
-  music and fails are DQ'd). Offline by default; `--fetch` enriches on cache miss.
+  music and fails are DQ'd). Offline by default; `--fetch` enriches on cache miss via
+  **MusicBrainz + Wikipedia** (Spotify API **not implemented / not planned**).
   - Run: `node scripts/release-year-gate.mjs <round> --year N [--fetch]`
     then `just merge <round> --rank music --gate passFail && just scores <round>`.
 - `data/ref/release-dates.json` — the shared cache, keyed by Spotify track URI. Fields per
@@ -31,16 +32,9 @@ Airtable songs DB can be mass-labeled.
 
 ## Open decisions (captured from the ask — resolve on resume)
 
-1. **Provider auth — UNSURE.** Which lookup path to finish/test end-to-end:
-   - **Recommended:** Spotify app creds (`SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET`) for
-     album date + `album_type` + ISRC keyed by track id, then **MusicBrainz** (no key; set
-     `MB_CONTACT`) for the earliest date across all releases via ISRC. Provider code for both is
-     already stubbed in `release-year-gate.mjs` (`fetchSpotify`, `fetchMusicBrainzEarliest`),
-     gated behind `--fetch`; not yet exercised live.
-   - MusicBrainz-only (artist+title search — fuzzier) or Spotify-only (album date; earliest =
-     album date, flag compilations) are fallbacks.
-   - **Action:** decide creds availability; then run a live `--fetch` pass and confirm the two
-     providers agree on a sample before trusting bulk writes.
+1. **Provider auth — RESOLVED (2026-08-04): Spotify API not planned.** Shipped lookup path:
+   **MusicBrainz** (default) + **Wikipedia** fallback on miss or compilation trap. Do not
+   suggest Spotify credentials. Open: CSV bulk enrichment, Airtable sync (separate plan).
 
 2. **Deluxe / album-edition handling — CHOSEN: bonus-track rule.**
    - `earliestReleaseDate` = earliest release of the *original recording*.

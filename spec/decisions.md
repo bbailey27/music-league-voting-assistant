@@ -153,6 +153,40 @@ eligibility rules differ by league and by recording version, not one global "ear
 
 ---
 
+## 2026-08-04 — Release dates: Wikipedia fallback; Spotify not planned
+
+**Change.** `release-year-gate.mjs` default provider is MusicBrainz with Wikipedia fallback
+when MB misses or MB earliest fails the target year (compilation trap → `needs-review`).
+CLI output splits **CONFIRMED** vs **NEEDS CHECK**; unverified rows stay `maybe` with
+`wikiCheckUrl`. Spotify API stub remains but is documented as **not implemented / not
+planned** — agents must not suggest configuring credentials
+(`.cursor/rules/release-dates-no-spotify.mdc`).
+
+**Why.** MB alone misses many K-pop tracks; MB compilation rows falsely fail good picks.
+Spotify API is not available in this workspace and should stop being recommended.
+
+**Refs.** `working tree` — `scripts/release-year-gate.mjs`, `spec/release-dates.md`,
+`tests/release-year-gate.test.mjs`, `.cursor/rules/release-dates-no-spotify.mdc`
+
+---
+
+## 2026-08-04 — bg-years: allow male soloist feat.; DQ co-ed groups
+
+**Change.** Kpop Boy Group Years standing reminders now allow male soloists featuring a
+female artist. Co-ed groups/duos (e.g. AKMU, ALLDAYPROJECT, KARD) are explicitly DQ'd
+along with girl-group and female-soloist submissions.
+
+**Why.** League clarified the collab vs co-ed line: a featured female on a male-soloist
+track is fine; standing co-ed acts are not boy groups or male soloists.
+
+**Overruled.** Reminder text that DQ'd all male–female collabs (added when soloists
+became eligible 2026-07-28).
+
+**Refs.** `working tree` — `scripts/leagues.mjs`, `spec/leagues.md`, `scripts/cli-help.mjs`,
+`tests/leagues.test.mjs`
+
+---
+
 ## 2026-07-28 — bg-years: male soloists and subunits eligible
 
 **Change.** Kpop Boy Group Years (`bg-years`) standing reminders now say boy groups,
@@ -162,7 +196,7 @@ male soloists, and subunits are eligible; only girl-group submissions are DQ'd.
 male-idol era (groups, solo debuts, and official subunits) — not strictly full-group
 tracks.
 
-**Refs.** `working tree` — `scripts/leagues.mjs`, `spec/leagues.md`
+**Refs.** `7971919` — `scripts/leagues.mjs`, `spec/leagues.md`
 
 ---
 

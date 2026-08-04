@@ -127,6 +127,8 @@ Load these when the task matches (they are explicit-only):
   distribution — a blank sits at 0 in every curve. Full rule:
   `spec/point-allocation.md` → _Pre-allocation gate_.
 - Submitter quotes are context only; never scored.
+- **Release dates:** MusicBrainz + Wikipedia only — **never suggest Spotify API creds**
+  (`.cursor/rules/release-dates-no-spotify.mdc`). Report year checks as confirmed vs needs check.
 - LLM does fit research only; allocation is always `scripts/score/allocate.mjs`.
 - **Parse never writes pick; pick never reads HTML; merge never picks.**
 - **Allocation invariants:** spend the full upvote bank and full downvote bank (when enabled), exactly; never assign upvotes and downvotes to the same song (see **point-allocation**).

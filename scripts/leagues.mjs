@@ -45,7 +45,7 @@ export const LEAGUES = [
     mode: 'objective',
     summary: 'K-pop songs from a specific release year — boy groups, male soloists, and boy group subunits (one year per round).',
     reminders: [
-      'Eligible: boy groups, male soloists, and boy group subunits — disqualify girl-group, female soloist, and male-female collab submissions (write a DQ comment; a text-only comment DQs in objective mode).',
+      'Eligible: boy groups, male soloists (feat. a female artist OK), and boy group subunits — disqualify girl-group, female soloist, and co-ed group/duo submissions (e.g. AKMU, ALLDAYPROJECT, KARD; write a DQ comment; a text-only comment DQs in objective mode).',
       "Release-year gate (rule: version-earliest — spec/release-dates.md): this version's earliest official release must be the target year. A year-only comment like `2019` DQs a wrong-year pick — years are never scored (spec/score-parsing.md → Years Are Not Scores).",
     ],
     scripts: [
