@@ -38,7 +38,7 @@ import {
 } from './round/pick.mjs';
 import { exploreAllocate, finishExploreCli } from './round/explore.mjs';
 import { printAppliedAllocationCli } from './parse/cli-print.mjs';
-import { slimProfile } from './parse/pipeline.mjs';
+import { slimProfile, warnBudgetMismatch } from './parse/pipeline.mjs';
 import { warnPickWithMissingScores } from './parse/cli-warn.mjs';
 import { downShapeFromShort, parsePickSpec } from './cli-commands.mjs';
 
@@ -336,6 +336,7 @@ async function main() {
       profile: slimProfile({ ...profile, rankBy: args.rank ?? musicData.profile?.rankBy ?? 'combined' }),
       baseline: picked.baseline,
     });
+    warnBudgetMismatch(tradeoffs);
     warnPickWithMissingScores(parsed.songs);
     await recordPickToTrainingLog(roundId, fitData.songs, picked.pick);
     return;
@@ -427,6 +428,7 @@ async function main() {
     profile: slim,
     baseline: picked.baseline,
   });
+  warnBudgetMismatch(tradeoffs);
   warnPickWithMissingScores(songs);
   await recordPickToTrainingLog(roundId, songs, picked.pick);
 }

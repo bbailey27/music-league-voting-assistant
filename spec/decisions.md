@@ -11,6 +11,74 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-08-13 — Score override normalization (`--score` / `--fit-score`)
+
+**Change.** [`parseScoreOverrides`](../scripts/parse/cli-flags.mjs) now runs the raw
+numeric value through [`scaleScoreToken`](../scripts/score/comment.mjs) — the same
+single-digit ×10, two-digit passthrough, three-digit ÷10 scaling that comment parsing
+uses. Applies to both `--score` and `--fit-score` on `rescore` and the web profile.
+
+**Why.** `--score 4:9` stored literal 9 instead of 90, breaking the "same shorthand as
+comment boxes" contract.
+
+**Refs.** `working tree` — `scripts/parse/cli-flags.mjs`, `tests/allocate.test.mjs`.
+
+## 2026-08-13 — `just run` auto-re-parses when input is newer
+
+**Change.** [`pipelineState`](../scripts/ml.mjs) compares input file mtime to
+`music.json` mtime. When the input is newer, [`nextStep`](../scripts/ml.mjs) returns a
+`parse` step with a "re-parse (input is newer)" label instead of skipping to merge/pick.
+
+**Why.** Uploading new HTML with scores after an earlier blank-score export left `just run`
+reading stale `music.json` and jumping to merge with 0 scores.
+
+**Refs.** `working tree` — `scripts/ml.mjs`.
+
+## 2026-08-13 — `just run` pick step prints option tables
+
+**Change.** The `pick` case in [`cmdRun`](../scripts/ml.mjs) now reads stored tradeoffs
+from `music.json` (or `scores.json`) and calls `printPickCli` to display the option menu
+alongside the pick prompt.
+
+**Why.** `just run` previously printed only "pick a distribution → just pick …" with no
+visible options, forcing the user to open `music.md` or run `just status` to see what
+A/B/C/D/E meant.
+
+**Refs.** `working tree` — `scripts/ml.mjs`.
+
+## 2026-08-13 — Budget warning at pick time
+
+**Change.** [`pick-round.mjs`](../scripts/pick-round.mjs) now calls `warnBudgetMismatch`
+after `printAppliedAllocationCli` in both music-only and thematic paths.
+
+**Why.** Budget mismatches (e.g. 14/15 after a pin on a DQ'd song) were reported during
+parse/merge/rescore but silently passed at pick.
+
+**Refs.** `working tree` — `scripts/pick-round.mjs`.
+
+## 2026-08-13 — Down table always emitted (single option when shapes collapse)
+
+**Change.** [`allocateDown`](../scripts/score/allocate.mjs) now pushes a `down-structure`
+tradeoff when `distinct.length >= 1` (was `>= 2`), mirroring the 2026-07-31 forced
+tier-count fix for the up menu.
+
+**Why.** When all three down shapes (curved/flat/concentrated) collapsed to the same
+distribution, no down table appeared at all — the user had to check the ballot to see
+downvote allocation.
+
+**Refs.** `working tree` — `scripts/score/allocate.mjs`.
+
+## 2026-08-13 — Unknown CLI flag detection with fuzzy suggestion
+
+**Change.** [`splitRoundArgs`](../scripts/ml.mjs) and `splitPickArgs` now reject
+unrecognized `--` flags via `rejectUnknownFlag`, which computes Levenshtein distance
+against all known flags and suggests the closest match (within 3 edits).
+
+**Why.** `--pins` (typo for `--pin`) was silently accepted; its value `4:3` was consumed
+as the round name, producing a confusing "No round matches 4:3" error.
+
+**Refs.** `working tree` — `scripts/ml.mjs`.
+
 ## 2026-07-31 — Web app Sections 1–3 (paste, parse, allocate)
 
 **Change.** Added [`docs/`](docs/) GitHub Pages shell: `index.html`, `styles.css`,
@@ -22,7 +90,7 @@ ballot/ranked tables + copy votes. README documents iPhone screenshot → Live T
 **Why.** Mobile in-app browser cannot copy round text; browser UI closes the loop
 for music-only rounds without a CLI.
 
-**Refs.** `working tree` — `docs/`, `README.md`, `spec/round-input-parsing.md`.
+**Refs.** `86b47de` — `docs/`, `README.md`, `spec/round-input-parsing.md`.
 
 ## 2026-07-31 — Forced `--tier-count` / `--bucket-count` emit a pickable option A
 
@@ -35,7 +103,7 @@ Forced curves surface as a single option A so `just pick A --tier-count N` (and
 `resolveOptionPick` with no letter to match, breaking the documented force-a-curve
 path on pick.
 
-**Refs.** `working tree` — `scripts/score/allocate.mjs`, `tests/score.test.mjs`.
+**Refs.** `d4bf5b8` — `scripts/score/allocate.mjs`, `tests/score.test.mjs`.
 
 ## 2026-07-31 — Pick pin comparison only when pick changes the presented menu
 
@@ -50,7 +118,7 @@ diffs tweaks against the display column too.
 the menu already showed, but the CLI re-printed a misleading unpinned-vs-pinned
 comparison.
 
-**Refs.** `working tree` — `scripts/round/pick.mjs`, `scripts/parse/cli-print.mjs`,
+**Refs.** `a9eba86` — `scripts/round/pick.mjs`, `scripts/parse/cli-print.mjs`,
 `scripts/pick-round.mjs`, `tests/cli-print.test.mjs`, `tests/rescore-e2e.test.mjs`.
 
 ## 2026-07-31 — Pin comparison table uses same rank sort as Up options
@@ -64,7 +132,7 @@ then raw submission order. Excluded songs still append last.
 while the Up option table honored `+` first; the owner expects one consistent rank
 order across CLI tables.
 
-**Refs.** `working tree` — `scripts/parse/cli-print.mjs`, `scripts/score/allocate.mjs`,
+**Refs.** `a9eba86` — `scripts/parse/cli-print.mjs`, `scripts/score/allocate.mjs`,
 `tests/cli-print.test.mjs`.
 
 ## 2026-07-31 — `rescore --score` clears `needsUserInput`; help documents score overrides
@@ -80,7 +148,7 @@ true, so allocation still treated the song as blank. The flags shipped in code a
 spec (2026-07-21) but were never added to CLI help — only vote `--pin` was documented
 there, which conflated ballot pins with raw-score edits.
 
-**Refs.** `working tree` — `scripts/rescore-round.mjs`, `scripts/cli-help.mjs`,
+**Refs.** `d940167` — `scripts/rescore-round.mjs`, `scripts/cli-help.mjs`,
 `tests/rescore-e2e.test.mjs`.
 
 ## 2026-07-29 — just recipes: positional-arguments for quoted flag values
@@ -95,7 +163,7 @@ extra argv words (`Unexpected argument "alignment"`). Same bug affected every va
 recipe (`parse`, `merge`, `rescore`, `fit`, `scores`, `final`, `run`, `status`, `tidy`,
 `config`, `test-regression`, `help`).
 
-**Refs.** `working tree` — `justfile`, `tests/just-args.test.mjs`.
+**Refs.** `f921971` — `justfile`, `tests/just-args.test.mjs`.
 
 ## 2026-07-28 — Pick reuses stored explore menu (cutoff + pins on profile)
 

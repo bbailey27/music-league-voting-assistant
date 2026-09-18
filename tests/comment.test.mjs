@@ -8,7 +8,7 @@ import {
   buildJsonPayload,
 } from '../scripts/score-core.mjs';
 import { applyManualFitScoring } from '../scripts/parse-round.mjs';
-import { mk, sum } from './score-helpers.mjs';
+import { sum } from './score-helpers.mjs';
 
 // scoreComment: digit scaling, modifiers, disqualification, fit tokens
 // ---------------------------------------------------------------------------

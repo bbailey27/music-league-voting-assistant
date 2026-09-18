@@ -32,12 +32,12 @@ import { applyDateSlugs, archiveStaleRounds, tidyRounds } from './maintain-round
 import { downShapeFromShort, parsePickSpec } from './cli-commands.mjs';
 import {
   formatConfigDisplay,
-  readMlConfig,
   writeMlConfig,
   DEFAULT_CLI_COMMENT_WIDTH,
 } from './ml-config.mjs';
 import { HELP, HELP_TOPICS, cmdHelpText } from './cli-help.mjs';
 import { LEAGUES, leagueForRound, leagueDetailLines } from './leagues.mjs';
+import { printPickCli } from './parse/cli-print.mjs';
 
 const SCRIPTS_DIR = 'scripts';
 
@@ -102,9 +102,60 @@ const VALUE_FLAGS = new Set([
   '--age',
 ]);
 
+const KNOWN_BOOLEAN_FLAGS = new Set([
+  '--dry-run',
+  '--scores',
+  '--no-favorite-band',
+  '--no-json',
+  '--lenient',
+  '--fit-words',
+]);
+
+const KNOWN_FLAGS = new Set([...VALUE_FLAGS, ...KNOWN_BOOLEAN_FLAGS]);
+
+function flagEditDistance(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const curr = [i];
+    for (let j = 1; j <= n; j++) {
+      curr[j] = a[i - 1] === b[j - 1]
+        ? prev[j - 1]
+        : 1 + Math.min(prev[j], curr[j - 1], prev[j - 1]);
+    }
+    prev = curr;
+  }
+  return prev[n];
+}
+
+function suggestFlag(flag) {
+  const name = flag.replace(/^-+/, '');
+  let best = null;
+  let bestDist = Infinity;
+  for (const known of KNOWN_FLAGS) {
+    const d = flagEditDistance(name, known.replace(/^-+/, ''));
+    if (d < bestDist) {
+      bestDist = d;
+      best = known;
+    }
+  }
+  return bestDist <= 3 ? best : null;
+}
+
+function rejectUnknownFlag(flag) {
+  const flagName = flag.includes('=') ? flag.slice(0, flag.indexOf('=')) : flag;
+  if (!flagName.startsWith('--') || KNOWN_FLAGS.has(flagName)) return;
+  const suggestion = suggestFlag(flagName);
+  const hint = suggestion ? ` Did you mean ${suggestion}?` : '';
+  console.error(`Unknown flag "${flagName}".${hint}`);
+  process.exit(1);
+}
+
 function nextFlagValue(argv, i, flag) {
   if (flag.includes('=') || !VALUE_FLAGS.has(flag)) return null;
-  if (i + 1 < argv.length && !argv[i + 1].startsWith('-')) return argv[++i];
+  if (i + 1 < argv.length && !argv[i + 1].startsWith('-')) return argv[i + 1];
   return null;
 }
 
@@ -115,6 +166,7 @@ function splitRoundArgs(rest) {
   for (let i = 0; i < rest.length; i++) {
     const t = rest[i];
     if (t.startsWith('-')) {
+      rejectUnknownFlag(t);
       flags.push(t);
       const v = nextFlagValue(rest, i, t);
       if (v != null) {
@@ -139,6 +191,7 @@ function splitPickArgs(rest) {
   for (let i = 0; i < rest.length; i++) {
     const t = rest[i];
     if (t.startsWith('-')) {
+      rejectUnknownFlag(t);
       flags.push(t);
       const v = nextFlagValue(rest, i, t);
       if (v != null) {
@@ -211,6 +264,10 @@ function pipelineState(name) {
   const hasScoresJson = existsSync(scores.json);
   const hasScoresHtml = existsSync(scores.html);
 
+  let inputFresherThanParse = false;
+  if (hasParse && hasInput) {
+    inputFresherThanParse = statSync(inputPath).mtimeMs > statSync(music.json).mtimeMs;
+  }
   let musicHtmlFresh = false;
   if (existsSync(music.json) && hasMusicHtml) {
     musicHtmlFresh = statSync(music.html).mtimeMs >= statSync(music.json).mtimeMs;
@@ -261,6 +318,7 @@ function pipelineState(name) {
     hasTxt,
     hasInput,
     hasParse,
+    inputFresherThanParse,
     hasMusicHtml,
     musicHtmlFresh,
     hasFitJson,
@@ -287,6 +345,12 @@ function nextStep(st) {
     return {
       kind: 'parse',
       label: `parse the round → ${st.music.md} + ${st.music.json}`,
+    };
+  }
+  if (st.inputFresherThanParse) {
+    return {
+      kind: 'parse',
+      label: `re-parse the round (input is newer than music.json) → ${st.music.md} + ${st.music.json}`,
     };
   }
   if (!st.hasFitJson) {
@@ -462,10 +526,18 @@ function cmdRun(explicitName, flags) {
       console.log(`${base}: ${step.label}`);
       warnMissingScores(st);
       return process.exit(runScript('merge-scores.mjs', [base]));
-    case 'pick':
+    case 'pick': {
       console.log(`${base}: ${step.label}`);
       warnMissingScores(st);
+      const pickJson = st.hasScoresJson ? st.scores.json : st.music.json;
+      try {
+        const data = JSON.parse(readFileSync(pickJson, 'utf8'));
+        if (data.tradeoffs?.length) {
+          printPickCli(data.tradeoffs, base, data.songs || [], data.ownSongs || [], data.budget, data.profile);
+        }
+      } catch { /* stored JSON unreadable — skip table */ }
       break;
+    }
     case 'final':
       return process.exit(
         runScript('render-final-html.mjs', [st.music.json, '--out', st.music.html])

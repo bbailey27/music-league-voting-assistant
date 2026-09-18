@@ -279,7 +279,6 @@ async function main() {
     process.exit(1);
   }
 
-  const budget = parsed.budget.upvoteBankSize ?? 0;
   const fitJson = fitPaths(roundId).json;
   const fitJsonExists = existsSync(fitJson);
   const thematicMerge = parseWantsThematicMerge(args, fitJsonExists);

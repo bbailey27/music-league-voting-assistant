@@ -1,6 +1,7 @@
 // Pure CLI flag validators for parse / merge / pick stages.
 
 import { normalizeDownShape } from './score/allocate.mjs';
+import { scaleScoreToken } from './score/comment.mjs';
 
 export function parsePins(specs) {
   const list = (Array.isArray(specs) ? specs : [specs]).filter(Boolean);
@@ -124,7 +125,11 @@ export function parseScoreOverrides(specs, flag = '--score') {
           `Invalid ${flag} "${pair}" — use <score> optionally with +, -, or ? (e.g. 74.5+, 75?, 76-).`
         );
       }
-      const score = Number(m[1]);
+      const rawNum = m[1];
+      const dotIdx = rawNum.indexOf('.');
+      const intPart = dotIdx >= 0 ? rawNum.slice(0, dotIdx) : rawNum;
+      const decPart = dotIdx >= 0 ? rawNum.slice(dotIdx) : '';
+      const score = scaleScoreToken(intPart, decPart);
       const mods = m[2] || '';
       const plus = mods.includes('+');
       const minus = mods.includes('-');

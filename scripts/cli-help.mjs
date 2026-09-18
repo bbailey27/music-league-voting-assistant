@@ -75,18 +75,21 @@ const GATE = `  --gate passFail|passFailMaybe
 export const HELP = {
   overview: `Music League pipeline — parse → (merge) → pick → render
 
-Stages (each reads/writes JSON; only parse touches HTML):
+Stages (each reads/writes JSON; only save-round and parse touch HTML):
+  0. save-round  clipboard → data/rounds/<name>.html
   1. parse   HTML/text → music.md + music.json
   2. merge   music.json + fit.json → scores.json   (thematic only)
   3. pick    record distribution choice (A/B/C) → pick in JSON + picks.jsonl
   4. final   render music.html or scores.html
 
 Music-only:
+  just save-round <name>
   just parse <name>
   just pick <name> B --reason "…"
   just final <name>
 
 Thematic:
+  just save-round <name>
   just parse <name>
   # agent writes fit.json
   just merge <name>

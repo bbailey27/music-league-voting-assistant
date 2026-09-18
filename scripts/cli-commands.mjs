@@ -68,7 +68,7 @@ export function formatLegacySelector(roundId, selector, defaultLetter = 'A') {
   return formatPickCmd(roundId, letter, { downShape });
 }
 
-export function pickHintLine(roundId, { hasUp = true, hasDown = false } = {}) {
+export function pickHintLine(roundId, { hasDown = false } = {}) {
   if (hasDown) return `just pick ${roundId} <A|B|C> <cv|fl|cc>`;
   return `just pick ${roundId} <A|B|C>`;
 }

@@ -259,7 +259,6 @@ test('pick after rescore --pin without pick --pin skips the pin comparison table
   try {
     await mkdir(join(dataDir, 'rounds'), { recursive: true });
     await copyFile(fixtureHtml, join(dataDir, 'rounds', `${ROUND}.html`));
-    const musicJson = join(dataDir, 'analysis', ROUND, 'music.json');
 
     await ml(env, 'parse', ROUND);
     await ml(env, 'rescore', ROUND, '--pin', '2:1');

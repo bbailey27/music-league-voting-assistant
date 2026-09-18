@@ -5,7 +5,6 @@ import {
   allocate,
   estimateCenter,
   rankValue,
-  mergeFitJson,
   normalizeCombined,
   ckmeans1dWeighted,
   buildPickRecord,
@@ -33,7 +32,6 @@ import {
   mk,
   sum,
   sumDown,
-  downProfile,
 } from './score-helpers.mjs';
 
 // estimateCenter: mode-of-rounded, median fallback
@@ -1625,6 +1623,18 @@ test('parseScoreOverrides parses idx:score with +/-/? modifiers', () => {
   // `?` combined with a modifier marks that modifier uncertain.
   assert.deepEqual(parseScoreOverrides('4:74.5+?'), [
     { idx: 4, score: 74.5, plus: true, minus: false, uncertain: false, plusUncertain: true, minusUncertain: false },
+  ]);
+
+  // Single-digit scores scale ×10 (same as comment parsing: 9 → 90).
+  assert.deepEqual(parseScoreOverrides('4:9'), [
+    { idx: 4, score: 90, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false },
+  ]);
+  assert.deepEqual(parseScoreOverrides('4:9+'), [
+    { idx: 4, score: 90, plus: true, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false },
+  ]);
+  // Three-digit scores scale ÷10 (745 → 74.5).
+  assert.deepEqual(parseScoreOverrides('4:745'), [
+    { idx: 4, score: 74.5, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false },
   ]);
 
   // Comma / repeated specs both fold into one list.

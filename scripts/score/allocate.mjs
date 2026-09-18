@@ -8,7 +8,7 @@ import {
   fitTierForScore,
 } from './fit-signal.mjs';
 import { combinedScore, effectiveMusic } from './merge.mjs';
-import { gateClass, songGate } from './gate.mjs';
+import { gateClass } from './gate.mjs';
 
 // The single number a song is ranked + tiered by, per the profile's rankBy.
 // music (default): the music score; fit: the fit score; combined: the blend.
@@ -576,7 +576,7 @@ function allocateDownvotes(songs, budget, cap, profile, tradeoffs, downSet) {
       seen.add(c.sig);
       distinct.push(c);
     }
-    if (distinct.length >= 2) {
+    if (distinct.length >= 1) {
       tradeoffs.push({
         kind: 'down-structure',
         question: `Which downvote shape? Default is ${DOWN_SHAPE_LABEL[chosen]}; record with just pick <round> <A|B|C> --down-shape <concentrated|flat|curved> (letter = up split; --down-shape = down shape).`,

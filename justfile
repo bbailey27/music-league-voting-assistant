@@ -1,3 +1,8 @@
+# ── Start every round here ─────────────────────────────────────────
+# Copy the round HTML to your clipboard, then:
+#     just save-round <slug>    e.g. just save-round 5th-gen-bg
+# After that: just run <slug> walks you through the pipeline (or "just help").
+
 # Pass recipe args as "$@" so quoted values (e.g. --reason "…") reach node intact.
 set positional-arguments
 
@@ -73,3 +78,8 @@ lint:
 # Auto-fix JS (eslint --fix) + Markdown (markdownlint --fix)
 fix:
     npm run --silent fix
+
+# Save clipboard HTML as a round file. Example: just save-round 5th-gen-bg
+save-round slug:
+    pbpaste > data/rounds/{{slug}}.html
+    @echo "Saved data/rounds/{{slug}}.html ($(wc -c < data/rounds/{{slug}}.html | tr -d ' ') bytes)"
