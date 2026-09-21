@@ -282,6 +282,12 @@ Retired rounds may live in `data/rounds/archive/` or `data/analysis/archive/` (i
 markdownlint config (`.markdownlint-cli2.jsonc`) is shared with the VS Code
 markdownlint extension, so editor warnings and the CLI agree.
 
+### Agent rules (AGENTS.md)
+
+`just agents` regenerates the root `AGENTS.md` from the rules in `.cursor/rules/` so
+AGENTS.md-reading tools (opencode, etc.) follow the same behavioral rules as Cursor.
+Edit rules in `.cursor/rules/*.mdc` — never the generated file.
+
 ## Getting a usable HTML export (important)
 
 See **Workflow step 1** — autosave, reload, confirm pre-filled comments, then save the

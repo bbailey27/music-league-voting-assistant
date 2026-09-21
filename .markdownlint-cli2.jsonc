@@ -8,6 +8,7 @@
   },
   "globs": ["**/*.md"],
   // node_modules + generated output; .cursor holds tool-generated plans;
+  // AGENTS.md is generated from .cursor/rules/ (just agents);
   // tests/regressions are terse one-line fixtures, not prose docs.
-  "ignores": ["node_modules", "data", ".cursor", "tests"],
+  "ignores": ["node_modules", "data", ".cursor", "tests", "AGENTS.md"],
 }

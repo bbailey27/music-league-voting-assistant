@@ -71,9 +71,15 @@ config *args:
 test-regression *args:
     node scripts/regression-snapshot.mjs "$@"
 
-# Lint JS (eslint) + Markdown (markdownlint) without changing files
+# Lint JS (eslint) + Markdown (markdownlint) without changing files.
+# Also fails if AGENTS.md is stale (rules changed without `just agents`).
 lint:
     npm run --silent lint
+    @node scripts/sync-agents-md.mjs --check
+
+# Regenerate AGENTS.md from .cursor/rules/*.mdc (run after editing any rule there)
+agents:
+    node scripts/sync-agents-md.mjs
 
 # Auto-fix JS (eslint --fix) + Markdown (markdownlint --fix)
 fix:
