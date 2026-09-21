@@ -95,9 +95,6 @@ Output snapshot regression test (diff-based): see
         Notes
         ⚠️ Bank not fully spent: upvotes 0/15. rebalance so each bank totals exactly (pins, or caps × eligible slots, may block full spend).
 
-
-
-
 ```
 
 1. Improve ballot and option table output some more.
@@ -118,6 +115,26 @@ Output snapshot regression test (diff-based): see
 6. Split out active vs concluded vs recurring leagues in the leagues.mjs file so context isn't bloated with outdated details. Also because these simplified slugs are likely to be reused. That's why dates are included in file names. So there needs to be logic about only matching a partial round name in CLI if it's a new or active round, not falling back to old rounds with similar names. And league notes and rules should probably save their active date range so they don't get applied to future leagues with similar names.
 7. For combined scores, always print the current applied weights alongside the option table. I forget the defaults and then have to run manually to make sure it's using the fit weights I expect in CLI. Could do similar for all active pins, cutoffs, curve types, etc.
 8. --reset flag. On rescore and other using the stored 'profile'. To clear the profile after testing out combinations of pins to get back to the original distributions. Currently no way to un-pin after trying things. maybe an interactive prompt, arg, or separate flag to reset just pins without resetting weights, or weights + pins but not --score and --fit-score. need to account for the other knobs as well.
+16. Improve ballot and option table output some more.
+  a. On ballot CLI I'd like to se votes right next to combined. mod should be next to the score it modifies. Currently not next to the music score. But also what if music and fit scores both were numeric with mods? would they share 1 mod column? is one silently dropped?
+    b. I get a spaced out table on parse and a squished one with the up label on rescore, even when no downvotes are available
+    c. options kicked out because of a cutoff should stay in the sort order with the others not sorted differently at the bottom. so i can visually see where the cutoff lands
+17. Decouple fit, gate, weights, etc flags from parse. add ability to use a shortcut like re-run or plain just run to alter combined score and weightings and output separate from the actual raw file parsing. May mean restructuring music vs fit json? output the table again after each alteration. also a command to manually adjust a raw score without editing or re-pasting the HTML. Similar to pin but update the actual music and fit jsons. if no re-parse of the raw using these new commands, it should stick.
+  a. **PARTIALLY SHIPPED (A + B + C):** `just rescore <round> [knobs]` re-weights/re-shapes and
+    re-allocates from JSON (no HTML re-read), re-printing the menu and resetting any pick to
+    draft (`scripts/rescore-round.mjs`; see decisions.md 2026-07-10). **(B) SHIPPED
+    (2026-07-21):** `rescore --score <i>:<v>` / `--fit-score <i>:<v>` writes a single raw
+    music/fit score (with `+`/`-`/`?` modifier) into `music.json`/`fit.json` by `rawOrderIndex`
+    and re-allocates with no re-parse (see decisions.md 2026-07-21). **Still open (D):** any
+    music-vs-fit JSON restructure — not needed for B as shipped.
+18. Testing dry-run / scratch-pad. Agents (and the owner) sometimes need to exercise parse/pick/rescore against a real round to verify behavior, but doing so today overwrites the round's `music.json`/`music.md` (and can silently change weights, as happened when a test re-parse dropped 0.7/0.3 → 0.5/0.5). Provide a safe scratch mode — e.g. a `--scratch`/`--sandbox` flag or a temp working copy — that runs the full pipeline and prints the tables/output WITHOUT writing back to the round's real files (or writes to a throwaway path). Goal: never mutate the owner's committed analysis as a side effect of testing.
+19. Finish splitting up test files and audit tests. Check for unnecessary tests e.g. checking 3rd party libraries or basic code features. Check for assumptions and logical leaps. E.g. compare to the decision file and see if it mentions the explicit edge case or if the agent likely just wrote a test to confirm what it had already assumed. Even the decision file may not be full evidence. Surface anything potentially sketchy, contradictory, or inconsistent in the tests or the decision log.
+20. Create a skill to corral excessive guessing and independent decision making. Agents should not make assumptions about implementation details that affect the outcome or handling of edge cases. There have been instances of large enough assumptions that they got codified in the decision log and taken as evidence of intent by future agents, without me signing off on them. Agents should consult me about any assumptions or edge cases. If it would be a small tweak to change, it is acceptable to pick the best option and then call it out for approval at the end of the step. If it's a larger rewrite to fix, always stop and ask. Either way, ALWAYS list any assumptions made or edge cases handled at the end. Example assumptions include: if the budget can't be met, it is acceptable to go under budget; always sort tables by music score even when combined score is present; manual cutoffs are only allowed on music scores. Even if you didn't make an intentional decision, check with fresh eyes if the code ENFORCES any such constraints that were not confirmed by the user.
+21. Split out active vs concluded vs recurring leagues in the leagues.mjs file so context isn't bloated with outdated details. Also because these simplified slugs are likely to be reused. That's why dates are included in file names. So there needs to be logic about only matching a partial round name in CLI if it's a new or active round, not falling back to old rounds with similar names. And league notes and rules should probably save their active date range so they don't get applied to future leagues with similar names.
+22. For combined scores, always print the current applied weights alongside the option table. I forget the defaults and then have to run manually to make sure it's using the fit weights I expect in CLI. Could do similar for all active pins, cutoffs, curve types, etc.
+23. --reset flag. On rescore and other using the stored 'profile'. To clear the profile after testing out combinations of pins to get back to the original distributions. Currently no way to un-pin after trying things. maybe an interactive prompt, arg, or separate flag to reset just pins without resetting weights, or weights + pins but not --score and --fit-score. need to account for the other knobs as well.
+24. Visual representations of the curves so I can quickly compare how well each option aligns with my vote distribution.
+25. Command shortcuts like r for rescore and -w for --weights and -c m:x for music cutoff. Can still use both versions. Appear in help.
 
 ## Bugs
 
@@ -712,3 +729,263 @@ D + pin # Song Score Mod Original Altered Comment
 fit or music score of '10' in my raw comment' means 100 not literally 10. I don't bother to write scores below 5/50 usually so it's safe to hardcode that case. I'd never write an actual 10, I'd just disqualify the song.
 
 ---
+
+Different weights on ballot vs choice table
+[main ≡ +0 ~1 -0]$$ just rescore --weights 2:8
+node scripts/ml.mjs rescore "$@"
+(current round: 2026-08-10-aaa-fire)
+Wrote data/analysis/2026-08-10-aaa-fire/music.md
+Wrote data/analysis/2026-08-10-aaa-fire/music.json
+
+Up
+    #  Song                Music  Fit  Combined  Mod   A   B   C   D   E  Comment                                  
+    3  No diggity             87   90      91.0    ·   5   4   5   4   5  87 9                                     
+    6  HWAA                   84   90      79.5    ·   4   4   4   4   4  84 9                                     
+    4  SPARK-AGAIN            83   92      76.7    ·   4   4   4   4   4  83 92                                    
+    5  Operation Mosquito     82   90      71.8    ·   3   3   3   4   4  82 9                                     
+    1  プリズム               81   90      68.0    ·   2   3   3   3   2  81 9                                     
+    2  火ノ鳥                 81   80      62.9    ·   2   2   1   1   1  81 8                                     
+       Total                                          20  20  20  20  20                                           
+    A. 4 tiers (bucket-count 4) — 5×1 / 4×2 / 3×1 / 2×2
+    B. 3 tiers (bucket-count 3) — 4×3 / 3×2 / 2×1
+    C. 4 tiers (bucket-count 4) — 5×1 / 4×2 / 3×2 / 1×1 · merges a tier (3→1 jump, no tiebreak)
+    D. 3 tiers (bucket-count 3) — 4×4 / 3×1 / 1×1 · merges a tier (3→1 jump, no tiebreak)
+    E. 4 tiers (bucket-count 4) — 5×1 / 4×3 / 2×1 / 1×1 · merges a tier (4→2 jump, no tiebreak)
+
+just pick <a|b|c> [--pin <song>:<v>] [--cutoff music:<n>] [--reason "…"]
+
+Ballot
+    #  Song                Music  Fit  Combined  Mod  Votes  Comment                                               
+    0  DETERMINADO             —    —         —    ·      —  ·                                                     
+    1  プリズム               81   90      68.0    ·      2  81 9                                                  
+    2  火ノ鳥                 81   80      62.9    ·      2  81 8                                                  
+    3  No diggity             87   90      91.0    ·      5  87 9                                                  
+    4  SPARK-AGAIN            83   92      76.7    ·      4  83 92                                                 
+    5  Operation Mosquito     82   90      71.8    ·      3  82 9                                                  
+    6  HWAA                   84   90      79.5    ·      4  84 9                                                  
+       Total                                             20   
+
+
+       [main ≡ +0 ~1 -0]$$ just pick a
+node scripts/ml.mjs pick "$@"
+(current round: 2026-08-10-aaa-fire)
+Applied option A — 4 tiers, 5×1 / 4×2 / 3×1 / 2×2.
+Wrote data/analysis/2026-08-10-aaa-fire/music.md
+Wrote data/analysis/2026-08-10-aaa-fire/music.json
+
+Applied
+    #  Song                Music  Fit  Combined  Mod  Votes  Comment                                               
+    0  DETERMINADO             —    —         —    ·      —  ·                                                     
+    1  プリズム               81   90      68.0    ·      2  81 9                                                  
+    2  火ノ鳥                 81   80      62.9    ·      2  81 8                                                  
+    3  No diggity             87   90      91.0    ·      5  87 9                                                  
+    4  SPARK-AGAIN            83   92      76.7    ·      4  83 92                                                 
+    5  Operation Mosquito     82   90      71.8    ·      3  82 9                                                  
+    6  HWAA                   84   90      79.5    ·      4  84 9                                                  
+       Total                                             20                                                        
+Logged pick to data/analysis/picks.jsonl
+---
+Why are none of the curves using the max votes? When I pinned a song to 6, it didn't bring back the E option with 654320 even though that was valid with the pins. It condensed all the way down to 1 option. I'd expect an attempt to reflow and produce more curves at that point.
+
+[main ≡ +0 ~2 -0]$$ just run circle
+node scripts/ml.mjs run "$@"
+  named aaa-circle → 2026-08-23-aaa-circle
+  ! skip archive of data/rounds/2026-07-16-kpop-under-appreciated.html: data/rounds/archive/2026-07-16-kpop-under-appreciated.html already exists
+  ! skip archive of data/analysis/2026-07-16-kpop-under-appreciated: data/analysis/archive/2026-07-16-kpop-under-appreciated already exists
+Wrote data/analysis/2026-08-23-aaa-circle/music.md
+Wrote data/analysis/2026-08-23-aaa-circle/music.json
+
+League: aaa-<topic> — AAA league themed rounds (aaa-<topic>).
+  See: spec/leagues.md
+
+Up
+    #  Song           Music  Fit  Combined  Mod   A   B   C   D   E  Comment                                       
+    0  Always You        90   80      85.9    ·   5   4   5   5   6  9 8                                           
+    5  Love in Bloom     75   78      79.3    ·   5   4   4   4   5  75 78                                         
+    6  I Want You        72   80      78.6    ·   4   4   4   3   4  72 8                                          
+    4  午夜宣言          70   75      76.4    ·   3   3   3   3   3  7 75                                          
+    1  プルミエール      60   80      73.8    ·   2   3   2   3   2  6 8                                           
+    3  BiiiG             50   30      56.0    ·   1   2   2   2   ·  5 3                                           
+       Total                                     20  20  20  20  20                                                
+    A. 5 tiers (bucket-count 5) — 5×2 / 4×1 / 3×1 / 2×1 / 1×1
+    B. 3 tiers (bucket-count 3) — 4×3 / 3×2 / 2×1
+    C. 4 tiers (bucket-count 4) — 5×1 / 4×2 / 3×1 / 2×2
+    D. 4 tiers (bucket-count 4) — 5×1 / 4×1 / 3×3 / 2×1
+    E. 6 tiers (bucket-count 5) — 6×1 / 5×1 / 4×1 / 3×1 / 2×1 / 0×1 · merges a tier (2→0 jump, no tiebreak)
+
+just pick <a|b|c> [--pin <song>:<v>] [--cutoff music:<n>] [--reason "…"]
+
+Ballot
+    #  Song                      Music  Fit  Combined  Mod  Votes  Comment                                         
+    0  Always You                   90   80      85.9    ·      5  9 8                                             
+    1  プルミエール                 60   80      73.8    ·      2  6 8                                             
+    2  Waves (feat. Simon Domi…      —    —         —    ·      —  ·                                               
+    3  BiiiG                        50   30      56.0    ·      1  5 3                                             
+    4  午夜宣言                     70   75      76.4    ·      3  7 75                                            
+    5  Love in Bloom                75   78      79.3    ·      5  75 78                                           
+    6  I Want You                   72   80      78.6    ·      4  72 8                                            
+       Total                                                   20                                                  
+bridgetbailey@MacBook-Pro:~/dev/music-league-voting-assistant output=''
+[main ≡ +0 ~2 -0]$$ just rescore --weights 8:2
+node scripts/ml.mjs rescore "$@"
+(current round: 2026-08-23-aaa-circle)
+Wrote data/analysis/2026-08-23-aaa-circle/music.md
+Wrote data/analysis/2026-08-23-aaa-circle/music.json
+
+Up
+    #  Song           Music  Fit  Combined  Mod   A   B   C   D   E  Comment                                       
+    0  Always You        90   80      82.5    ·   4   5   5   5   6  9 8                                           
+    6  I Want You        72   80      79.6    ·   4   4   5   4   5  72 8                                          
+    5  Love in Bloom     75   78      79.2    ·   4   3   4   4   4  75 78                                         
+    1  プルミエール      60   80      77.6    ·   3   3   3   3   3  6 8                                           
+    4  午夜宣言          70   75      77.1    ·   3   3   2   2   2  7 75                                          
+    3  BiiiG             50   30      54.1    ·   2   2   1   2   ·  5 3                                           
+       Total                                     20  20  20  20  20                                                
+    A. 3 tiers (bucket-count 3) — 4×3 / 3×2 / 2×1
+    B. 4 tiers (bucket-count 4) — 5×1 / 4×1 / 3×3 / 2×1
+    C. 5 tiers (bucket-count 5) — 5×2 / 4×1 / 3×1 / 2×1 / 1×1
+    D. 4 tiers (bucket-count 4) — 5×1 / 4×2 / 3×1 / 2×2
+    E. 6 tiers (bucket-count 5) — 6×1 / 5×1 / 4×1 / 3×1 / 2×1 / 0×1 · merges a tier (2→0 jump, no tiebreak)
+
+just pick <a|b|c> [--pin <song>:<v>] [--cutoff music:<n>] [--reason "…"]
+
+Ballot
+    #  Song                      Music  Fit  Combined  Mod  Votes  Comment                                         
+    0  Always You                   90   80      82.5    ·      4  9 8                                             
+    1  プルミエール                 60   80      77.6    ·      3  6 8                                             
+    2  Waves (feat. Simon Domi…      —    —         —    ·      —  ·                                               
+    3  BiiiG                        50   30      54.1    ·      2  5 3                                             
+    4  午夜宣言                     70   75      77.1    ·      3  7 75                                            
+    5  Love in Bloom                75   78      79.2    ·      4  75 78                                           
+    6  I Want You                   72   80      79.6    ·      4  72 8                                            
+       Total                                                   20                                                  
+bridgetbailey@MacBook-Pro:~/dev/music-league-voting-assistant output=''
+[main ≡ +0 ~2 -0]$$ just rescore --weights 6:4
+node scripts/ml.mjs rescore "$@"
+(current round: 2026-08-23-aaa-circle)
+Wrote data/analysis/2026-08-23-aaa-circle/music.md
+Wrote data/analysis/2026-08-23-aaa-circle/music.json
+
+Up
+    #  Song           Music  Fit  Combined  Mod   A   B   C   D   E  Comment                                       
+    0  Always You        90   80      84.7    ·   4   5   5   4   5  9 8                                           
+    5  Love in Bloom     75   78      79.2    ·   4   4   4   4   4  75 78                                         
+    6  I Want You        72   80      78.9    ·   4   4   4   4   4  72 8                                          
+    4  午夜宣言          70   75      76.6    ·   3   3   3   4   4  7 75                                          
+    1  プルミエール      60   80      75.1    ·   3   2   3   3   3  6 8                                           
+    3  BiiiG             50   30      55.4    ·   2   2   1   1   ·  5 3                                           
+       Total                                     20  20  20  20  20                                                
+    A. 3 tiers (bucket-count 3) — 4×3 / 3×2 / 2×1
+    B. 4 tiers (bucket-count 4) — 5×1 / 4×2 / 3×1 / 2×2
+    C. 4 tiers (bucket-count 4) — 5×1 / 4×2 / 3×2 / 1×1 · merges a tier (3→1 jump, no tiebreak)
+    D. 3 tiers (bucket-count 3) — 4×4 / 3×1 / 1×1 · merges a tier (3→1 jump, no tiebreak)
+    E. 4 tiers (bucket-count 3) — 5×1 / 4×3 / 3×1 / 0×1 · merges a tier (3→0 jump, no tiebreak)
+
+just pick <a|b|c> [--pin <song>:<v>] [--cutoff music:<n>] [--reason "…"]
+
+Ballot
+    #  Song                      Music  Fit  Combined  Mod  Votes  Comment                                         
+    0  Always You                   90   80      84.7    ·      4  9 8                                             
+    1  プルミエール                 60   80      75.1    ·      3  6 8                                             
+    2  Waves (feat. Simon Domi…      —    —         —    ·      —  ·                                               
+    3  BiiiG                        50   30      55.4    ·      2  5 3                                             
+    4  午夜宣言                     70   75      76.6    ·      3  7 75                                            
+    5  Love in Bloom                75   78      79.2    ·      4  75 78                                           
+    6  I Want You                   72   80      78.9    ·      4  72 8                                            
+       Total                                                   20                                                  
+bridgetbailey@MacBook-Pro:~/dev/music-league-voting-assistant output=''
+[main ≡ +0 ~2 -0]$$ just rescore --pin 0:5
+node scripts/ml.mjs rescore "$@"
+(current round: 2026-08-23-aaa-circle)
+Wrote data/analysis/2026-08-23-aaa-circle/music.md
+Wrote data/analysis/2026-08-23-aaa-circle/music.json
+  Pins merged 2 identical up option(s).
+
+Up
+    #  Song           Music  Fit  Combined  Mod   A   B   C  Comment                                               
+    0  Always You        90   80      84.7    ·   5   5   5  9 8                                                   
+    5  Love in Bloom     75   78      79.2    ·   4   4   4  75 78                                                 
+    6  I Want You        72   80      78.9    ·   4   4   4  72 8                                                  
+    4  午夜宣言          70   75      76.6    ·   3   3   4  7 75                                                  
+    1  プルミエール      60   80      75.1    ·   3   2   3  6 8                                                   
+    3  BiiiG             50   30      55.4    ·   1   2   ·  5 3                                                   
+       Total                                     20  20  20                                                        
+    A. 3 tiers (bucket-count 3) — 5×1 / 4×2 / 3×2 / 1×1
+    B. 4 tiers (bucket-count 4) — 5×1 / 4×2 / 3×1 / 2×2
+    C. 3 tiers (bucket-count 3) — 5×1 / 4×3 / 3×1 / 0×1 · merges a tier (3→1 jump, no tiebreak)
+
+just pick <a|b|c> [--pin <song>:<v>] [--cutoff music:<n>] [--reason "…"]
+
+Ballot
+    #  Song                      Music  Fit  Combined  Mod  Votes  Comment                                         
+    0  Always You                   90   80      84.7    ·      5  9 8                                             
+    1  プルミエール                 60   80      75.1    ·      3  6 8                                             
+    2  Waves (feat. Simon Domi…      —    —         —    ·      —  ·                                               
+    3  BiiiG                        50   30      55.4    ·      1  5 3                                             
+    4  午夜宣言                     70   75      76.6    ·      3  7 75                                            
+    5  Love in Bloom                75   78      79.2    ·      4  75 78                                           
+    6  I Want You                   72   80      78.9    ·      4  72 8                                            
+       Total                                                   20                                                  
+bridgetbailey@MacBook-Pro:~/dev/music-league-voting-assistant output=''
+[main ≡ +0 ~2 -0]$$ just rescore --pin 0:5,3:0
+node scripts/ml.mjs rescore "$@"
+(current round: 2026-08-23-aaa-circle)
+Wrote data/analysis/2026-08-23-aaa-circle/music.md
+Wrote data/analysis/2026-08-23-aaa-circle/music.json
+  Pins merged 4 identical up option(s).
+
+Up
+    #  Song           Music  Fit  Combined  Mod   A  Comment                                                       
+    0  Always You        90   80      84.7    ·   5  9 8                                                           
+    5  Love in Bloom     75   78      79.2    ·   4  75 78                                                         
+    6  I Want You        72   80      78.9    ·   4  72 8                                                          
+    4  午夜宣言          70   75      76.6    ·   4  7 75                                                          
+    1  プルミエール      60   80      75.1    ·   3  6 8                                                           
+    3  BiiiG             50   30      55.4    ·   ·  5 3                                                           
+       Total                                     20                                                                
+    A. 3 tiers (bucket-count 3) — 5×1 / 4×3 / 3×1 / 0×1
+
+just pick <a|b|c> [--pin <song>:<v>] [--cutoff music:<n>] [--reason "…"]
+
+Ballot
+    #  Song                      Music  Fit  Combined  Mod  Votes  Comment                                         
+    0  Always You                   90   80      84.7    ·      5  9 8                                             
+    1  プルミエール                 60   80      75.1    ·      3  6 8                                             
+    2  Waves (feat. Simon Domi…      —    —         —    ·      —  ·                                               
+    3  BiiiG                        50   30      55.4    ·      ·  5 3                                             
+    4  午夜宣言                     70   75      76.6    ·      4  7 75                                            
+    5  Love in Bloom                75   78      79.2    ·      4  75 78                                           
+    6  I Want You                   72   80      78.9    ·      4  72 8                                            
+       Total                                                   20                                                  
+bridgetbailey@MacBook-Pro:~/dev/music-league-voting-assistant output=''
+[main ≡ +0 ~2 -0]$$ just rescore --pin 0:6,3:0
+node scripts/ml.mjs rescore "$@"
+(current round: 2026-08-23-aaa-circle)
+Wrote data/analysis/2026-08-23-aaa-circle/music.md
+Wrote data/analysis/2026-08-23-aaa-circle/music.json
+  Pins merged 3 identical up option(s).
+
+Up
+    #  Song           Music  Fit  Combined  Mod   A   B  Comment                                                   
+    0  Always You        90   80      84.7    ·   6   6  9 8                                                       
+    5  Love in Bloom     75   78      79.2    ·   4   4  75 78                                                     
+    6  I Want You        72   80      78.9    ·   4   4  72 8                                                      
+    4  午夜宣言          70   75      76.6    ·   3   4  7 75                                                      
+    1  プルミエール      60   80      75.1    ·   3   2  6 8                                                       
+    3  BiiiG             50   30      55.4    ·   ·   ·  5 3                                                       
+       Total                                     20  20                                                            
+    A. 3 tiers (bucket-count 3) — 6×1 / 4×2 / 3×2 / 0×1
+    B. 3 tiers (bucket-count 3) — 6×1 / 4×3 / 2×1 / 0×1 · merges a tier (3→1 jump, no tiebreak)
+
+just pick <a|b|c> [--pin <song>:<v>] [--cutoff music:<n>] [--reason "…"]
+
+Ballot
+    #  Song                      Music  Fit  Combined  Mod  Votes  Comment                                         
+    0  Always You                   90   80      84.7    ·      6  9 8                                             
+    1  プルミエール                 60   80      75.1    ·      3  6 8                                             
+    2  Waves (feat. Simon Domi…      —    —         —    ·      —  ·                                               
+    3  BiiiG                        50   30      55.4    ·      ·  5 3                                             
+    4  午夜宣言                     70   75      76.6    ·      3  7 75                                            
+    5  Love in Bloom                75   78      79.2    ·      4  75 78                                           
+    6  I Want You                   72   80      78.9    ·      4  72 8                                            
+       Total                                                   20             
