@@ -1,3 +1,8 @@
+---
+description: Output conventions — tables, highlights, and fit-round artifacts in CLI and rendered reports
+alwaysApply: true
+---
+
 # Output Rules
 
 Authoritative spec: [`spec/analysis-artifacts.md`](../../spec/analysis-artifacts.md),

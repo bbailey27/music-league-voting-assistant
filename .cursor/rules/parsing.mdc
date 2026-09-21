@@ -1,3 +1,8 @@
+---
+description: Hard rules for parsing round inputs and scores (numeric-first, userComment only, HTML preferred, never cluster by string similarity)
+alwaysApply: true
+---
+
 # Parsing Rules
 
 Authoritative spec: [`spec/round-input-parsing.md`](../../spec/round-input-parsing.md),

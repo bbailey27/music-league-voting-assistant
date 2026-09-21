@@ -1,0 +1,39 @@
+---
+description: Every rule file in .cursor/rules/ must have frontmatter (summary description + alwaysApply) — fix any rule found without it
+alwaysApply: true
+---
+
+# Rule frontmatter requirement
+
+Every `.cursor/rules/*.mdc` file must carry frontmatter. A rule without it is **not
+loaded by Cursor at all** — it silently stops governing behavior, and the AGENTS.md
+sync (`just agents`) quarantines it into a "reference only" section that no agent
+treats as active.
+
+When you find a rule file with no frontmatter — while editing rules, running
+`just agents` (the script warns), or any repo touch — fix it in the same pass:
+
+1. Add frontmatter with a **summary description** of the rule's actual content
+   (one line, written to trigger correctly in Cursor's agent-requested mode).
+2. Tag it `alwaysApply: true` — these existing rules were all written to govern
+   generally. Only downgrade to `alwaysApply: false` if the content is clearly
+   situational to one task type.
+3. The body stays as-is; do not rewrite the rule's substance while adding the header.
+4. Run `just agents` so `AGENTS.md` picks the rule up. If you forget, the staleness
+   check catches it on the next `just lint` (see below).
+
+Staleness enforcement: `just agents` regenerates `AGENTS.md`; `just lint` runs
+`scripts/sync-agents-md.mjs --check` and fails with a reminder whenever rules changed
+without a re-sync. After adding or editing any rule, run it in the same pass.
+
+Template:
+
+```mdc
+---
+description: <one-line summary of what the rule governs>
+alwaysApply: true
+---
+```
+
+Do not log frontmatter additions in `spec/decisions.md` — they are metadata recovery,
+not behavior changes (the rule text is what governs, and it predates the fix).

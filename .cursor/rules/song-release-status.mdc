@@ -1,0 +1,47 @@
+---
+description: Song/album research — save release-status findings (B-Side vs Title Track vs Single) into the private data/ ref docs
+alwaysApply: false
+---
+
+# Song release status — record findings in ref docs
+
+When researching any song for any task (round fit, release year, candidate scoring,
+scrobble cleanup), any release info you learn — album appearance, standalone single
+release, title-track status — **must be saved into the ref docs, even if it surfaced
+incidentally** and even if nobody asked. Record it in:
+
+1. `data/ref/all-songs-no-inst.csv` + `data/ref/all-scrobbles.csv` — the trailing
+   `B-Side vs Title Track vs Single` column on every (song, artist) row.
+2. `data/ref/b-side-title-track-status.csv` — one row: song | album | the album's actual
+   lead single | status | source note.
+
+Status vocabulary and the full workflow (row hygiene, no-tag list for Pandora
+pseudo-rows) live in [`data/README.md`](../data/README.md#rule-song-release-status-b-side--title-track--single)
+— that file is authoritative; this rule is the pointer.
+
+Key definitions to keep straight:
+
+- **Title track** is the album's *lead/promotional* song — not a literal name match with
+  the album (EXO's THE WAR title track is "Ko Ko Bop"). Verify what the album promoted
+  (Wikipedia tracklist/infobox, official announcements) before assigning.
+- A standalone single that later shows up as an album b-side stays **Single** (lone
+  "Single" = single-only or single + b-side; never title track).
+- A track that was a standalone single AND later an album's title track becomes
+  **Title Track** — or the clarified **Single + Title Track** when the standalone
+  release history is worth keeping.
+- Promoted album tracks (b-side with an MV / music-show promotion) are **not** singles
+  unless actually released standalone.
+- Empty column = not yet checked. Never write "Unknown".
+
+Do not grep the song CSVs directly while reading/writing these columns — see
+`no-grep-csvs` (always-applied). After editing the tables, keep field counts and the
+private submodule ordering rule in `data-submodule-sync` in mind.
+
+## File targets (all root-relative)
+
+| File                                     | What to do there                                            |
+| ---------------------------------------- | ----------------------------------------------------------- |
+| `data/ref/all-songs-no-inst.csv`         | trailing release-status column, every (song, artist) row     |
+| `data/ref/all-scrobbles.csv`             | same column, same rule                                       |
+| `data/ref/b-side-title-track-status.csv` | findings log row with album, actual lead single, source note |
+| `data/README.md`                         | the rule + status vocabulary (authoritative reference)       |

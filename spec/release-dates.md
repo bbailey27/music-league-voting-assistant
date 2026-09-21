@@ -14,6 +14,10 @@ configure or suggest credentials (see `.cursor/rules/release-dates-no-spotify.md
 League-specific eligibility (boy groups, soloists, etc.) is in [`leagues.md`](leagues.md);
 this doc is only about **which date** counts for a submission.
 
+When researching release info, any album / single / title-track facts learned must also be
+saved into the ref song tables — see the standing rule in
+[`data/README.md`](../data/README.md#rule-song-release-status-b-side--title-track--single).
+
 ---
 
 ## Match the submitted version
@@ -22,6 +26,7 @@ The gate always tests the **specific recording the submitter linked** — not an
 original, or unrelated version of the same song title.
 
 | Situation                                                       | Counts for the gate                                                                                                                   |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | A 2020 remix of a 2018 original                                 | **2020** (this remix's first official release)                                                                                        |
 | An English ver. first released later than the Korean original   | The English ver.'s date                                                                                                               |
@@ -82,6 +87,7 @@ Examples:
 
 | League need                        | Minimum stored precision               | Gate compares      |
 | ---------------------------------- | -------------------------------------- | ------------------ |
+| ---------------------------------- | -------------------------------------- | ------------------ |
 | Year only (default, `bg-years`)    | `YYYY` acceptable; prefer `YYYY-MM-DD` | Calendar **year**  |
 | Month (`YYYY-MM` leagues — future) | `YYYY-MM` or `YYYY-MM-DD`              | Calendar **month** |
 
@@ -95,6 +101,7 @@ when month/day are unknown — flag with `confidence: fuzzy` or `needs-review`.
 Two gate fields (one per league family) plus a linked-row audit field:
 
 | Field                       | Role      | Meaning                                                                                                                                 |
+| --------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | --------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `earliestReleaseDate`       | **Gate**  | `version-earliest` (`bg-years`): first official release of **this recording** — **singles count**.                                      |
 | `earliestAlbumReleaseDate`  | **Gate**  | `earliest-album-release` (upcoming): earliest release on an **EP / mini / full album** — **singles do not count**; not the linked row.  |
@@ -130,20 +137,21 @@ Edition traps when setting gate fields:
 
 Keyed by `spotify:track:…` (the URI from parsed `music.json`). Shape per track:
 
-| Field                     | Required | Notes                                                                                          |
-| ------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
-| `artist`, `title`         | yes      | Echo for humans; not a lookup key.                                                             |
-| `earliestReleaseDate`        | gate     | `version-earliest` leagues. ISO `YYYY`, `YYYY-MM`, or `YYYY-MM-DD`. Prefer full date.     |
-| `earliestAlbumReleaseDate`   | gate     | `earliest-album-release` leagues (when populated). Same ISO precision.                    |
-| `earliestSource`             | yes*     | Citation for `earliestReleaseDate`.                                                       |
-| `earliestAlbumSource`        | yes*     | Citation for `earliestAlbumReleaseDate`.                                                  |
-| `albumTitle`              | audit    | Album name on the **linked** Spotify row.                                                      |
-| `albumReleaseDate`        | audit    | **Linked album release date** — ISO date on that row only; never used as a gate by itself.     |
-| `albumType`               | audit    | `single` · `ep` · `album` · `compilation` · … on the linked row.                               |
-| `albumEdition`            | audit    | Edition of the **linked** row (see vocab above).                                               |
-| `confidence`              | yes      | `verified` · `linked-album-date` · `fuzzy` · `needs-review` (see below).                       |
-| `verifiedAt`              | yes      | `YYYY-MM-DD` when last checked.                                                                |
-| `note`                    | optional | Version traps, remix vs original, manual overrides.                                            |
+| Field                      | Required | Notes                                                                                          |
+| -------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| -------------------------  | -------- | ---------------------------------------------------------------------------------------------- |
+| `artist`, `title`          | yes      | Echo for humans; not a lookup key.                                                             |
+| `earliestReleaseDate`      | gate     | `version-earliest` leagues. ISO `YYYY`, `YYYY-MM`, or `YYYY-MM-DD`. Prefer full date.          |
+| `earliestAlbumReleaseDate` | gate     | `earliest-album-release` leagues (when populated). Same ISO precision.                         |
+| `earliestSource`           | yes*     | Citation for `earliestReleaseDate`.                                                            |
+| `earliestAlbumSource`      | yes*     | Citation for `earliestAlbumReleaseDate`.                                                       |
+| `albumTitle`               | audit    | Album name on the **linked** Spotify row.                                                      |
+| `albumReleaseDate`         | audit    | **Linked album release date** — ISO date on that row only; never used as a gate by itself.     |
+| `albumType`                | audit    | `single` · `ep` · `album` · `compilation` · … on the linked row.                               |
+| `albumEdition`             | audit    | Edition of the **linked** row (see vocab above).                                               |
+| `confidence`               | yes      | `verified` · `linked-album-date` · `fuzzy` · `needs-review` (see below).                       |
+| `verifiedAt`               | yes      | `YYYY-MM-DD` when last checked.                                                                |
+| `note`                     | optional | Version traps, remix vs original, manual overrides.                                            |
 
 \*Required when a gate date is set.
 
@@ -154,12 +162,13 @@ overwrite `confidence: verified` entries from automated fuzzy matches.
 
 ## Confidence levels
 
-| Level          | Meaning                                                                                    |
-| -------------- | ------------------------------------------------------------------------------------------ |
-| `verified`     | Human or strong primary source (label site, Wikipedia with date, official MV description). |
+| Level               | Meaning                                                                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| --------------      | ------------------------------------------------------------------------------------------                                                                 |
+| `verified`          | Human or strong primary source (label site, Wikipedia with date, official MV description).                                                                 |
 | `linked-album-date` | Only the **linked** row date is known; used as a gate fallback — unsafe (compilations, deluxes). Legacy value `album-date` may appear in older cache rows. |
-| `fuzzy`        | Year-only or weak match — do not auto-pass a gate without review.                          |
-| `needs-review` | Conflicting sources or version ambiguity.                                                  |
+| `fuzzy`             | Year-only or weak match — do not auto-pass a gate without review.                                                                                          |
+| `needs-review`      | Conflicting sources or version ambiguity.                                                                                                                  |
 
 Cache miss, `fuzzy`, `needs-review`, or `needs-check` → gate emits `maybe` (NEEDS CHECK),
 never a silent pass.
@@ -168,13 +177,14 @@ never a silent pass.
 
 ## Lookup providers (`--fetch`)
 
-| Provider        | Status        | Role                                                                 |
-| --------------- | ------------- | -------------------------------------------------------------------- |
-| **MusicBrainz** | **Shipped**   | Default. Artist+title search → earliest release across MB releases.  |
-| **Wikipedia**   | **Shipped**   | Fallback when MB misses, or when MB earliest fails the target year   |
-|                 |               | (compilation/repackage trap). Cite the song-article URL.             |
-| **Spotify API** | **Not planned** | Stub code only — **do not configure** `SPOTIFY_CLIENT_*`. Never   |
-|                 |               | suggest setting up Spotify for release dates in this workspace.      |
+| Provider        | Status          | Role                                                                 |
+| --------------- | --------------- | -------------------------------------------------------------------- |
+| --------------- | -------------   | -------------------------------------------------------------------- |
+| **MusicBrainz** | **Shipped**     | Default. Artist+title search → earliest release across MB releases.  |
+| **Wikipedia**   | **Shipped**     | Fallback when MB misses, or when MB earliest fails the target year   |
+|                 |                 | (compilation/repackage trap). Cite the song-article URL.             |
+| **Spotify API** | **Not planned** | Stub code only — **do not configure** `SPOTIFY_CLIENT_*`. Never      |
+|                 |                 | suggest setting up Spotify for release dates in this workspace.      |
 
 Agent rule: [`.cursor/rules/release-dates-no-spotify.mdc`](../.cursor/rules/release-dates-no-spotify.mdc).
 

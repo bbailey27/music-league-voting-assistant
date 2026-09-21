@@ -1,3 +1,8 @@
+---
+description: Release-date lookups use cache/MusicBrainz/Wikipedia only — do not suggest Spotify API credentials (not implemented, not planned)
+alwaysApply: true
+---
+
 # Release dates — no Spotify API
 
 **Do not suggest setting up Spotify API credentials** (`SPOTIFY_CLIENT_ID`,
