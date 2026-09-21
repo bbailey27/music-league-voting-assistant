@@ -11,6 +11,45 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-09-21 — Frontmatter mandate + 4 rules become actively loaded in Cursor
+
+**Change.** New always-applied rule `.cursor/rules/rule-frontmatter.mdc`: any rule found
+without frontmatter gets a summary `description` + `alwaysApply: true` in the same pass,
+then a `just agents` re-sync. Converted the 4 frontmatter-less rules (`output`,
+`parsing`, `ranking`, `release-dates-no-spotify`) — bodies unchanged.
+
+**Why.** Cursor never loads frontmatter-less `.mdc` rules, so those four had stopped
+governing anything; the sync script first quarantined them into a reference-only
+AGENTS.md section. With frontmatter they are enforced again (in Cursor) and rank as
+always-applied (in AGENTS.md). Frontmatter-only additions are excluded from this log
+per `rule-frontmatter`; this entry exists because the conversion activates rules that
+were silently inactive, which is a governance change.
+
+**Refs.** `1b3bb84` — `.cursor/rules/rule-frontmatter.mdc`, the four converted rules.
+
+---
+
+## 2026-09-21 — AGENTS.md sync from Cursor rules (`just agents`)
+
+**Change.** Added `scripts/sync-agents-md.mjs` + `just agents`: regenerates the root
+`AGENTS.md` from `.cursor/rules/*.mdc` (rules grouped by `alwaysApply` frontmatter, with
+defensive resolution of the rules' inconsistent link depths; no-frontmatter files are
+noted). New rule file `.cursor/rules/song-release-status.mdc` captures the standing
+release-status lookup rule (B-Side / Title Track / Single definitions, authoritative in
+`data/README.md`).
+
+**Why.** opencode and other AGENTS.md-reading agents were not seeing the Cursor rule
+set. Marked `AGENTS.md` as generated (markdownlint ignore) so Cursor stays the single
+editing surface and both tools stay in agreement.
+
+Enforcement: the script takes `--check` (exit 1 + reminder when AGENTS.md is stale),
+wired into `just lint` so a rule edit without re-sync fails the first lint that follows.
+`AGENTS.md` carries the standing instruction to run `just agents` after editing rules.
+
+**Refs.** `35e1d6b` — `scripts/sync-agents-md.mjs`; `1b3bb84` — `.cursor/rules/song-release-status.mdc`.
+
+---
+
 ## 2026-08-13 — Score override normalization (`--score` / `--fit-score`)
 
 **Change.** [`parseScoreOverrides`](../scripts/parse/cli-flags.mjs) now runs the raw
