@@ -29,12 +29,13 @@ flowchart LR
 
 `isContender(s, gate)` in [`scripts/score/merge.mjs`](../../scripts/score/merge.mjs):
 
-| Excluded from curve                            | Included                                     |
-| ---------------------------------------------- | -------------------------------------------- |
-| `isDisqualified` (`-` in comment)              | Songs eligible to earn points                |
-| `needsUserInput` (blank / missing score)       | **All songs when cutoff axis = `combined`**  |
-| Below a `fit`/`music` `--cutoff` (e.g. `fit:52`) |                                            |
-| Gate `fail` (terrible-fit / explicit fail)     |                                              |
+| Excluded from curve                              | Included                                     |
+| ------------------------------------------------ | -------------------------------------------- |
+| ----------------------------------------------   | -------------------------------------------- |
+| `isDisqualified` (`-` in comment)                | Songs eligible to earn points                |
+| `needsUserInput` (blank / missing score)         | **All songs when cutoff axis = `combined`**  |
+| Below a `fit`/`music` `--cutoff` (e.g. `fit:52`) |                                              |
+| Gate `fail` (terrible-fit / explicit fail)       |                                              |
 
 Example: `--cutoff fit:52` → only songs with fit ≥ 52 contribute to fit mean/stddev.
 Sub-52 songs are scored on that remaining curve but excluded from vote allocation.
@@ -47,6 +48,7 @@ field enough to trip the small-N std floors and blow the z-scores up.
 ## Where this applies
 
 | Path                                         | Status                                                                               |
+| -------------------------------------------- | ------------------------------------------------------------------------------------ |
 | -------------------------------------------- | ------------------------------------------------------------------------------------ |
 | `mergeFit` / LLM rounds (`merge-scores.mjs`) | **Shipped** — passes `profile.gate` into `normalizeCombined`                         |
 | Manual-fit parse (`applyManualFitScoring`)   | **Shipped** — passes `profile.gate` into `normalizeCombined` with `fitTrust: manual` |

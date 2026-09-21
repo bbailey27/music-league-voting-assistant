@@ -22,7 +22,7 @@ scrobble; columns: `uts,utc_time,artist,artist_mbid,album,album_mbid,track,track
 
 ### Regenerate everything
 
-```
+```sh
 node scripts/lastfm-aggregate.mjs [--input <export.csv>] [--rules <rules.json>] [--outdir data/ref/lastfm]
 ```
 
@@ -84,13 +84,13 @@ Dimension precedence: `override.set` > `albumRule.set` > title auto-extraction.
 
 Add rules interactively (no need to hand-edit JSON):
 
-```
+```sh
 node scripts/lastfm-add-rule.mjs
 ```
 
 ## Merge-candidate report
 
-```
+```sh
 node scripts/lastfm-merge-candidates.mjs [--reason case|accent|parens|label|artist|language|instrumental] [--fuzzy] [--inst-min 5]
 ```
 

@@ -215,15 +215,15 @@ exactly 1, so a tightly-clustered round can collapse to a single distribution (o
 a couple of 2s, a wall of 1s). The empty option slots are backfilled toward `optionCount` in
 **two passes, best kind first**:
 
-1. **Coarser merge / jump curves** (`groupAtomicAlternatives`). These enumerate every
+1. \*\*Coarser merge / jump curves\*\* (`groupAtomicAlternatives`). These enumerate every
    budget-exact, monotonic-non-increasing point vector over the atomic units, \*\*allowing a
-   > 1 jump between adjacent tiers and unfunded (0) buckets**. Because each unit keeps a single
-   > level, an equal-score group is **never split — no tiebreak needed\*\*. Example (flat k-pop,
+   > 1 jump between adjacent tiers and unfunded (0) buckets\*\*. Because each unit keeps a single
+   > level, an equal-score group is \*\*never split — no tiebreak needed\*\*. Example (flat k-pop,
    > scores `76,75.5,75×2,74.5×3,74×3`, budget 15): the one clean staircase is
    > `3,2,2,2,1,1,1,1,1,1`, but a merge exists with no tiebreak — `3,2,2,2,2,2,2,0,0,0` (merge
    > `74.5` up to 2, drop the `74`s to 0). These carry `jumped: true` and a `jump` label
    > (`2→0`), and the label ends with `· merges a tier (2→0 jump, no tiebreak)`.
-2. **Tie-split staircases** (`separatedTierAlternatives`). Taller curves that split a tie by
+2. \*\*Tie-split staircases\*\* (`separatedTierAlternatives`). Taller curves that split a tie by
    exactly one point (smoothness-safe, but an arbitrary coin flip). Only used to fill slots the
    merges couldn't. They carry `separated: true` and `arbitrarySplits`, and their label ends
    with `· needs a tiebreak (splits N tie…)`. Picking one is deterministic (the extra point

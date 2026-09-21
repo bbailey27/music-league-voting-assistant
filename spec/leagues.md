@@ -18,6 +18,7 @@ Each entry in `LEAGUES` is a `League` descriptor:
 
 | Field             | Meaning                                                                          |
 | ----------------- | -------------------------------------------------------------------------------- |
+| ----------------- | -------------------------------------------------------------------------------- |
 | `id`              | Stable kebab-case key (`bg-years`, `story-chain`, …).                            |
 | `names`           | Exact league names as they appear in the ML page `<title>`.                      |
 | `slugFamily`      | Human slug shape (`bg-<year>`, `story-<n>`) — matches `analysis-artifacts`.      |
@@ -55,15 +56,16 @@ Unknown rounds resolve to `null` and surface no banner.
 
 Authoritative list in [`scripts/leagues.mjs`](../scripts/leagues.mjs); this table is a map.
 
-| id            | Slug family      | Mode      | Standing notes / machinery                                                                 |
-| ------------- | ---------------- | --------- | ------------------------------------------------------------------------------------------ |
+| id            | Slug family      | Mode      | Standing notes / machinery                                                                                                           |
+| ------------- | ---------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| ------------- | ---------------- | --------- | ------------------------------------------------------------------------------------------                                           |
 | `bg-years`    | `bg-<year>`      | objective | Boy groups, male soloists (feat. OK), subunits; DQ girl groups, female soloists, co-ed groups; `version-earliest` release-year gate. |
-| `story-chain` | `story-<n>`      | thematic  | Title-only; `title-*-scan` scripts; profile `story-continuation`.                          |
-| `tarot`       | `tarot-<arcana>` | thematic  | Profiles `traits-over-symbols` + `lyrics-first`.                                           |
-| `astrology`   | `<sign>`         | thematic  | Chill Western Astrology League; `traits-over-symbols` + `lyrics-first`.                    |
-| `lastfm`      | `lfm-<topic>`    | objective | `lastfm-*` table scripts; query via scan scripts, never raw grep.                          |
-| `aaa`         | `aaa-<topic>`    | thematic  | Themed AAA rounds.                                                                         |
-| `kpop-themed` | `kpop-<theme>`   | thematic  | Themed K-pop song picks.                                                                   |
+| `story-chain` | `story-<n>`      | thematic  | Title-only; `title-*-scan` scripts; profile `story-continuation`.                                                                    |
+| `tarot`       | `tarot-<arcana>` | thematic  | Profiles `traits-over-symbols` + `lyrics-first`.                                                                                     |
+| `astrology`   | `<sign>`         | thematic  | Chill Western Astrology League; `traits-over-symbols` + `lyrics-first`.                                                              |
+| `lastfm`      | `lfm-<topic>`    | objective | `lastfm-*` table scripts; query via scan scripts, never raw grep.                                                                    |
+| `aaa`         | `aaa-<topic>`    | thematic  | Themed AAA rounds.                                                                                                                   |
+| `kpop-themed` | `kpop-<theme>`   | thematic  | Themed K-pop song picks.                                                                                                             |
 
 ## Adding or editing a league
 
