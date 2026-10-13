@@ -143,6 +143,7 @@ through to the underlying scripts. Run `just --list` or `just help` for the over
 
 | Command                      | Stage                                     | Reads HTML? |
 | ---------------------------- | ----------------------------------------- | ----------- |
+| `just save-round <slug>`     | clipboard → `data/rounds/<dated id>.html` | —           |
 | `just parse <name>`          | HTML → `music.json`                       | Yes         |
 | `just merge <name>`          | `music.json` + `fit.json` → `scores.json` | No          |
 | `just pick <name> <A\|B\|C>` | record distribution choice                | No          |
@@ -158,6 +159,11 @@ through to the underlying scripts. Run `just --list` or `just help` for the over
 
 `<name>` is optional after the first explicit use — the current round is stored in
 `data/.current-round` (e.g. `just pick B --reason "…"` continues the same round).
+
+save-round self-dates: it resolves the slug to the round's dated id when one already
+exists (an undated export never re-appears beside it), stamps today's date for a new
+round, and stamps the saved id as the current round. Later commands accept either name;
+a bare slug like `lfm-4` snaps to its single dated sibling.
 
 ### CLI flags
 

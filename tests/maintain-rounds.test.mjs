@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm, mkdir, writeFile, stat } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, writeFile, readFile, stat, utimes } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -114,6 +114,51 @@ test('naming joins undated input into an existing dated analysis sibling', async
     assert.ok(await exists(join(cwd, 'data', 'analysis', dated)));
     assert.ok(!(await exists(join(cwd, 'data', 'rounds', 'lfm-art.html'))));
     assert.ok(!(await exists(join(cwd, 'data', 'analysis', 'lfm-art'))));
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('naming overwrites the dated sibling when the undated export is newer', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'tidy-fold-newer-'));
+  try {
+    const dated = `${slugFor(1)}-lfm-4`;
+    const datedPath = join(cwd, 'data', 'rounds', `${dated}.html`);
+    const undatedPath = join(cwd, 'data', 'rounds', 'lfm-4.html');
+    await mkdir(join(cwd, 'data', 'rounds'), { recursive: true });
+    await writeFile(datedPath, '<html>OLD BLANK SCORE</html>', 'utf8');
+    await writeFile(undatedPath, '<html>NEW CORRECTED EXPORT</html>', 'utf8');
+    // Undated file touched after the dated one.
+    await utimes(undatedPath, new Date(), new Date());
+    await utimes(datedPath, new Date(), new Date(Date.now() - 60_000));
+
+    const { stdout } = await tidy(cwd, ['--no-archive']);
+    const saved = await readFile(datedPath, 'utf8');
+    assert.match(saved, /NEW CORRECTED EXPORT/);
+    assert.ok(!(await exists(undatedPath)));
+    assert.match(stdout, /overwriting/);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('naming skips a stale undated copy when the dated sibling is newer', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'tidy-fold-stale-'));
+  try {
+    const dated = `${slugFor(1)}-lfm-4`;
+    const datedPath = join(cwd, 'data', 'rounds', `${dated}.html`);
+    const undatedPath = join(cwd, 'data', 'rounds', 'lfm-4.html');
+    await mkdir(join(cwd, 'data', 'rounds'), { recursive: true });
+    await writeFile(datedPath, '<html>NEW CURRENT</html>', 'utf8');
+    await writeFile(undatedPath, '<html>OLD STALE</html>', 'utf8');
+    await utimes(datedPath, new Date(), new Date());
+    await utimes(undatedPath, new Date(), new Date(Date.now() - 60_000));
+
+    const { stdout } = await tidy(cwd, ['--no-archive']);
+    assert.match(await readFile(datedPath, 'utf8'), /NEW CURRENT/);
+    assert.ok(await exists(undatedPath));
+    assert.match(stdout, /stale/);
+    assert.doesNotMatch(stdout, /overwriting/);
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }

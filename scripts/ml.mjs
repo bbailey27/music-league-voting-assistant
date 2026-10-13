@@ -27,6 +27,8 @@ import {
   scoresPaths,
   readCurrentRound,
   writeCurrentRound,
+  hasDatePrefix,
+  datedSiblingsOf,
 } from './paths.mjs';
 import { applyDateSlugs, archiveStaleRounds, tidyRounds } from './maintain-rounds.mjs';
 import { downShapeFromShort, parsePickSpec } from './cli-commands.mjs';
@@ -222,22 +224,48 @@ function splitPickArgs(rest) {
   return { name, option, flags };
 }
 
+/**
+ * Bare slugs are always sub-canonical to their dated sibling — snap to it so
+ * typing `lfm-4` (or a stale bare id in .current-round) can never split a round
+ * into two analysis folders.
+ */
+function canonicalizeRoundId(id, candidates) {
+  if (hasDatePrefix(id) || !candidates.includes(id)) return id;
+  const siblings = datedSiblingsOf(id, candidates);
+  if (siblings.length === 1) {
+    console.log(`(round ${id} is dated as ${siblings[0]} — using it)`);
+    return siblings[0];
+  }
+  return id;
+}
+
 function resolveRoundName(explicitName, candidates, kind) {
   if (explicitName) {
     const resolved = resolveOrExit(explicitName, candidates, kind);
-    writeCurrentRound(resolved);
-    return resolved;
+    const canonical = canonicalizeRoundId(resolved, candidates);
+    writeCurrentRound(canonical);
+    return canonical;
   }
   const stored = readCurrentRound();
   if (stored) {
     if (!candidates.includes(stored)) {
+      // Stale bare id (e.g. saved before self-dating save-round): snap to its
+      // dated sibling instead of failing.
+      const siblings = datedSiblingsOf(stored, candidates);
+      if (siblings.length === 1) {
+        console.log(`(round ${stored} is dated as ${siblings[0]} — using it)`);
+        writeCurrentRound(siblings[0]);
+        return siblings[0];
+      }
       console.error(
         `Current round "${stored}" is not available for this command. Name a round explicitly.`
       );
       process.exit(1);
     }
-    console.log(`(current round: ${stored})`);
-    return stored;
+    const canonical = canonicalizeRoundId(stored, candidates);
+    if (canonical !== stored) writeCurrentRound(canonical);
+    console.log(`(current round: ${canonical})`);
+    return canonical;
   }
   console.error(`No round name — name one explicitly (e.g. just parse story-6).`);
   process.exit(1);

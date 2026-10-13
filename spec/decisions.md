@@ -11,6 +11,42 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-10-13 — Dated round id is canonical (self-dating save-round + newer-wins fold)
+
+**Change.** Round ids: the `YYYY-MM-DD-<slug>` form is canonical everywhere. Three
+behaviors enforce it:
+- [`scripts/save-round.mjs`](../scripts/save-round.mjs) (new; justfile `save-round` now pipes
+  the clipboard through it) strips any leading date from the slug, saves the export to a
+  unique existing dated sibling's filename when one exists (rounds/ or analysis/), otherwise
+  stamps today's effective date — no undated input file is ever created by save-round. It
+  also records the resolved id as the current round and prints the next-step hint.
+- [`applyDateSlugs`](../scripts/maintain-rounds.mjs) fold takes **newer content wins** for
+  input files: when an undated export is newer (mtime) than the dated sibling it would fold
+  into, it replaces the dated file's content and the undated copy is removed. A stale
+  (older) undated copy is skipped with a warning as before. Analysis-dir clashes still
+  favor the canonical (target) side — artifacts are regenerable.
+- [`resolveRoundName`](../scripts/ml.mjs) snaps any undated id with exactly one dated
+  sibling (explicit name or stale `.current-round` bare id) to that dated id, with a
+  one-line note, so `just parse lfm-4`-style calls can no longer split a round across two
+  underdetermined folders.
+
+**Why.** Re-saving an export under a bare slug created a second input the fold step
+refused to overwrite ("already exists"), so parse kept reading the old blank-score HTML
+while the corrected export sat stranded; save-round also left `.current-round` pointing at
+the literal bare slug typed, so later rescore/pick ENOENT'd on
+`data/analysis/lfm-4/music.json` even though the real analysis lived under
+`2026-09-27-lfm-4`. Root fix is prevention: nothing in the pipeline should generate the
+undated form.
+
+**Overruled.** Considered only fixing the fold or only the stored current round — both
+leave other trap surfaces (explicit bare names resolve to the undated id while it exists;
+fresh-clipboard exports keep recreating duplicates).
+
+**Refs.** `working tree` — `scripts/save-round.mjs`, `scripts/maintain-rounds.mjs`, `scripts/ml.mjs`,
+justfile, `tests/save-round.test.mjs`, `tests/maintain-rounds.test.mjs`.
+
+---
+
 ## 2026-09-21 — Frontmatter mandate + 4 rules become actively loaded in Cursor
 
 **Change.** New always-applied rule `.cursor/rules/rule-frontmatter.mdc`: any rule found
@@ -60,7 +96,7 @@ uses. Applies to both `--score` and `--fit-score` on `rescore` and the web profi
 **Why.** `--score 4:9` stored literal 9 instead of 90, breaking the "same shorthand as
 comment boxes" contract.
 
-**Refs.** `working tree` — `scripts/parse/cli-flags.mjs`, `tests/allocate.test.mjs`.
+**Refs.** `fabdf6f` — `scripts/parse/cli-flags.mjs`, `tests/allocate.test.mjs`.
 
 ## 2026-08-13 — `just run` auto-re-parses when input is newer
 
@@ -71,7 +107,7 @@ comment boxes" contract.
 **Why.** Uploading new HTML with scores after an earlier blank-score export left `just run`
 reading stale `music.json` and jumping to merge with 0 scores.
 
-**Refs.** `working tree` — `scripts/ml.mjs`.
+**Refs.** `fabdf6f` — `scripts/ml.mjs`.
 
 ## 2026-08-13 — `just run` pick step prints option tables
 
@@ -83,7 +119,7 @@ alongside the pick prompt.
 visible options, forcing the user to open `music.md` or run `just status` to see what
 A/B/C/D/E meant.
 
-**Refs.** `working tree` — `scripts/ml.mjs`.
+**Refs.** `fabdf6f` — `scripts/ml.mjs`.
 
 ## 2026-08-13 — Budget warning at pick time
 
@@ -93,7 +129,7 @@ after `printAppliedAllocationCli` in both music-only and thematic paths.
 **Why.** Budget mismatches (e.g. 14/15 after a pin on a DQ'd song) were reported during
 parse/merge/rescore but silently passed at pick.
 
-**Refs.** `working tree` — `scripts/pick-round.mjs`.
+**Refs.** `fabdf6f` — `scripts/pick-round.mjs`.
 
 ## 2026-08-13 — Down table always emitted (single option when shapes collapse)
 
@@ -105,7 +141,7 @@ tier-count fix for the up menu.
 distribution, no down table appeared at all — the user had to check the ballot to see
 downvote allocation.
 
-**Refs.** `working tree` — `scripts/score/allocate.mjs`.
+**Refs.** `fabdf6f` — `scripts/score/allocate.mjs`.
 
 ## 2026-08-13 — Unknown CLI flag detection with fuzzy suggestion
 
@@ -116,7 +152,7 @@ against all known flags and suggests the closest match (within 3 edits).
 **Why.** `--pins` (typo for `--pin`) was silently accepted; its value `4:3` was consumed
 as the round name, producing a confusing "No round matches 4:3" error.
 
-**Refs.** `working tree` — `scripts/ml.mjs`.
+**Refs.** `fabdf6f` — `scripts/ml.mjs`.
 
 ## 2026-07-31 — Web app Sections 1–3 (paste, parse, allocate)
 

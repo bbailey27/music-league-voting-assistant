@@ -87,5 +87,4 @@ fix:
 
 # Save clipboard HTML as a round file. Example: just save-round 5th-gen-bg
 save-round slug:
-    pbpaste > data/rounds/{{slug}}.html
-    @echo "Saved data/rounds/{{slug}}.html ($(wc -c < data/rounds/{{slug}}.html | tr -d ' ') bytes)"
+    pbpaste | node scripts/save-round.mjs {{slug}}

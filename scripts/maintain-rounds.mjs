@@ -16,7 +16,7 @@
 // Date helpers are exported for tests; the file ops are intentionally simple
 // renameSync moves within the data submodule (reversible via git).
 
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 import {
   ROUNDS_DIR,
@@ -183,11 +183,19 @@ export function applyDateSlugs({ now = new Date(), dryRun = false, log = () => {
     const merging = Boolean(existing);
 
     const moves = [];
+    const overwrites = [];
     for (const { ext } of inputFilesFor(id)) {
       const from = join(ROUNDS_DIR, `${id}${ext}`);
       const to = join(ROUNDS_DIR, `${newId}${ext}`);
       if (existsSync(to)) {
-        if (merging) log(`  ! skip merge ${from}: ${to} already exists`);
+        if (merging) {
+          if (statSync(from).mtimeMs > statSync(to).mtimeMs) {
+            // Fresh export stranded on the undated name: newer content wins.
+            overwrites.push([from, to]);
+          } else {
+            log(`  ! skip merge ${from}: ${to} is newer, undated copy is stale`);
+          }
+        }
         continue;
       }
       moves.push([from, to]);
@@ -217,6 +225,13 @@ export function applyDateSlugs({ now = new Date(), dryRun = false, log = () => {
 
     for (const [from, to] of moves) {
       if (!dryRun) renameSync(from, to);
+    }
+    for (const [from, to] of overwrites) {
+      log(`  ${dryRun ? 'would overwrite' : 'overwriting'} ${to} with newer ${from}`);
+      if (!dryRun) {
+        copyFileSync(from, to);
+        rmSync(from);
+      }
     }
 
     if (merging) {
