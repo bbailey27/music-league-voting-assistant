@@ -134,8 +134,12 @@ Output snapshot regression test (diff-based): see
 22. For combined scores, always print the current applied weights alongside the option table. I forget the defaults and then have to run manually to make sure it's using the fit weights I expect in CLI. Could do similar for all active pins, cutoffs, curve types, etc.
 23. --reset flag. On rescore and other using the stored 'profile'. To clear the profile after testing out combinations of pins to get back to the original distributions. Currently no way to un-pin after trying things. maybe an interactive prompt, arg, or separate flag to reset just pins without resetting weights, or weights + pins but not --score and --fit-score. need to account for the other knobs as well.
 24. Visual representations of the curves so I can quickly compare how well each option aligns with my vote distribution.
-25. Command shortcuts like r for rescore and -w for --weights and -c m:x for music cutoff. Can still use both versions. Appear in help. Cutoff would be nice to assume music if I don't specify, especially if there are no fit scores in use - I shouldn't have to get an error about it being ambiguous.
+25. Command shortcuts like s for save-round, r for rescore and -w for --weights and -c m:x for music cutoff. Can still use both versions. Appear in help. Cutoff would be nice to assume music if I don't specify, especially if there are no fit scores in use - I shouldn't have to get an error about it being ambiguous.
 26. save-round should update current round pointer so I can do just run next without specifying
+27. Just command to list recently-active league slugs in case I forget the exact format when saving a round. If no round within 2 weeks, mark inactive for this purpose.
+
+
+
 
 ## Bugs
 
@@ -990,6 +994,198 @@ Ballot
     5  Love in Bloom                75   78      79.2    ·      4  75 78                                           
     6  I Want You                   72   80      78.9    ·      4  72 8                                            
        Total                                                   20             
+
+---
+I think we already forbid all-same-score candidates. But all 1s with a single 2 is also bad and should not be allowed. and it would be common with the admins who set the point limit equal to the number of participants (the point you can't give to your own song goes to the extra one). one strong negative is assigning a point to every song - effectively cancels each other out. And the other is lack of tiers, too close to flat.
+
+Wrote data/analysis/2026-10-06-vim-26-jan/music.json
+
+Up
+     #  Song                      Score   Mod   A   B   C   D   E  Comment
+     4  Will We Be There             78     ·   2   2   2   2   3  78
+    14  make you mine                77  play   2   1   2   2   3  77 play
+    17  Yalla Habibi               76.5     ·   2   1   2   1   3  765
+     1  Quicksand Heart              76     ·   2   1   1   1   2  76
+    15  Day at the soccer fields   75.7     ·   2   1   1   1   2  757
+     2  Magic Touch                75.7     ·   2   1   1   1   2  757
+    12  Bruised Sky                75.2     ·   2   1   1   1   2  752 great except for the screaming
+     8  Enough                     74.9     ·   1   1   1   1   1  749
+     6  Ev'ry Portal Past          74.7     ?   1   1   1   1   1  747? cool instrumental. kinda weird but cool
+     5  Good Things Will Come A…   74.7     ·   1   1   1   1   1  747 smooth
+    20  I OWE IT TO YOU            74.5     ·   1   1   1   1   1  745
+     7  Crash Down Feeling         73.7     ·   1   1   1   1   ·  737
+     0  Savage Sword               73.7     ·   1   1   1   1   ·  737
+    19  Zig Zag                    73.7     ?   1   1   1   1   ·  737? rap. actually pretty nice chill vibe. repetitive but not painful even after 7 minutes
+    10  Biograph                   73.5     +   ·   1   1   1   ·  735+ don't love the vocals or guitar. but fun energy
+    18  Saia-Amarela               73.5     ?   ·   1   1   1   ·  735? weird but not bad? 7 minutes though. Fun to have not english. mildly annoying bits
+    16  Crows                        73     ·   ·   1   1   1   ·  73
+    11  Oranj                        73     ·   ·   1   1   1   ·  73 nice enough but doesn't go anywhere
+     3  No Touch                     70     ·   ·   1   ·   1   ·  7
+    13  Stainless Steel              67     ?   ·   1   ·   ·   ·  67? like the instrumental but hate the talking
+        Total                                  21  21  21  21  21
+    A. 3 tiers (bucket-count 2) — 2×7 / 1×7 / 0×6
+    B. 2 tiers (bucket-count 2) — 2×1 / 1×19
+    C. 3 tiers (bucket-count 2) — 2×3 / 1×15 / 0×2
+    D. 3 tiers (bucket-count 2) — 2×2 / 1×17 / 0×1
+    E. 4 tiers (bucket-count 3) — 3×3 / 2×4 / 1×4 / 0×9
+    ---
+    Wwe've clarified this before. A random number hidden in a sentence is not a score. If the first thing in the text box is not a number, there is no score and that's just a DQ comment. I know it may be adjustable to have like 'music 8, fit 7' as a format. But that's not really a format I use. I'll type the word fit maybe but never music. Tighten up this parsing logic.
+
+    Wrote data/analysis/2026-10-12-sm-bridge/music.json
+
+Up
+     #  Song                      Score  Mod   A   B   C   D   E  Comment
+     4  Broken Melodies              78    ·   3   3   3   2   3  78
+     5  Make A Wish (Birthday S…   76.5    ·   2   3   2   2   3  765
+     0  100                          76    ·   2   2   2   2   3  76
+    10  Love In The Ice            75.5    ·   2   2   2   2   2  755
+     8  Drama                      74.5    ·   1   1   2   2   2  745
+     2  Beatbox                      74    ·   1   1   1   1   1  74
+     6  Chain                        74    ·   1   1   1   1   1  74
+     7  Armageddon                   73    ·   1   1   1   1   ·  73
+     1  Everybody                    73    ·   1   1   1   1   ·  73
+     9  Monster                      30    ·   1   ·   ·   1   ·  Great song, but it already got 3rd place in the vocal round
+---
+ignored the cutoff and didn't even call out that it did so.
+also could have used full width of the terminal instead of chopping song titles off. The longest line wasn't even using 2/3 of the space. truncating title is better than truncating comment. but if they both fit no need to truncate either one.
+would be great to add more tier knobs like 2 minimum or 4 maximum. Caps like max points 3. Things to nudge it in the right direction. Again like I've said in other notes - ideally this would re-generate more options matching the constraints. Not just filter the existing ones. Another knob could be "include scores 77 and higher in favorite tier and assign that tier 3 points each", to cut down on individual pinning when trying things out. Or shortcuts like I give you the 2×5 / 1×11 / 0×2 notation and you apply that set of scores to the songs (again faster than individual pins)
+And it would be awesome when there are lots of tied scores like this to propose alternative options based on the modifiers (e.g. try a question mark in the group above and the group below) or hypothetical "if you can pick 1 73.5 song to promote, here's a better point spread option". Ideally with an interactive prompt to quickly capture which one to promote, or a comma-separated list if it wants multiple.
+
+     ❯ just rescore --cutoff music:73
+node scripts/ml.mjs rescore "$@"
+(current round: 2026-10-12-vim-26-feb)
+Wrote data/analysis/2026-10-12-vim-26-feb/music.md
+Wrote data/analysis/2026-10-12-vim-26-feb/music.json
+
+Up
+     #  Song                      Score    Mod   A   B   C   D   E  Comment
+     7  Djinê Mogo Tiki              78   play   2   2   3   4   4  78 play
+     1  On & On                      78  play?   2   2   3   4   4  78 play? Gina?
+    10  Sugar Clouds                 78   play   2   2   3   4   4  78 play
+     2  Major Threat                 76      ·   2   1   3   3   3  76
+     4  Your Good Time             75.5      ·   2   1   3   3   2  755
+     0  Feed My Head - Acoustic    74.5      ·   1   1   2   2   1  745
+    15  Think About It               74      ·   1   1   2   1   1  74
+    13  Damp                       73.7      +   1   1   1   ·   1  737+
+     9  Wait Up (feat. I'm With…   73.6      ·   1   1   1   ·   1  736
+    12  Orange County (feat. Bi…   73.5     +?   1   1   ·   ·   ·  735+?
+    18  The Wire                   73.5     +?   1   1   ·   ·   ·  735+?
+    14  Anywhere                   73.5      ·   1   1   ·   ·   ·  735 cute. pleasant. tiny bit annoying
+     6  promise                    73.5      ?   1   1   ·   ·   ·  735? not bad punk I guess but kinda too loud or dischordant
+    11  That White Cat             73.5      ?   1   1   ·   ·   ·  735? like some choral parts but too talky overall
+     8  Norf Side (feat. Tierra…   73.5      -   1   1   ·   ·   ·  735-
+    16  Clean Living               73.3      ·   1   1   ·   ·   ·  733
+     3  messer                       73      ·   ·   1   ·   ·   ·  73
+    19  w-w-w-w-w                    73      -   ·   1   ·   ·   ·  73-
+     5  After I'm Gone                -     DQ   -   -   -   -   -  no
+        Total                                   21  21  21  21  21
+    A. 3 tiers (bucket-count 2) — 2×5 / 1×11 / 0×2
+    B. 2 tiers (bucket-count 2) — 2×3 / 1×15
+    C. 4 tiers (bucket-count 3) — 3×5 / 2×2 / 1×2 / 0×9
+    D. 5 tiers (bucket-count 4) — 4×3 / 3×2 / 2×1 / 1×1 / 0×11
+    E. 5 tiers (bucket-count 4) — 4×3 / 3×1 / 2×1 / 1×4 / 0×9
+
+    The tiers at the bottom didn't update after pinning changed their values.
+
+    ❯ just rescore --pin 7:3,1:3,10:3 --cutoff music:73.5
+node scripts/ml.mjs rescore "$@"
+(current round: 2026-10-12-vim-26-feb)
+Wrote data/analysis/2026-10-12-vim-26-feb/music.md
+Wrote data/analysis/2026-10-12-vim-26-feb/music.json
+
+Up
+     #  Song                      Score    Mod   A   B   C   D   E  Comment
+     7  Djinê Mogo Tiki              78   play   3   3   3   3   3  78 play
+     1  On & On                      78  play?   3   3   3   3   3  78 play? Gina?
+    10  Sugar Clouds                 78   play   3   3   3   3   3  78 play
+     2  Major Threat                 76      ·   3   3   3   2   3  76
+     4  Your Good Time             75.5      ·   3   3   2   2   3  755
+     0  Feed My Head - Acoustic    74.5      ·   2   2   1   2   3  745
+    15  Think About It               74      ·   2   1   1   1   2  74
+    13  Damp                       73.7      +   1   1   1   1   1  737+
+     9  Wait Up (feat. I'm With…   73.6      ·   1   1   1   1   ·  736
+    12  Orange County (feat. Bi…   73.5     +?   ·   1   1   1   ·  735+?
+    18  The Wire                   73.5     +?   ·   ·   1   1   ·  735+?
+    14  Anywhere                   73.5      ·   ·   ·   1   1   ·  735 cute. pleasant. tiny bit annoying
+     6  promise                    73.5      ?   ·   ·   ·   ·   ·  735? not bad punk I guess but kinda too loud or dischordant
+    11  That White Cat             73.5      ?   ·   ·   ·   ·   ·  735? like some choral parts but too talky overall
+     8  Norf Side (feat. Tierra…   73.5      -   ·   ·   ·   ·   ·  735-
+     3  messer                       73      ·   -   -   -   -   -  73
+     5  After I'm Gone                -     DQ   -   -   -   -   -  no
+    16  Clean Living               73.3      ·   -   -   -   -   -  733
+    19  w-w-w-w-w                    73      -   -   -   -   -   -  73-
+        Total                                   21  21  21  21  21
+    A. 4 tiers (bucket-count 3) — 3×5 / 2×2 / 1×2 / 0×6
+    B. 5 tiers (bucket-count 4) — 3×5 / 2×1 / 1×4 / 0×5
+    C. 5 tiers (bucket-count 4) — 3×4 / 2×1 / 1×7 / 0×3
+    D. 2 tiers (bucket-count 2) — 3×3 / 2×3 / 1×6 / 0×3
+    E. 4 tiers (bucket-count 3) — 3×6 / 2×1 / 1×1 / 0×7
+
+    Now it forgot my previous pins. Do I have to resend them all each time?
+
+    ❯ just rescore --pin 14:0
+
+    Up
+     #  Song                      Score    Mod   A   B   C   D   E  Comment
+     7  Djinê Mogo Tiki              78   play   3   4   4   2   3  78 play
+     1  On & On                      78  play?   3   4   4   2   3  78 play? Gina?
+    10  Sugar Clouds                 78   play   3   4   4   2   3  78 play
+     2  Major Threat                 76      ·   3   3   3   2   3  76
+     4  Your Good Time             75.5      ·   3   3   2   2   3  755
+     0  Feed My Head - Acoustic    74.5      ·   2   2   1   2   3  745
+    15  Think About It               74      ·   2   1   1   2   2  74
+    13  Damp                       73.7      +   1   ·   1   1   1  737+
+     9  Wait Up (feat. I'm With…   73.6      ·   1   ·   1   1   ·  736
+    12  Orange County (feat. Bi…   73.5     +?   ·   ·   ·   1   ·  735+?
+    18  The Wire                   73.5     +?   ·   ·   ·   1   ·  735+?
+    14  Anywhere                   73.5      ·   ·   ·   ·   ·   ·  735 cute. pleasant. tiny bit annoying
+     6  promise                    73.5      ?   ·   ·   ·   1   ·  735? not bad punk I guess but kinda too loud or dischordant
+    11  That White Cat             73.5      ?   ·   ·   ·   1   ·  735? like some choral parts but too talky overall
+     8  Norf Side (feat. Tierra…   73.5      -   ·   ·   ·   1   ·  735-
+     3  messer                       73      ·   -   -   -   -   -  73
+     5  After I'm Gone                -     DQ   -   -   -   -   -  no
+    16  Clean Living               73.3      ·   -   -   -   -   -  733
+    19  w-w-w-w-w                    73      -   -   -   -   -   -  73-
+        Total                                   21  21  21  21  21
+    A. 4 tiers (bucket-count 3) — 3×5 / 2×2 / 1×2 / 0×6
+    B. 5 tiers (bucket-count 4) — 4×3 / 3×2 / 2×1 / 1×1 / 0×8
+    C. 5 tiers (bucket-count 4) — 4×3 / 3×1 / 2×1 / 1×4 / 0×6
+    D. 2 tiers (bucket-count 2) — 2×7 / 1×4 / 0×1 / 1×3
+    E. 4 tiers (bucket-count 3) — 3×6 / 2×1 / 1×1 / 0×7
+
+    Extra misleading to print the wrong bucket count and curve shape when the pick is only in ballot form so it's hard to count and double check the shape myself.
+
+    ❯ just pick d
+node scripts/ml.mjs pick "$@"
+(current round: 2026-10-12-vim-26-feb)
+Applied option D — 2 tiers, 2×6 / 1×9.
+Wrote data/analysis/2026-10-12-vim-26-feb/music.md
+Wrote data/analysis/2026-10-12-vim-26-feb/music.json
+
+Applied
+     #  Song                      Score    Mod  Votes  Comment
+     0  Feed My Head - Acoustic    74.5      ·      2  745
+     1  On & On                      78  play?      3  78 play? Gina?
+     2  Major Threat                 76      ·      2  76
+     3  messer                       73      ·      ·  73
+     4  Your Good Time             75.5      ·      2  755
+     5  After I'm Gone                -     DQ      -  no
+     6  promise                    73.5      ?      ·  735? not bad punk I guess but kinda too loud or dischordant
+     7  Djinê Mogo Tiki              78   play      3  78 play
+     8  Norf Side (feat. Tierra…   73.5      -      ·  735-
+     9  Wait Up (feat. I'm With…   73.6      ·      1  736
+    10  Sugar Clouds                 78   play      3  78 play
+    11  That White Cat             73.5      ?      ·  735? like some choral parts but too talky overall
+    12  Orange County (feat. Bi…   73.5     +?      1  735+?
+    13  Damp                       73.7      +      1  737+
+    14  Anywhere                   73.5      ·      ·  735 cute. pleasant. tiny bit annoying
+    15  Think About It               74      ·      2  74
+    16  Clean Living               73.3      ·      ·  733
+    17  Still Rose                    —      ·      —  ·
+    18  The Wire                   73.5     +?      1  735+?
+    19  w-w-w-w-w                    73      -      ·  73-
+        Total                                      21
+    ---
 
 
 ---
