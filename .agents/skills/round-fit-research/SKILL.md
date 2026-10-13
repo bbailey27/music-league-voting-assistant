@@ -44,11 +44,14 @@ Check `analysis/<name>/music.json` for songs flagged `needsResearch` (thematic m
    first. Full rule:
    [`spec/point-allocation.md` → Pre-allocation gate](../../../spec/point-allocation.md#pre-allocation-gate-resolve-blocking-inputs-first).
 7. **Merge + allocate:**
+
    ```bash
    node scripts/parse-round.mjs rounds/<name>.html --fit analysis/<name>/fit.json
    ```
+
    Resolve any printed tradeoffs (see **point-allocation**). Allocation must spend both vote banks exactly and never mix up+down on one song.
 8. **Render:**
+
    ```bash
    just scores <name>    # deliverable
    just fit <name>       # fit-only review

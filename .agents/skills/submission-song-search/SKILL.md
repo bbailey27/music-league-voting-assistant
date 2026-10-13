@@ -102,7 +102,7 @@ pruning = fewer searches.
 
 ### 5. Cheap meaning pass before deep lyric dive
 
-For survivors, run quick **"<song> meaning"** web searches in **batches of ~6** (parallel tool
+For survivors, run quick **`"<song> meaning"`** web searches in **batches of ~6** (parallel tool
 calls in one message). One synthesis line per song is enough to drop the romantic/breakup ones.
 Only the songs that survive the cheap pass get a full-lyric verification search. Append every
 result to `song-topic-summaries.csv` as you go.
@@ -155,7 +155,3 @@ everything in context). Update a TODO list per chunk so progress survives trunca
 - Don't deep-search before the user prunes the shortlist (wastes searches).
 - Don't put fit/round judgement in `song-topic-summaries.csv` — summaries must stay reusable.
 - Don't commit `data/` outputs unless the user asks (`.cursor/rules/no-auto-commit.mdc`).
-
-```
-
-```

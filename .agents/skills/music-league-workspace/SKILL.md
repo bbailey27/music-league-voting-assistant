@@ -32,7 +32,7 @@ Re-parse only when replacing the HTML export. Pick never reads HTML.
 
 ## Directory layout
 
-```
+```text
 data/            PRIVATE submodule (music-league-data); not in the public repo:
   rounds/        Saved round HTML or pasted text (<round>.html|.txt) — flat; archive/ ignored
   analysis/      Per-round folders + picks.jsonl — see spec/analysis-artifacts.md

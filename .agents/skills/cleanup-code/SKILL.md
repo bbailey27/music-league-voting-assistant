@@ -146,7 +146,7 @@ If a file is clean, say so in one line: "No issues found."
 
 Flag duplicate logic that spans multiple files:
 
-```
+```text
 ### Cross-file duplication
 
 The same date-formatting logic appears in both
@@ -158,7 +158,7 @@ Recommend: extract to a shared utility.
 
 End with a total count across all files:
 
-```
+```text
 ### Summary
 
 6 files reviewed, 2 with findings.
