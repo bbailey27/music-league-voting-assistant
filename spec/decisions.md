@@ -11,10 +11,41 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-10-13 — Agent guard rules: clarify-assumptions + sandbox-runs + avoidable-mistakes
+
+**Change.** Three always-applied rules added to `.cursor/rules/` and synced into
+AGENTS.md via `just agents` (22 rules now):
+
+- `clarify-assumptions.mdc` — owner sign-off tiers for implementation assumptions
+  (cosmetic → decide; small tweak → pick best + flag at end of step; large → stop
+  and ask); ALWAYS list assumptions/edge cases at end of step; decision-log entries
+  written from agent assumptions must be flagged, not cited as owner intent.
+  Requested as future-plans #20 (owner confirmed "definitely always apply", so it
+  shipped as a rule instead of the originally-proposed skill).
+- `sandbox-runs.mdc` — never hand-run data-writing scripts against live `data/`;
+  use `ML_DATA_DIR` sandbox / `just smoke`; repo-root cwd; real-round touches need
+  owner approval. From the 2026-10-13 smoke-test incident (save-round run from repo
+  root clobbered `data/.current-round` and created a stray dated round file).
+- `avoidable-mistakes.mdc` — end-of-session retro: mistake + damage, root cause,
+  proposed guard (new rule / rule+skill tweak / test), applied same-session after
+  owner sign-off.
+
+**Why.** Repeated failure pattern: agent assumptions hardened into decision-log
+entries and later cited as intent, and verification runs polluted real round data
+(state that cost restoration work). Guards encode the prevention a session's fix
+alone doesn't carry forward.
+
+**Refs.** `working tree` — `.cursor/rules/clarify-assumptions.mdc`,
+`.cursor/rules/sandbox-runs.mdc`, `.cursor/rules/avoidable-mistakes.mdc`,
+`AGENTS.md`, `justfile` (`smoke` recipe).
+
+---
+
 ## 2026-10-13 — Dated round id is canonical (self-dating save-round + newer-wins fold)
 
 **Change.** Round ids: the `YYYY-MM-DD-<slug>` form is canonical everywhere. Three
 behaviors enforce it:
+
 - [`scripts/save-round.mjs`](../scripts/save-round.mjs) (new; justfile `save-round` now pipes
   the clipboard through it) strips any leading date from the slug, saves the export to a
   unique existing dated sibling's filename when one exists (rounds/ or analysis/), otherwise

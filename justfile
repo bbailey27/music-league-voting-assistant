@@ -88,3 +88,16 @@ fix:
 # Save clipboard HTML as a round file. Example: just save-round 5th-gen-bg
 save-round slug:
     pbpaste | node scripts/save-round.mjs {{slug}}
+
+# Smoke-run a script against a throwaway sandbox (fresh /tmp sandbox seeded with
+# the sample fixture; never touches live data/). stdin passes through:
+#     echo '<html>…</html>' | just smoke scripts/save-round.mjs lfm-4
+# Iterate inside the same sandbox: ML_SMOKE_KEEP=1 just smoke …
+smoke *args:
+    @sandbox="${ML_SMOKE_DIR:-/tmp/ml-smoke}"; \
+    if [ -z "${ML_SMOKE_KEEP:-}" ]; then rm -rf "$sandbox"; fi; \
+    mkdir -p "$sandbox/rounds"; \
+    if [ ! -f "$sandbox/rounds/sample-round.html" ]; then \
+      cp tests/fixtures/sample-round/sample-round.html "$sandbox/rounds/sample-round.html"; \
+    fi; \
+    ML_DATA_DIR="$sandbox" node "$@"

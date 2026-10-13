@@ -1,0 +1,40 @@
+---
+description: End-of-session review — capture avoidable mistakes made during the session and propose rules, skill tweaks, or tests to prevent recurrence
+alwaysApply: true
+---
+
+# Capture avoidable mistakes and propose guards
+
+When a session contains avoidable mistakes — tool misuse, polluted state, missed
+conventions, wrong-but-unflagged assumptions — do not just fix the immediate damage.
+Each mistake is a signal that a guardrail is missing.
+
+## The retro
+
+At the end of a work session (or when a mistake is caught mid-session), list:
+
+1. **Mistake + damage** — what went wrong and what state needed fixing.
+2. **Root cause** — knowledge gap, missing guardrail, or habit (theory of the failure).
+3. **Proposed guard**, choosing the cheapest that would have caught it:
+   - a **new rule** in `.cursor/rules/` (alwaysApply unless situational)
+   - a **tweak to an existing rule or skill** (e.g. sharpen a warning, add a checklist line)
+   - a **test** that would have failed before the mistake shipped
+   - nothing — the mistake isn't worth encoding (say so plainly)
+
+Propose guards; do not write rule/skill changes without the owner's sign-off (rules
+govern future sessions — same class of decision as the decision log). A one-line
+approval is enough; then apply in the same pass, including `just agents` for rule sync.
+
+## Where to record
+
+- Accepted rule/skill/test guards land in the repo in the same session — a guard only
+  works if it exists before the next session.
+- A mistake that reveals wrong committed behavior belongs in `spec/decisions.md`
+  (Overruled/reversal entry), not just a fix.
+
+## Calibration
+
+- Prefer converting a repeated mistake into a guard the **first** time it repeats,
+  not the third.
+- One-off typos and workflow noise are not candidates; behavior that costs
+  restoration work (state pollution, silent overwrites, real-data damage) always is.

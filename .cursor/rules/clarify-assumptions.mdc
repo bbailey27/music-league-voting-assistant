@@ -1,0 +1,46 @@
+---
+description: Corral agent guesswork — consult the owner about implementation assumptions and edge cases; small tweaks may be picked then flagged for approval; larger ones stop and ask; ALWAYS list assumptions and edge cases at end of step
+alwaysApply: true
+---
+
+# Clarify assumptions before they become "intent"
+
+Agents must not make silent assumptions about implementation details that affect
+the outcome or edge-case handling. Assumptions have been codified into decision
+logs and later treated as evidence of owner intent without sign-off.
+
+## The three tiers
+
+| Situation | What to do |
+| --- | --- |
+| **Cosmetic** — wording, ordering, nothing that changes behavior or data | Just decide; no sign-off needed. |
+| **Small tweak to change later** — behavior choice, but a revert is cheap | Pick the best option, then call the assumption out for approval at the end of the step (do not silently ship). |
+| **Larger rewrite to fix** — new constraint, data shape, or semantics that would ripple | **Stop and ask** before implementing. |
+
+Examples of assumptions that should have been asked (real hazards in this repo):
+block-fallback to going under budget when a bank cannot be met exactly; always
+sorting tables by music score even when a combined score is present; allowing
+manual cutoffs only on music scores. This also covers **constraints the owner
+never asked for** — check with fresh eyes whether the code *enforces* rules that
+were never confirmed.
+
+## The two reflexes
+
+1. **While working — surfacing the decision.**
+   Ask in the moment: "When X can't be met exactly, fall back to A or B?" Ask
+   questions one at a time, grounded in evidence from the code — not bare question
+   dumps; lead with one recommendation and its reasoning.
+
+2. **Before ending any work — the assumption audit.**
+   Scan the diff/work for choices made along the way and ALWAYS list them at the
+   end of the step:
+   - assumptions made (incl. those you did not consider "intentional")
+   - edge cases handled and the chosen handling
+   - constraints the code now enforces that the owner never approved
+
+## Reconciling with the decision log
+
+A decision-log entry is a record of shipped owner intent. When an entry was
+written from an agent's own assumption, flag it for correction rather than
+citing it as evidence for current behavior — and ask before adding a new entry
+describing behavior the owner has not echoed or approved.

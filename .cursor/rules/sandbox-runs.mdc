@@ -1,0 +1,44 @@
+---
+description: Never hand-run data-writing pipeline scripts against live data/ — always use a throwaway ML_DATA_DIR sandbox (or just smoke) with cwd at repo root
+alwaysApply: true
+---
+
+# Sandbox runs for manual script exercise
+
+Pipeline scripts write into `data/` (resolved from `ML_DATA_DIR`, default `data`,
+relative to cwd) — `scripts/save-round.mjs`, `maintain-rounds.mjs`,
+`scripts/ml.mjs`, `parse-round.mjs`, and friends. Hand-running one "just to check"
+against the live workspace has polluted real rounds: clobbered `data/.current-round`
+and created stray round files.
+
+## Hard rules
+
+1. Never hand-run a data-writing script with the live `data/` while exercising
+   behavior "to verify". Set `ML_DATA_DIR` to a throwaway path first.
+2. Keep cwd at the **repo root** so relative `scripts/` imports and spawned
+   helpers resolve (a sandbox `DATA_DIR` does not make it safe to run from `/tmp` —
+   the script node module path still comes from where you invoked node).
+3. Seed only what the run needs under `$ML_DATA_DIR/rounds/`. The synthetic
+   fixture lives at `tests/fixtures/sample-round/`; never paste real round HTML
+   into a lens run unless testing real data deliberately — and then prefer
+   copying into the sandbox, not pointing at `data/`.
+4. `--dry-run` flags complement the sandbox; they do not replace it (many write
+   paths have no dry-run mode).
+
+## The runner
+
+    just smoke scripts/save-round.mjs lfm-4
+    echo '<html>…</html>' | just smoke scripts/save-round.mjs lfm-4
+
+`just smoke` spawns the script with a fresh sandbox seeded from the sample fixture
+and reports the sandbox path. Keep the same sandbox across invocations while
+iterating (seed once, tweak instructions, re-run):
+
+    ML_SMOKE_KEEP=1 just smoke scripts/save-round.mjs lfm-4
+
+## When a change needs the real thing
+
+If a fix can only be verified against a real committed round, say so explicitly,
+name the round, and get owner approval before touching that round's artifacts —
+per the plan-lifecycle / no-auto-commit rules, leave the round files for the user
+to review and keep the submodule check state mentioned in the summary.

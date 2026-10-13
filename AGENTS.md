@@ -14,7 +14,95 @@ Orientation:
 - Durable specs live in [spec/](./spec); decision history in [spec/decisions.md](./spec/decisions.md).
 - After editing or adding any [.cursor/rules/](./.cursor/rules) rule, run `just agents` to regenerate this file before finishing.
 
-## Always-applied rules (17)
+## Always-applied rules (20)
+
+### avoidable-mistakes.mdc
+
+*End-of-session review — capture avoidable mistakes made during the session and propose rules, skill tweaks, or tests to prevent recurrence*
+
+# Capture avoidable mistakes and propose guards
+
+When a session contains avoidable mistakes — tool misuse, polluted state, missed
+conventions, wrong-but-unflagged assumptions — do not just fix the immediate damage.
+Each mistake is a signal that a guardrail is missing.
+
+## The retro
+
+At the end of a work session (or when a mistake is caught mid-session), list:
+
+1. **Mistake + damage** — what went wrong and what state needed fixing.
+2. **Root cause** — knowledge gap, missing guardrail, or habit (theory of the failure).
+3. **Proposed guard**, choosing the cheapest that would have caught it:
+   - a **new rule** in `.cursor/rules/` (alwaysApply unless situational)
+   - a **tweak to an existing rule or skill** (e.g. sharpen a warning, add a checklist line)
+   - a **test** that would have failed before the mistake shipped
+   - nothing — the mistake isn't worth encoding (say so plainly)
+
+Propose guards; do not write rule/skill changes without the owner's sign-off (rules
+govern future sessions — same class of decision as the decision log). A one-line
+approval is enough; then apply in the same pass, including `just agents` for rule sync.
+
+## Where to record
+
+- Accepted rule/skill/test guards land in the repo in the same session — a guard only
+  works if it exists before the next session.
+- A mistake that reveals wrong committed behavior belongs in `spec/decisions.md`
+  (Overruled/reversal entry), not just a fix.
+
+## Calibration
+
+- Prefer converting a repeated mistake into a guard the **first** time it repeats,
+  not the third.
+- One-off typos and workflow noise are not candidates; behavior that costs
+  restoration work (state pollution, silent overwrites, real-data damage) always is.
+
+
+### clarify-assumptions.mdc
+
+*Corral agent guesswork — consult the owner about implementation assumptions and edge cases; small tweaks may be picked then flagged for approval; larger ones stop and ask; ALWAYS list assumptions and edge cases at end of step*
+
+# Clarify assumptions before they become "intent"
+
+Agents must not make silent assumptions about implementation details that affect
+the outcome or edge-case handling. Assumptions have been codified into decision
+logs and later treated as evidence of owner intent without sign-off.
+
+## The three tiers
+
+| Situation | What to do |
+| --- | --- |
+| **Cosmetic** — wording, ordering, nothing that changes behavior or data | Just decide; no sign-off needed. |
+| **Small tweak to change later** — behavior choice, but a revert is cheap | Pick the best option, then call the assumption out for approval at the end of the step (do not silently ship). |
+| **Larger rewrite to fix** — new constraint, data shape, or semantics that would ripple | **Stop and ask** before implementing. |
+
+Examples of assumptions that should have been asked (real hazards in this repo):
+block-fallback to going under budget when a bank cannot be met exactly; always
+sorting tables by music score even when a combined score is present; allowing
+manual cutoffs only on music scores. This also covers **constraints the owner
+never asked for** — check with fresh eyes whether the code *enforces* rules that
+were never confirmed.
+
+## The two reflexes
+
+1. **While working — surfacing the decision.**
+   Ask in the moment: "When X can't be met exactly, fall back to A or B?" Ask
+   questions one at a time, grounded in evidence from the code — not bare question
+   dumps; lead with one recommendation and its reasoning.
+
+2. **Before ending any work — the assumption audit.**
+   Scan the diff/work for choices made along the way and ALWAYS list them at the
+   end of the step:
+   - assumptions made (incl. those you did not consider "intentional")
+   - edge cases handled and the chosen handling
+   - constraints the code now enforces that the owner never approved
+
+## Reconciling with the decision log
+
+A decision-log entry is a record of shipped owner intent. When an entry was
+written from an agent's own assumption, flag it for correction rather than
+citing it as evidence for current behavior — and ask before adding a new entry
+describing behavior the owner has not echoed or approved.
+
 
 ### cli-docs-parity.mdc
 
@@ -568,6 +656,51 @@ alwaysApply: true
 
 Do not log frontmatter additions in `spec/decisions.md` — they are metadata recovery,
 not behavior changes (the rule text is what governs, and it predates the fix).
+
+
+### sandbox-runs.mdc
+
+*Never hand-run data-writing pipeline scripts against live data/ — always use a throwaway ML_DATA_DIR sandbox (or just smoke) with cwd at repo root*
+
+# Sandbox runs for manual script exercise
+
+Pipeline scripts write into `data/` (resolved from `ML_DATA_DIR`, default `data`,
+relative to cwd) — `scripts/save-round.mjs`, `maintain-rounds.mjs`,
+`scripts/ml.mjs`, `parse-round.mjs`, and friends. Hand-running one "just to check"
+against the live workspace has polluted real rounds: clobbered `data/.current-round`
+and created stray round files.
+
+## Hard rules
+
+1. Never hand-run a data-writing script with the live `data/` while exercising
+   behavior "to verify". Set `ML_DATA_DIR` to a throwaway path first.
+2. Keep cwd at the **repo root** so relative `scripts/` imports and spawned
+   helpers resolve (a sandbox `DATA_DIR` does not make it safe to run from `/tmp` —
+   the script node module path still comes from where you invoked node).
+3. Seed only what the run needs under `$ML_DATA_DIR/rounds/`. The synthetic
+   fixture lives at `tests/fixtures/sample-round/`; never paste real round HTML
+   into a lens run unless testing real data deliberately — and then prefer
+   copying into the sandbox, not pointing at `data/`.
+4. `--dry-run` flags complement the sandbox; they do not replace it (many write
+   paths have no dry-run mode).
+
+## The runner
+
+    just smoke scripts/save-round.mjs lfm-4
+    echo '<html>…</html>' | just smoke scripts/save-round.mjs lfm-4
+
+`just smoke` spawns the script with a fresh sandbox seeded from the sample fixture
+and reports the sandbox path. Keep the same sandbox across invocations while
+iterating (seed once, tweak instructions, re-run):
+
+    ML_SMOKE_KEEP=1 just smoke scripts/save-round.mjs lfm-4
+
+## When a change needs the real thing
+
+If a fix can only be verified against a real committed round, say so explicitly,
+name the round, and get owner approval before touching that round's artifacts —
+per the plan-lifecycle / no-auto-commit rules, leave the round files for the user
+to review and keep the submodule check state mentioned in the summary.
 
 
 ### save-plans-in-repo.mdc
