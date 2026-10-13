@@ -134,7 +134,8 @@ Output snapshot regression test (diff-based): see
 22. For combined scores, always print the current applied weights alongside the option table. I forget the defaults and then have to run manually to make sure it's using the fit weights I expect in CLI. Could do similar for all active pins, cutoffs, curve types, etc.
 23. --reset flag. On rescore and other using the stored 'profile'. To clear the profile after testing out combinations of pins to get back to the original distributions. Currently no way to un-pin after trying things. maybe an interactive prompt, arg, or separate flag to reset just pins without resetting weights, or weights + pins but not --score and --fit-score. need to account for the other knobs as well.
 24. Visual representations of the curves so I can quickly compare how well each option aligns with my vote distribution.
-25. Command shortcuts like r for rescore and -w for --weights and -c m:x for music cutoff. Can still use both versions. Appear in help.
+25. Command shortcuts like r for rescore and -w for --weights and -c m:x for music cutoff. Can still use both versions. Appear in help. Cutoff would be nice to assume music if I don't specify, especially if there are no fit scores in use - I shouldn't have to get an error about it being ambiguous.
+26. save-round should update current round pointer so I can do just run next without specifying
 
 ## Bugs
 
@@ -989,3 +990,271 @@ Ballot
     5  Love in Bloom                75   78      79.2    ·      4  75 78                                           
     6  I Want You                   72   80      78.9    ·      4  72 8                                            
        Total                                                   20             
+
+
+---
+pins and cutoffs should have the same shorthand parsing as everywhere else.
+[main ≡ +0 ~2 -0]$$ just rescore --cutoff music:737
+node scripts/ml.mjs rescore "$@"
+(current round: 2026-09-21-5th-gen-gg)
+Wrote data/analysis/2026-09-21-5th-gen-gg/music.md
+Wrote data/analysis/2026-09-21-5th-gen-gg/music.json
+
+Notes
+  Awarded 10 leftover point(s) to gated-out, blank-score, or disqualified songs so the votes total the budget (10). Reassign if you'd rather place them elsewhere.
+
+Ballot
+     #  Song                     Score   Mod  Votes  Comment                                                       
+     0  Magnetic                    73     ·      1  73                                                            
+     1  404 (New Era)               70     ·      ·  7                                                             
+     2  Dopamine(UNIS Ver.)       75.5     ·      1  755                                                           
+     3  NAIL (feat. Lolo Zouaï)     77     ·      1  77                                                            
+     4  VISA                        74     ?      1  74?? don't love the rap but do like some parts                
+     5  Blue Blood                  75     +      1  75+                                                           
+     6  Starlight                   75     ·      1  75                                                            
+     7  DROP TOP                    73     +      1  73+                                                           
+     8  OXY                         76  play      1  76 play                                                       
+     9  Plot Twist                74.5     ·      1  745                                                           
+    10  FOCUS                     73.5     ·      1  735 like everything except the chorus                         
+    11  BADVILLAIN                   —     ·      —  ·                                                             
+    12  Pinball                     73     ·      ·  73                                                            
+        Total                                    10                                                                
+Warning: no upvote option menu surfaced — budget may be unallocatable.
+bridgetbailey@MacBook-Pro:~/dev/music-league-voting-assistant output=''
+[main ≡ +0 ~2 -0]$$ 
+---
+adding a score should also clear the DQ qualifier that was only there because the song had no score. I wouldn't manually add a score unless I wanted to count the song. --score is precisely for this case where I forgot or want to adjust a score but don't want to re-export the full thing. I should also be able to set a song to DQ via --score.
+Then I did export and ran save-round but it didn't save the new version. Parse produced the old blank score.
+Other commands failing. Odd over budget message.
+ah part of the problem is save-round using the plain slug not the date version. it made 2 copies (one with date and one without) and confused things.
+
+[main ≡ +0 ~2 -0]$$ just rescore --score 10:75.5
+node scripts/ml.mjs rescore "$@"
+(current round: 2026-09-27-lfm-4)
+Wrote data/analysis/2026-09-27-lfm-4/music.md
+Wrote data/analysis/2026-09-27-lfm-4/music.json
+Reset committed pick to draft — re-run just pick to commit a distribution.
+
+Up
+     #  Song                      Score  Mod   A   B   C   D   E  Comment
+    16  Heathens                     77    ·   2   3   3   3   4  77
+     5  The Lonely One               77    ·   2   3   3   3   4  77
+     0  Easy On Me                   76    ·   1   2   3   1   2  76
+    12  HAYABUSA                     76    ·   1   2   3   1   2  76
+     6  Turbine Blue                 76    ·   1   2   3   1   2  76
+     7  Coming Undone                75    -   1   1   ·   1   1  75-
+    11  Happier Than Ever          74.7    ·   1   1   ·   1   ·  747
+     1  Holy Fucking Shit: 40,0…   74.7    ·   1   1   ·   1   ·  747
+    18  Walk, Don't Run              74    +   1   ·   ·   1   ·  74+
+     2  Letting Go                   74    ·   1   ·   ·   1   ·  74 inoffensive but boring and long
+     3  Pieces                       74    ?   1   ·   ·   1   ·  74? not sure if better or worse than the boring one. definitely punk. meh vocals
+    19  I'm Not Okay (I Promise)   73.9    ·   1   ·   ·   ·   ·  739
+     4  Sunday - Remastered 2026   73.6    ·   1   ·   ·   ·   ·  736
+     9  Human Nature                 73    ·   ·   ·   ·   ·   ·  73
+    13  Night Fever - From "Sat…     73    ?   ·   ·   ·   ·   ·  73?
+    15  Please, Please, Please,…     73    ?   ·   ·   ·   ·   ·  73? made no impression
+    17  PRIDE.                       73    ·   ·   ·   ·   ·   ·  73
+    14  Stress Builds Character      70    ·   ·   ·   ·   ·   ·  7
+    10  Gymnopédie No. 1. Lent …   75.5   DQ   -   -   -   -   -  One of the few songs I actually know on this list. It's in a lot of soundtracks
+        Total                                 15  15  15  15  15
+    A. 3 tiers (bucket-count 2) — 2×2 / 1×11 / 0×5
+    B. 4 tiers (bucket-count 3) — 3×2 / 2×3 / 1×3 / 0×10
+    C. 2 tiers (bucket-count 1) — 3×5 / 0×13 · merges a tier (3→0 jump, no tiebreak)
+    D. 3 tiers (bucket-count 2) — 3×2 / 1×9 / 0×7 · merges a tier (3→1 jump, no tiebreak)
+    E. 4 tiers (bucket-count 3) — 4×2 / 2×3 / 1×1 / 0×12 · merges a tier (4→2 jump, no tiebreak)
+
+    also favorite-band isn't working and getting an odd over budget warning
+
+    [main ≡ +0 ~2 -0]$$ just parse lfm-4
+node scripts/ml.mjs parse "$@"
+  ! skip merge data/rounds/lfm-4.html: data/rounds/2026-09-27-lfm-4.html already exists
+  merged lfm-4 → 2026-09-27-lfm-4
+Wrote data/analysis/2026-09-27-lfm-4/music.md
+Wrote data/analysis/2026-09-27-lfm-4/music.json
+
+League: lfm-<topic> — Last.fm listening-stats prompts (top tracks, alliteration, curses, …).
+  ⚠ Query the generated Last.fm tables with the scan scripts, never raw grep (spec/lastfm-data.md, no-grep-csvs rule).
+  $ node scripts/lastfm-aggregate.mjs
+      Regenerate the Last.fm reference tables in data/ref/lastfm/ (title-table via table-map.json).
+  $ node scripts/lastfm-export.mjs
+      Export raw Last.fm scrobble data feeding the aggregate tables.
+  See: spec/leagues.md
+
+⛔ OVER BUDGET: upvotes 18/15. Exceeding a bank is never a valid ballot — rebalance so each bank totals exactly (pins, or caps × eligible slots, may block full spend).
+
+Up
+     #  Song                      Score  Mod   A   B   C   D   E  Comment
+    16  Heathens                     77    ·   2   3   2   3   4  77
+     5  The Lonely One               77    ·   2   3   2   3   4  77
+     0  Easy On Me                   76    ·   1   2   2   3   2  76
+    12  HAYABUSA                     76    ·   1   2   2   3   2  76
+     6  Turbine Blue                 76    ·   1   2   2   3   2  76
+    10  Gymnopédie No. 1. Lent …   75.5    ·   1   2   2   ·   1  75.5
+     7  Coming Undone                75    -   1   1   1   ·   ·  75-
+    11  Happier Than Ever          74.7    ·   1   ·   1   ·   ·  747
+     1  Holy Fucking Shit: 40,0…   74.7    ·   1   ·   1   ·   ·  747
+    18  Walk, Don't Run              74    +   1   ·   ·   ·   ·  74+
+     2  Letting Go                   74    ·   1   ·   ·   ·   ·  74 inoffensive but boring and long
+     3  Pieces                       74    ?   1   ·   ·   ·   ·  74? not sure if better or worse than the boring one. definitely punk. meh vocals
+    19  I'm Not Okay (I Promise)   73.9    ·   1   ·   ·   ·   ·  739
+     4  Sunday - Remastered 2026   73.6    ·   ·   ·   ·   ·   ·  736
+     9  Human Nature                 73    ·   ·   ·   ·   ·   ·  73
+    13  Night Fever - From "Sat…     73    ?   ·   ·   ·   ·   ·  73?
+    15  Please, Please, Please,…     73    ?   ·   ·   ·   ·   ·  73? made no impression
+    17  PRIDE.                       73    ·   ·   ·   ·   ·   ·  73
+    14  Stress Builds Character      70    ·   ·   ·   ·   ·   ·  7
+        Total                                 15  15  15  15  15
+    A. 3 tiers (bucket-count 2) — 2×2 / 1×11 / 0×6
+    B. 4 tiers (bucket-count 3) — 3×2 / 2×4 / 1×1 / 0×12
+    C. 3 tiers (bucket-count 2) — 2×6 / 1×3 / 0×10
+    D. 2 tiers (bucket-count 1) — 3×5 / 0×14 · merges a tier (3→0 jump, no tiebreak)
+    E. 4 tiers (bucket-count 3) — 4×2 / 2×3 / 1×1 / 0×13 · merges a tier (4→2 jump, no tiebreak)
+
+just pick <a|b|c> [--pin <song>:<v>] [--cutoff music:<n>] [--reason "…"]
+
+Notes
+  ⛔ OVER BUDGET: upvotes 18/15. Exceeding a bank is never a valid ballot — rebalance so each bank totals exactly (pins, or caps × eligible slots, may block full spend).
+
+Ballot
+     #  Song                      Score  Mod  Votes  Comment
+     0  Easy On Me                   76    ·      1  76
+     1  Holy Fucking Shit: 40,0…   74.7    ·      1  747
+     2  Letting Go                   74    ·      1  74 inoffensive but boring and long
+     3  Pieces                       74    ?      1  74? not sure if better or worse than the boring one. definitely punk. meh vocals
+     4  Sunday - Remastered 2026   73.6    ·      ·  736
+     5  The Lonely One               77    ·      2  77
+     6  Turbine Blue                 76    ·      1  76
+     7  Coming Undone                75    -      1  75-
+     8  View                          —    ·      —  ·
+     9  Human Nature                 73    ·      ·  73
+    10  Gymnopédie No. 1. Lent …   75.5    ·      1  75.5
+    11  Happier Than Ever          74.7    ·      1  747
+    12  HAYABUSA                     76    ·      1  76
+    13  Night Fever - From "Sat…     73    ?      ·  73?
+    14  Stress Builds Character      70    ·      ·  7
+    15  Please, Please, Please,…     73    ?      ·  73? made no impression
+    16  Heathens                     77    ·      2  77
+    17  PRIDE.                       73    ·      ·  73
+    18  Walk, Don't Run              74    +      1  74+
+    19  I'm Not Okay (I Promise)   73.9    ·      1  739
+        Total                                    15
+bridgetbailey@MacBook-Pro:~/dev/music-league-voting-assistant output=''
+[main ≡ +0 ~2 -0]$$ just rescore --favorite-band 76
+node scripts/ml.mjs rescore "$@"
+(current round: lfm-4)
+Could not read data/analysis/lfm-4/music.json: ENOENT: no such file or directory, open 'data/analysis/lfm-4/music.json'. Run just parse first.
+error: recipe `rescore` failed on line 35 with exit code 1
+bridgetbailey@MacBook-Pro:~/dev/music-league-voting-assistant output=''
+[main ≡ +0 ~2 -0]$$ just pick c
+node scripts/ml.mjs pick "$@"
+(current round: lfm-4)
+Could not read data/analysis/lfm-4/music.json: ENOENT: no such file or directory, open 'data/analysis/lfm-4/music.json'. Run just parse first.
+error: recipe `pick` failed on line 31 with exit code 1
+bridgetbailey@MacBook-Pro:~/dev/music-league-voting-assistant output=''
+
+---
+Still not a great experience trying to nudge the curve options towards what I want. If I pin something like tier-count, I expect it to reflow and give me more options, not just cut all the ones that don't already match that tiercount. If the one I wanted was already an option, I wouldn't be using rescore. I need it to try more things like merging decimal scores into the other neighboring tier or moving songs with +/- modifiers to a different tier. If it's really not possible, maybe point to where the issue is like 'too may songs at 76, please refine those scores and try again'.
+Also double check how rescore interacts with a supplied cutoff. The cutoff is already creating a bunch of 0-point songs. So no need for the curve to keep a 0-tier among the remaining songs, which it could be doing based on how it interprets that. Same for original scoring that has some DQs. If enough songs are disqualified, I probably want to reward every valid song with at least one point. The DQ tier becomes the 0 tier. It shouldn't be completely discounted in the algorithm as if those songs don't exist and we still need a 0 tier above that.
+
+[main ≡ +0 ~2 -0]$$ just rescore --cutoff music:74
+node scripts/ml.mjs rescore "$@"
+(current round: 2026-10-11-lfm-halloween-oct-2025)
+Wrote data/analysis/2026-10-11-lfm-halloween-oct-2025/music.md
+Wrote data/analysis/2026-10-11-lfm-halloween-oct-2025/music.json
+
+Up
+     #  Song                      Score  Mod   A   B   C   D   E  Comment
+    13  Mosquitoes                   76    ·   2   3   3   3   3  76
+    17  Romance                      76    ·   2   3   3   3   3  76
+    15  St. James Infirmary          76    ·   2   3   3   3   2  76
+    16  we fell in love in octo…     76    ·   2   3   3   2   2  76
+     2  In The End                 75.5    +   2   1   2   2   2  755+
+    12  Girls My Age               75.5    ·   2   1   1   1   2  755
+     3  Thirteen                     75    ·   2   1   ·   1   1  75
+     5  Hallowed Be Thy Name - …   74.7    ·   1   ·   ·   ·   ·  747
+     9  Leaving Shire              74.5    ·   ·   ·   ·   ·   ·  745 inst
+     8  Magnificent Seventies      74.5    ?   ·   ·   ·   ·   ·  745? do do do do do is nice enough but 9 minutes???
+    11  Glycerine - Remastered       74    ·   ·   ·   ·   ·   ·  74
+    14  Hells Bells                  74    ·   ·   ·   ·   ·   ·  74
+     0  Poltergeist                73.5    ·   -   -   -   -   -  735
+     1  In My Secret Place           72    ·   -   -   -   -   -  72
+     4  Above The Clouds           73.5    ·   -   -   -   -   -  735
+     6  I Got Heaven                 73    ·   -   -   -   -   -  73
+     7  (Forever) Live And Die     73.7    ?   -   -   -   -   -  737? nicer but might be more boring than the 35s
+    10  Last Caress - C.I. Reco…   73.1    ·   -   -   -   -   -  731
+    18  I Did Something Weird L…     60    ·   -   -   -   -   -  6
+        Total                                 15  15  15  15  15
+    A. 3 tiers (bucket-count 2) — 2×7 / 1×1 / 0×4
+    B. 3 tiers (bucket-count 2) — 3×4 / 1×3 / 0×5 · merges a tier (3→1 jump, no tiebreak)
+    C. 4 tiers (bucket-count 3) — 3×4 / 2×1 / 1×1 / 0×6
+    D. 4 tiers (bucket-count 3) — 3×3 / 2×2 / 1×2 / 0×5 · needs a tiebreak (splits 1 tie)
+    E. 4 tiers (bucket-count 3) — 3×2 / 2×4 / 1×1 / 0×5 · needs a tiebreak (splits 1 tie)
+
+    
+[main ≡ +0 ~2 -0]$$ just rescore --tier-count 3
+node scripts/ml.mjs rescore "$@"
+(current round: 2026-10-11-lfm-halloween-oct-2025)
+Wrote data/analysis/2026-10-11-lfm-halloween-oct-2025/music.md
+Wrote data/analysis/2026-10-11-lfm-halloween-oct-2025/music.json
+
+Up
+     #  Song                      Score  Mod   A  Comment
+    13  Mosquitoes                   76    ·   2  76
+    17  Romance                      76    ·   2  76
+    15  St. James Infirmary          76    ·   2  76
+    16  we fell in love in octo…     76    ·   2  76
+     2  In The End                 75.5    +   2  755+
+    12  Girls My Age               75.5    ·   2  755
+     3  Thirteen                     75    ·   2  75
+     5  Hallowed Be Thy Name - …   74.7    ·   1  747
+     9  Leaving Shire              74.5    ·   ·  745 inst
+     8  Magnificent Seventies      74.5    ?   ·  745? do do do do do is nice enough but 9 minutes???
+    11  Glycerine - Remastered       74    ·   ·  74
+    14  Hells Bells                  74    ·   ·  74
+     0  Poltergeist                73.5    ·   -  735
+     1  In My Secret Place           72    ·   -  72
+     4  Above The Clouds           73.5    ·   -  735
+     6  I Got Heaven                 73    ·   -  73
+     7  (Forever) Live And Die     73.7    ?   -  737? nicer but might be more boring than the 35s
+    10  Last Caress - C.I. Reco…   73.1    ·   -  731
+    18  I Did Something Weird L…     60    ·   -  6
+        Total                                 15
+    A. 3 tiers (bucket-count 2) — 2×7 / 1×1 / 0×4
+
+
+Also definitely need a reset option since it's hard to undo those command tweaks. I think re-parse might work but a flag on rescore would be good. potentially with optons to keep manual scores but clear algorithm flags like tier-count and cutoff. That could be default and an extra param to ALSO clear score, or use parse for that.
+This attempt to bump the cutoff back up seems to have ignored me. Maybe again it doesn't actually reflow, just filters the existing options, maybe with a limit to keep one? idk why it did nothing. I just want my original options back to see if cutoff is what messed it up. I already changed cutoff lower and that didn't reflow anything since there was only one candidate left. I need each of these changes to allow options to come back if they now fit the critera. Not constantly narrow with no undo option.
+
+[main ≡ +0 ~2 -0]$$ just rescore --tier-count 4
+node scripts/ml.mjs rescore "$@"
+(current round: 2026-10-11-lfm-halloween-oct-2025)
+Wrote data/analysis/2026-10-11-lfm-halloween-oct-2025/music.md
+Wrote data/analysis/2026-10-11-lfm-halloween-oct-2025/music.json
+
+Up
+     #  Song                      Score  Mod   A  Comment
+    13  Mosquitoes                   76    ·   2  76
+    17  Romance                      76    ·   2  76
+    15  St. James Infirmary          76    ·   2  76
+    16  we fell in love in octo…     76    ·   2  76
+     2  In The End                 75.5    +   2  755+
+    12  Girls My Age               75.5    ·   2  755
+     3  Thirteen                     75    ·   2  75
+     5  Hallowed Be Thy Name - …   74.7    ·   1  747
+     9  Leaving Shire              74.5    ·   ·  745 inst
+     8  Magnificent Seventies      74.5    ?   ·  745? do do do do do is nice enough but 9 minutes???
+    11  Glycerine - Remastered       74    ·   ·  74
+    14  Hells Bells                  74    ·   ·  74
+     7  (Forever) Live And Die     73.7    ?   ·  737? nicer but might be more boring than the 35s
+     4  Above The Clouds           73.5    ·   ·  735
+     0  Poltergeist                73.5    ·   ·  735
+     1  In My Secret Place           72    ·   -  72
+     6  I Got Heaven                 73    ·   -  73
+    10  Last Caress - C.I. Reco…   73.1    ·   -  731
+    18  I Did Something Weird L…     60    ·   -  6
+        Total                                 15
+    A. 3 tiers (bucket-count 2) — 2×7 / 1×1 / 0×7
+
+    Option A should have called out a tiebreak here. question mark coud go up or down, should prompt which song on the next tier gets the extra point or at least call it out so I can pin.
+
+    
