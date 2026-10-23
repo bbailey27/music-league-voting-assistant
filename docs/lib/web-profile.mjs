@@ -79,9 +79,16 @@ function applyScoreOverridesToSongs(songs, specs, flag) {
   const byIdx = new Map(songs.map((s) => [s.rawOrderIndex, s]));
   for (const ov of overrides) {
     const s = byIdx.get(ov.idx);
-    if (!s) throw new Error(`Invalid ${flag} ${ov.idx}:${ov.score} — no song #${ov.idx}.`);
+    if (!s) throw new Error(`Invalid ${flag} ${ov.idx}:${ov.disqualified ? 'DQ' : ov.score} — no song #${ov.idx}.`);
     if (flag === '--fit-score') {
+      if (ov.disqualified) {
+        throw new Error(`Invalid --fit-score ${ov.idx}:DQ — DQ is a music score override (--score <i>:DQ).`);
+      }
       s.fitScore = ov.score;
+    } else if (ov.disqualified) {
+      s.isDisqualified = true;
+      s.needsUserInput = false;
+      s.needsReview = false;
     } else {
       s.score = ov.score;
       s.plus = ov.plus;
@@ -90,6 +97,9 @@ function applyScoreOverridesToSongs(songs, specs, flag) {
       s.plusUncertain = ov.plusUncertain;
       s.minusUncertain = ov.minusUncertain;
       s.needsUserInput = false;
+      s.isDisqualified = false;
+      s.needsReview = false;
+      s.reviewReason = '';
     }
   }
 }

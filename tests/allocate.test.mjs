@@ -1609,37 +1609,56 @@ test('parseScoreOverrides parses idx:score with +/-/? modifiers', () => {
   assert.equal(parseScoreOverrides([]), undefined);
 
   assert.deepEqual(parseScoreOverrides('5:74.5+'), [
-    { idx: 5, score: 74.5, plus: true, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false },
+    { idx: 5, score: 74.5, plus: true, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: false },
   ]);
   assert.deepEqual(parseScoreOverrides('7:75'), [
-    { idx: 7, score: 75, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false },
+    { idx: 7, score: 75, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: false },
   ]);
   assert.deepEqual(parseScoreOverrides('2:76-'), [
-    { idx: 2, score: 76, plus: false, minus: true, uncertain: false, plusUncertain: false, minusUncertain: false },
+    { idx: 2, score: 76, plus: false, minus: true, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: false },
   ]);
   assert.deepEqual(parseScoreOverrides('3:75?'), [
-    { idx: 3, score: 75, plus: false, minus: false, uncertain: true, plusUncertain: false, minusUncertain: false },
+    { idx: 3, score: 75, plus: false, minus: false, uncertain: true, plusUncertain: false, minusUncertain: false, disqualified: false },
   ]);
   // `?` combined with a modifier marks that modifier uncertain.
   assert.deepEqual(parseScoreOverrides('4:74.5+?'), [
-    { idx: 4, score: 74.5, plus: true, minus: false, uncertain: false, plusUncertain: true, minusUncertain: false },
+    { idx: 4, score: 74.5, plus: true, minus: false, uncertain: false, plusUncertain: true, minusUncertain: false, disqualified: false },
   ]);
 
   // Single-digit scores scale ×10 (same as comment parsing: 9 → 90).
   assert.deepEqual(parseScoreOverrides('4:9'), [
-    { idx: 4, score: 90, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false },
+    { idx: 4, score: 90, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: false },
   ]);
   assert.deepEqual(parseScoreOverrides('4:9+'), [
-    { idx: 4, score: 90, plus: true, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false },
+    { idx: 4, score: 90, plus: true, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: false },
   ]);
   // Three-digit scores scale ÷10 (745 → 74.5).
   assert.deepEqual(parseScoreOverrides('4:745'), [
-    { idx: 4, score: 74.5, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false },
+    { idx: 4, score: 74.5, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: false },
   ]);
 
   // Comma / repeated specs both fold into one list.
   const multi = parseScoreOverrides(['5:74.5+', '7:75,2:76-']);
   assert.equal(multi.length, 3);
+});
+
+test('parseScoreOverrides parses DQ as a disqualified override (any case)', () => {
+  assert.deepEqual(parseScoreOverrides('7:DQ'), [
+    { idx: 7, score: null, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: true },
+  ]);
+  assert.deepEqual(parseScoreOverrides('7:dq'), [
+    { idx: 7, score: null, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: true },
+  ]);
+  // Numeric overrides carry disqualified: false (un-DQ then set the score).
+  assert.deepEqual(parseScoreOverrides('5:75'), [
+    { idx: 5, score: 75, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: false },
+  ]);
+});
+
+test('parseScoreOverrides keeps accepting modifiers for fit-score and default flags', () => {
+  assert.deepEqual(parseScoreOverrides('3:75?', '--fit-score'), [
+    { idx: 3, score: 75, plus: false, minus: false, uncertain: true, plusUncertain: false, minusUncertain: false, disqualified: false },
+  ]);
 });
 
 test('parseScoreOverrides rejects malformed specs', () => {

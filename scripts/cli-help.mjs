@@ -28,10 +28,15 @@ const SCORE_OVERRIDE = `  --score <index>:<value>
                           Index = raw submission order. Value accepts modifier
                           suffixes: 74.5+, 76-, 75?, 74.5+? (same as parsed
                           comments). Clears needsUserInput — song enters allocation
-                          normally. Repeatable; comma-separate.
+                          normally. Adding a score also clears a DQ that held only
+                          because the song had no score. <index>:DQ instead
+                          disqualifies the song (kept score stays on the record;
+                          allocation reflows without it). Repeatable;
+                          comma-separate.
   --fit-score <index>:<value>
                           Same for fitScore on fit.json (thematic) or the song
-                          record on music-only rounds.`;
+                          record on music-only rounds (numeric values only —
+                          DQ belongs on --score).`;
 
 const SHAPE = `  --shape <preset>
                           Allocation curve preset: auto (default — enumerates

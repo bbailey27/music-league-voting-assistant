@@ -212,11 +212,11 @@ draft; never reads HTML): takes the shared allocation/profile flags above (`--we
 `--shape`, `--rank`, `--gate`, `--down-shape`, `--tier-count`, `--bucket-count`,
 `--pin`, `--favorite-band`) plus:
 
-| Flag          | Values            | Effect                                                                                                     |
-| ------------- | ----------------- | ---------------------------------------------------------------------------------------------------------- |
-| `--score`     | `<index>:<value>` | Write a music score to `music.json` (modifiers `+`/`-`/`?` OK). Clears `needsUserInput`; no HTML re-parse. |
-| `--fit-score` | `<index>:<value>` | Write fit score to `fit.json` (thematic) or song record (music-only).                                      |
-| `--dry-run`   | —                 | Preview re-score without writing files.                                                                    |
+| Flag | Values | Effect |
+| --- | --- | --- |
+| `--score` | `<index>:<value>` | Write a music score to `music.json` (modifiers `+`/`-`/`?`; `:DQ` disqualifies and reflows). Clears `needsUserInput`, and clears a DQ held only for lack of a score. No HTML re-parse. |
+| `--fit-score` | `<index>:<value>` | Write fit score to `fit.json` (thematic) or song record (music-only). |
+| `--dry-run` | — | Preview re-score without writing files. |
 
 See `just help rescore` for examples. Vote pins (`--pin`) and raw score overrides
 (`--score`) are different — use `--score` to fill a blank box and re-tier normally.

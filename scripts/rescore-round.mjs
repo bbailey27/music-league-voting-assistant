@@ -113,16 +113,31 @@ function applyScoreOverrides(songs, overrides) {
   for (const ov of overrides) {
     const s = byIdx.get(ov.idx);
     if (!s) {
-      console.error(`Invalid --score ${ov.idx}:${ov.score} — no song with rawOrderIndex ${ov.idx}.`);
+      console.error(`Invalid --score ${ov.idx}:${ov.disqualified ? 'DQ' : ov.score} — no song with rawOrderIndex ${ov.idx}.`);
       process.exit(1);
     }
-    s.score = ov.score;
-    s.plus = ov.plus;
-    s.minus = ov.minus;
-    s.uncertain = ov.uncertain;
-    s.plusUncertain = ov.plusUncertain;
-    s.minusUncertain = ov.minusUncertain;
-    s.needsUserInput = false;
+    if (ov.disqualified) {
+      if (!s.isDisqualified) {
+        console.log(`Disqualified #${ov.idx} ${s.title || ''} — excluded from allocation (previous score, if any, stays on the record).`);
+      }
+      s.isDisqualified = true;
+      s.needsUserInput = false;
+      s.needsReview = false;
+    } else {
+      if (s.isDisqualified) {
+        console.log(`Un-disqualified #${ov.idx} ${s.title || ''} — a manually added score counts the song (comment text stays).`);
+      }
+      s.score = ov.score;
+      s.plus = ov.plus;
+      s.minus = ov.minus;
+      s.uncertain = ov.uncertain;
+      s.plusUncertain = ov.plusUncertain;
+      s.minusUncertain = ov.minusUncertain;
+      s.needsUserInput = false;
+      s.isDisqualified = false;
+      s.needsReview = false;
+      s.reviewReason = '';
+    }
   }
   return true;
 }
@@ -133,7 +148,11 @@ function applyFitScoreOverrides(songs, overrides, where) {
   for (const ov of overrides) {
     const s = byIdx.get(ov.idx);
     if (!s) {
-      console.error(`Invalid --fit-score ${ov.idx}:${ov.score} — no song with rawOrderIndex ${ov.idx} in ${where}.`);
+      console.error(`Invalid --fit-score ${ov.idx}:${ov.disqualified ? 'DQ' : ov.score} — no song with rawOrderIndex ${ov.idx} in ${where}.`);
+      process.exit(1);
+    }
+    if (ov.disqualified) {
+      console.error(`Invalid --fit-score ${ov.idx}:DQ — DQ is a music score override (--score <i>:DQ), not a fit-score value.`);
       process.exit(1);
     }
     s.fitScore = ov.score;

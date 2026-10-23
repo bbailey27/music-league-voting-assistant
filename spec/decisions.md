@@ -11,6 +11,30 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-10-13 — `--score` DQ semantics (un-DQ by scoring; `:DQ` to disqualify)
+
+**Change.** [`--score` overrides](../scripts/parse/cli-flags.mjs) now carry explicit DQ
+semantics, in both `rescore` and the web profile:
+
+- `--score <i>:<number>` **unconditionally clears `isDisqualified`** (and
+  `needsReview`/`reviewReason`) when it lands on a disqualified song — a manually added
+  score means the owner wants the song counted. The comment text stays as the record.
+- New token **`--score <i>:DQ`** (any case) sets `isDisqualified = true` and clears
+  `needsUserInput`/`needsReview`; any previously stored numeric score is kept on the
+  record while allocation reflows without the song.
+- `--fit-score <i>:DQ` is rejected with a pointer to `--score`.
+
+**Why.** Music-league bug-session report: applying a score to a DQ'd song left the DQ
+in place (alloc kept a `-` column for the song even after `--score` accepted the
+number), and there was no way to belatedly disqualify + reflow without re-exporting
+HTML. `applyScoreOverrides` had only ever cleared `needsUserInput`.
+
+**Refs.** `working tree` — `scripts/parse/cli-flags.mjs`, `scripts/rescore-round.mjs`,
+`scripts/web-profile.mjs`, `docs/lib` (synced), `tests/allocate.test.mjs`,
+`tests/rescore-e2e.test.mjs`.
+
+---
+
 ## 2026-10-13 — Agent guard rules: clarify-assumptions + sandbox-runs + avoidable-mistakes
 
 **Change.** Three always-applied rules added to `.cursor/rules/` and synced into

@@ -101,8 +101,10 @@ export function parseOptionCount(spec) {
 // Manual raw-score overrides for `rescore --score` / `--fit-score`. Each spec is
 // `<rawOrderIndex>:<score>` where <score> may carry a modifier suffix: `+` / `-` nudge
 // a tie, `?` marks uncertainty, and `+?` / `-?` combine them (e.g. `5:74.5+`, `7:75?`,
-// `9:76-`). A bare number clears any modifier. Returns a list of
-// `{ idx, score, plus, minus, uncertain, plusUncertain, minusUncertain }`.
+// `9:76-`). A bare number clears any modifier — and also clears a DQ that only
+// existed because the song had no score. `<i>:DQ` instead disqualifies the song
+// (kept score stays on the record; allocation ignores DQ songs). Returns a list of
+// `{ idx, score, plus, minus, uncertain, plusUncertain, minusUncertain, disqualified }`.
 export function parseScoreOverrides(specs, flag = '--score') {
   const list = (Array.isArray(specs) ? specs : [specs]).filter(Boolean);
   if (!list.length) return undefined;
@@ -112,17 +114,30 @@ export function parseScoreOverrides(specs, flag = '--score') {
       if (!pair.trim()) continue;
       const ci = pair.indexOf(':');
       if (ci < 0) {
-        throw new Error(`Invalid ${flag} "${pair}" (use <rawOrderIndex>:<score>, e.g. 5:74.5+)`);
+        throw new Error(`Invalid ${flag} "${pair}" (use <rawOrderIndex>:<score|DQ>, e.g. 5:74.5+ or 7:DQ)`);
       }
       const idx = Number(pair.slice(0, ci).trim());
       const valRaw = pair.slice(ci + 1).trim();
       if (!Number.isInteger(idx) || idx < 0) {
         throw new Error(`Invalid ${flag} "${pair}" — rawOrderIndex must be a non-negative integer.`);
       }
+      if (/^dq$/i.test(valRaw)) {
+        out.push({
+          idx,
+          score: null,
+          plus: false,
+          minus: false,
+          uncertain: false,
+          plusUncertain: false,
+          minusUncertain: false,
+          disqualified: true,
+        });
+        continue;
+      }
       const m = valRaw.match(/^(\d+(?:\.\d+)?)([+\-?]*)$/);
       if (!m) {
         throw new Error(
-          `Invalid ${flag} "${pair}" — use <score> optionally with +, -, or ? (e.g. 74.5+, 75?, 76-).`
+          `Invalid ${flag} "${pair}" — use <score> optionally with +, -, or ? (e.g. 74.5+, 75?, 76-, or DQ).`
         );
       }
       const rawNum = m[1];
@@ -145,6 +160,7 @@ export function parseScoreOverrides(specs, flag = '--score') {
         uncertain: q && !plus && !minus,
         plusUncertain: q && plus,
         minusUncertain: q && minus,
+        disqualified: false,
       });
     }
   }

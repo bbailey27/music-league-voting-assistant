@@ -142,6 +142,68 @@ test('rescore --score on a blank box clears needsUserInput and allocates normall
   }
 });
 
+test('rescore --score on a DQ song clears the disqualification and counts it', async () => {
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-rescore-undq-'));
+  const dataDir = join(tmpRoot, 'data');
+  const env = { ...process.env, ML_DATA_DIR: dataDir };
+  try {
+    await mkdir(join(dataDir, 'rounds'), { recursive: true });
+    await copyFile(fixtureHtml, join(dataDir, 'rounds', `${ROUND}.html`));
+    const musicJson = join(dataDir, 'analysis', ROUND, 'music.json');
+
+    await ml(env, 'parse', ROUND);
+    const parsed = JSON.parse(await readFile(musicJson, 'utf8'));
+    const dq = songByIndex(parsed, 2);
+    dq.userComment = 'no';
+    dq.score = null;
+    dq.isDisqualified = true;
+    dq.needsUserInput = false;
+    await writeFile(musicJson, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+
+    const { stdout } = await ml(env, 'rescore', ROUND, '--score', '2:78+');
+    assert.match(stdout, /Un-disqualified #2/, 'CLI calls out the un-DQ');
+    const after = JSON.parse(await readFile(musicJson, 'utf8'));
+    const s2 = songByIndex(after, 2);
+    assert.equal(s2.isDisqualified, false, 'numeric --score clears the DQ');
+    assert.equal(s2.score, 78);
+    assert.equal(s2.userComment, 'no', 'comment text stays as the record');
+    assert.ok((s2.finalVotes || 0) > 0, 'un-DQ song enters allocation');
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('rescore --score <i>:DQ disqualifies and reflows without the song', async () => {
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-rescore-dq-'));
+  const dataDir = join(tmpRoot, 'data');
+  const env = { ...process.env, ML_DATA_DIR: dataDir };
+  try {
+    await mkdir(join(dataDir, 'rounds'), { recursive: true });
+    await copyFile(fixtureHtml, join(dataDir, 'rounds', `${ROUND}.html`));
+    const musicJson = join(dataDir, 'analysis', ROUND, 'music.json');
+
+    await ml(env, 'parse', ROUND);
+    const before = JSON.parse(await readFile(musicJson, 'utf8'));
+    const s2Before = songByIndex(before, 2);
+    assert.equal(s2Before.isDisqualified, false);
+    const scoreBefore = s2Before.score;
+    const bank = before.budget.upvoteBankSize;
+
+    const { stdout } = await ml(env, 'rescore', ROUND, '--score', '2:DQ');
+    assert.match(stdout, /Disqualified #2/, 'CLI calls out the DQ');
+    const after = JSON.parse(await readFile(musicJson, 'utf8'));
+    const s2 = songByIndex(after, 2);
+    assert.equal(s2.isDisqualified, true, '--score DQ sets the disqualification');
+    assert.equal(s2.needsUserInput, false, 'DQ clears needsUserInput');
+    assert.equal(s2.score, scoreBefore, 'previous score stays on the record');
+    assert.equal(s2.finalVotes || 0, 0, 'DQ song gets no votes');
+    const upSum = after.songs.reduce((a, s) => a + Math.max(s.finalVotes || 0, 0), 0);
+    assert.equal(upSum, bank, 'vote bank reflows exactly across the survivors');
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
 test('rescore --dry-run does not write and reports the reset', async () => {
   const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-rescore-dry-'));
   const dataDir = join(tmpRoot, 'data');
