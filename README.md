@@ -155,6 +155,7 @@ through to the underlying scripts. Run `just --list` or `just help` for the over
 | `just status [name]`         | pipeline checklist                        | —           |
 | `just help [cmd]`            | workflow / per-command flags              | —           |
 | `just tidy`                  | date-slug + archive stale rounds          | —           |
+| `just leagues [name]`        | active-first league + slug registry       | —           |
 | `just config`                | local CLI preferences                     | —           |
 
 `<name>` is optional after the first explicit use — the current round is stored in
@@ -163,7 +164,16 @@ through to the underlying scripts. Run `just --list` or `just help` for the over
 save-round self-dates: it resolves the slug to the round's dated id when one already
 exists (an undated export never re-appears beside it), stamps today's date for a new
 round, and stamps the saved id as the current round. Later commands accept either name;
-a bare slug like `lfm-4` snaps to its single dated sibling.
+a bare slug snaps to its single dated sibling.
+
+Naming-consistency: save-round prints your slug's family with its 3 most recent
+concrete slugs; an unknown family shows the digest of other recent families and
+(when run from a terminal) asks before saving, then auto-registers the family in
+`data/ref/leagues.json` (plain leagues get no reminders — special rules stay
+optional). `just rename <new-slug>` re-aligns a saved round afterwards, keeping the
+date and cascading input/analysis/picks/registry. `just leagues` lists every family
+active-first (14-day recency window; archived rounds still count) and details one by
+id/name/prefix.
 
 ### CLI flags
 

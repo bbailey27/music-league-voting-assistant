@@ -11,6 +11,52 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-10-22 — `just leagues` lists active-first with the latest concrete slug
+
+**Change.** Bare [`just leagues`](../scripts/leagues.mjs) now computes each league's
+round recency (`leagueSlugActivity`): the newest dated round ids whose bare slugs match
+the league's `slugPrefixes`, counted across the active tree **and** the archive folders
+(new [`listArchivedRoundIds`](../scripts/paths.mjs) — the archive sweep moves rounds out
+at 2 days, so a 14-day window that ignored archive would only ever see the last 2 days).
+Active leagues (round ≤ 14 days old, effective-date aware) print first showing their 3
+most recent concrete slugs — `latest: <slug> (<n>d ago)` on the row, the 2 older ones on
+an indented `also:` line; leagues with no round in 2 weeks collapse to a one-line
+dormant footer. New `just leagues` recipe (ml leagues existed without a just alias).
+Archive inclusion is scoped to this recency feature — round resolution (`just run`,
+fuzzy name matching) still ignores archived floors. Fixed 14-day window (no `--age`
+flag).
+
+**Guard.** [`unregisteredLeagues`](../scripts/leagues.mjs) catches new leagues going
+forward: bare `ml leagues` (and `ml status <round>`) print a warning when a parsed
+round's official `round.league` matches no descriptor name and no slug prefix. The
+scan covers the active tree + analysis/archive but only rounds ≤ 30 days old, so
+dormant one-off leagues don't nag forever — 2-day archive pruning makes an
+active-tree-only scan worthless (the whole reason recency needed archive).
+`just parse` prints the same note inline in the save-round → run → rescore flow the
+owner actually uses (they do not run `just leagues`/`ml status`), with the slugs seen
+so far and an ask-the-agent hint. Nothing edits the registry automatically —
+descriptors are owner sign-off per `.cursor/rules/clarify-assumptions.mdc`.
+
+**Plain vs. constraint leagues.** Registration and rules are separate layers in the
+same descriptor: a plain league registers with only name/family/mode/summary (no
+`reminders`), and its parse banner is the slug reminder. Registered three recent
+plain leagues: `5th-gen-<bg|gg>` (5th Gen and New Kpop!), `sm-<topic>` (kwangya &
+beyond SM), `vim-26-<month>` (2026 VIM Year End League) — all objective mode.
+
+**Overruled (2026-10-23).** The parse-time `Slug:` line and the "unregistered
+league" notices were removed once plain leagues self-register (see 2026-10-23
+entry); the registry itself moved into the data submodule.
+
+**Why.** Slug-recall before `just save-round`: forgetting the exact slug-family shape
+was how stray round folders happened (2026-10-13 dated-id incident). The static registry
+knew only families, never what you actually typed last week.
+
+**Refs.** `working tree` — `scripts/leagues.mjs`, `scripts/ml.mjs`, `justfile`,
+`scripts/cli-help.mjs`, `README.md`, `tests/leagues.test.mjs` (ships with the
+2026-10-23 entry's commit).
+
+---
+
 ## 2026-10-13 — `--score` DQ semantics (un-DQ by scoring; `:DQ` to disqualify)
 
 **Change.** [`--score` overrides](../scripts/parse/cli-flags.mjs) now carry explicit DQ
@@ -29,9 +75,53 @@ in place (alloc kept a `-` column for the song even after `--score` accepted the
 number), and there was no way to belatedly disqualify + reflow without re-exporting
 HTML. `applyScoreOverrides` had only ever cleared `needsUserInput`.
 
-**Refs.** `working tree` — `scripts/parse/cli-flags.mjs`, `scripts/rescore-round.mjs`,
+**Refs.** `8eb60b5` — `scripts/parse/cli-flags.mjs`, `scripts/rescore-round.mjs`,
 `scripts/web-profile.mjs`, `docs/lib` (synced), `tests/allocate.test.mjs`,
 `tests/rescore-e2e.test.mjs`.
+
+---
+
+## 2026-10-23 — Registry moves into data + plain leagues self-register (save-time slug check)
+
+**Change.** The league registry is now a **private data file**: all descriptors live in
+`data/ref/leagues.json` (data submodule — the main repo ships none of it, per new rule
+[`no-league-facts.mdc`](../.cursor/rules/no-league-facts.mdc): no league or round facts
+in main-repo code/docs/help/examples). [`scripts/leagues.mjs`](../scripts/leagues.mjs)
+became engine-only (loader with `ML_LEAGUES_JSON` test override; fail-soft with a
+one-time warning on corrupt JSON, never a hiding failure; missing file = empty facts
+created at first write).
+
+**Plain leagues self-register.** `just save-round` (primary — the moment the name is
+confirmed) and parse (secondary, after `ensureDateSlugForInput`) upsert a minimal
+descriptor keyed on the slug family (first dash token; parse fills the official name +
+mode on the nameless entry). `ml leagues`/`just leagues` backfills plain entries from
+all historical `round.league` values on first run. reminders stay optional — plain
+leagues carry none; constraint leagues keep hand-authored ones.
+
+**Warnings removed.** The unregistered-league notices (parse, `ml status`,
+`just leagues`) and the parse `Slug:` banner line are gone — with auto-registration
+there is nothing to warn about; the owner never sees the word "registered".
+
+**No-leak sweep.** cli-help/README/spec examples now use `<round>`/`<league>-<topic>`
+placeholders; `round-slug-naming.mdc` lost its known-families table (points at the data
+file); test fixtures are synthetic (`Sample League`,
+`tests/fixtures/leagues-registry.json`).
+
+**`just rename <new-slug>`** (new): post-save fix-up — keeps the date prefix, cascades
+input file + analysis folder (active or archive), `picks.jsonl` `round` fields,
+`.current-round`, and the registry family key.
+
+**Why.** Naming consistency is decided at save time (the slug you type), not at parse;
+private league facts belong with the private data; and "unregistered" was agent
+bookkeeping leaking into the owner's workflow.
+
+**Overruled.** The 2026-10-13 unregistered-warning design + always-print parse `Slug:`
+line are reversed above; two manual plain registrations (5th-gen/sm/vim entries
+hand-added in the same entry) are now auto-managed.
+
+**Refs.** `working tree` — `scripts/leagues.mjs`, `scripts/save-round.mjs`,
+`scripts/rename-round.mjs`, `scripts/parse-round.mjs`, `scripts/ml.mjs`,
+`data/ref/leagues.json`, `.cursor/rules/no-league-facts.mdc`, `.cursor/rules/round-slug-naming.mdc`.
 
 ---
 
@@ -59,7 +149,7 @@ entries and later cited as intent, and verification runs polluted real round dat
 (state that cost restoration work). Guards encode the prevention a session's fix
 alone doesn't carry forward.
 
-**Refs.** `working tree` — `.cursor/rules/clarify-assumptions.mdc`,
+**Refs.** `589eed0` — `.cursor/rules/clarify-assumptions.mdc`,
 `.cursor/rules/sandbox-runs.mdc`, `.cursor/rules/avoidable-mistakes.mdc`,
 `AGENTS.md`, `justfile` (`smoke` recipe).
 
@@ -97,7 +187,7 @@ undated form.
 leave other trap surfaces (explicit bare names resolve to the undated id while it exists;
 fresh-clipboard exports keep recreating duplicates).
 
-**Refs.** `working tree` — `scripts/save-round.mjs`, `scripts/maintain-rounds.mjs`, `scripts/ml.mjs`,
+**Refs.** `7d2067d` — `scripts/save-round.mjs`, `scripts/maintain-rounds.mjs`, `scripts/ml.mjs`,
 justfile, `tests/save-round.test.mjs`, `tests/maintain-rounds.test.mjs`.
 
 ---

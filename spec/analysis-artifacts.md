@@ -76,31 +76,28 @@ Use `ml tidy --dry-run` to preview, `--no-name` / `--no-archive` to run one half
 ## Recurring league slug families
 
 Full per-league context (slug family + eligibility rules, reusable scripts, fit profiles,
-skills) lives in the central registry — [`spec/leagues.md`](leagues.md) /
-[`scripts/leagues.mjs`](../scripts/leagues.mjs), viewable with `just leagues`. This section
-covers only the **slug-family** half that drives naming/folding.
+skills) lives in the **private** registry file `data/ref/leagues.json` (in the data
+submodule — no league names or slug shapes in this public repo), viewable with
+`just leagues`. This section covers only the **slug-family** half that drives
+naming/folding.
 
 Many rounds belong to a **recurring league** that reuses a predictable bare slug (the part
 after the `YYYY-MM-DD-` date). Naming and folding key off the **bare slug**: `applyDateSlugs`
 folds an undated input into an existing dated folder only when their bare slugs match
 (`bareSlugOf`, `datedSiblingsOf` in `scripts/paths.mjs`). So a new installment must reuse its
-league's established slug family — otherwise the pre-round research folder and the later parsed
-round land in two `analysis/<date>-<slug>/` folders that never merge (as happened when 2017
-research was slugged `2017-bg-kpop` but the parsed round was `bg-2017`).
+league's established slug family — otherwise the pre-round research folder and the later
+parsed round land in two `analysis/<date>-<slug>/` folders that never merge.
 
-| League                 | Slug family      | Examples                        |
-| ---------------------- | ---------------- | ------------------------------- |
-| K-pop Boy Group Years  | `bg-<year>`      | `bg-2016`, `bg-2017`, `bg-2018` |
-| Story / sentence chain | `story-<n>`      | `story-8`, `story-9`            |
-| Tarot                  | `tarot-<arcana>` | `tarot-devil`, `tarot-hermit`   |
-| Last.fm stats          | `lfm-<topic>`    | `lfm-art`, `lfm-curses`         |
-| AAA                    | `aaa-<topic>`    | `aaa-cars`, `aaa-text`          |
-| K-pop themed           | `kpop-<theme>`   | `kpop-ost`, `kpop-glittering`   |
+| Field       | Example                        |
+| ------------| ------------------------------ |
+| `slugFamily`| `<family>-<topic>`             |
+| Concrete id | `2026-06-09-<family>-<topic>`  |
 
-**Before creating a new round input or analysis folder**, look for prior installments of the
-same league in the active _and_ `archive/` trees (`data/rounds/`, `data/analysis/`) and copy
-their exact slug shape. Name the pre-round research folder, the saved HTML/text input, and
-every analysis artifact with that one bare slug so the whole round stays in a single
+**Before creating a new round input or analysis folder**, let `just save-round <slug>` or
+`just leagues` name the family from the **private** registry (active and `archive/`
+trees) — both check prior installments and print the last few concrete slugs to copy.
+Then name the pre-round research folder, the saved HTML/text input, and every analysis
+artifact with that one bare slug so the whole round stays in a single
 `analysis/<date>-<slug>/` folder — including when the voting-HTML export is added later.
 
 ## Archive
@@ -115,7 +112,7 @@ When consulting a **previous** round, check both the active folders and `archive
 ```text
 data/analysis/README.md            ← shared legend (git-tracked in data submodule)
 data/analysis/picks.jsonl          ← pick training log (all rounds)
-data/analysis/2026-06-09-tarot-hanged-man/
+data/analysis/2026-06-09-<family>-<topic>/
   music.md
   music.json
   fit.json

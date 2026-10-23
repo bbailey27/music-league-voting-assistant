@@ -48,7 +48,7 @@ const DOWN_SHAPE = `  --down-shape <shape>
                           concentrated | flat | curved (aliases: worst, even,
                           curve, bell). Pick also accepts short positional
                           codes after the letter: cv (curved), fl (flat), cc
-                          (concentrated) — e.g. just pick tarot A cv.`;
+                          (concentrated) — e.g. just pick <round> A cv.`;
 
 const TIER_KNOBS = `  --tier-count <n>         Force exactly n distinct upvote point tiers.
   --bucket-count <n>       Force n funded score-cluster tiers (lower-level knob).`;
@@ -112,9 +112,9 @@ Set a missing or wrong raw score: just rescore <name> --score <i>:<v> (see just 
 
 <name> is optional after the first explicit use — stored in data/.current-round.
 Omit it to continue the same round (e.g. just parse --fit, just run, just merge).
-Name a round explicitly to switch (e.g. just parse tarot --fit).
+Name a round explicitly to switch (e.g. just parse <round> --fit).
 
-Fuzzy match: "tarot" or "2026-06-09".
+Fuzzy match: a slug token or a full date ("2026-06-09").
 Run "just help <cmd>" for flags (parse, merge, pick, final, fit, scores, pin, flags, tidy, config).`,
 
   pin: `just help pin — manual vote overrides (--pin)
@@ -144,8 +144,8 @@ Works on:  parse  merge  rescore  pick
 
 Examples:
   just rescore --pin 8:1,5:1               # every option column honors both pins
-  just merge tarot --pin 3:3               # thematic explore with pinned menu
-  just pick story-5 A --pin 9:2 --reason "pin Two Evils to 2; reflow drops bottom 1"`,
+  just merge <round> --pin 3:3               # thematic explore with pinned menu
+  just pick <round> A --pin 9:2 --reason "pin two songs to 2; reflow drops bottom 1"`,
 
   parse: `just parse [<name>] [flags]
 
@@ -184,10 +184,15 @@ Deprecated (warns — use merge + pick instead):
   --option, --reason
 
 Example:
-  just parse kpop-favorite --shape auto
+  just parse <round> --shape auto
   just parse --fit                    # current round, tier words
   just parse --fit gate               # gate words
-  just help pin                       # full --pin reference`,
+  just help pin                       # full --pin reference
+
+After a parse, the matched league prints its reminders + scripts (recalling
+descriptors and their family). A round whose official league isn't in the registry
+gets auto-registered as a plain league — reminders stay optional and are edited in
+data/ref/leagues.json.`,
 
   merge: `just merge [<name>] [flags]
 
@@ -206,7 +211,7 @@ Flags:
   ${FAVORITE_BAND}
 
 Example:
-  just merge tarot --rank combined --weights 3:2
+  just merge <round> --rank combined --weights 3:2
   just help pin                       # full --pin reference`,
 
   pick: `just pick [<name>] <A|B|C> [cv|fl|cc] [flags]
@@ -220,7 +225,7 @@ Positional:
   <A|B|C>                  Option letter from the tier-structure tradeoff table.
   cv | fl | cc             Optional down-shape short code (curved | flat |
                           concentrated) when the round has downvotes — e.g.
-                          just pick tarot A cv.
+                          just pick <round> A cv.
 
 pick ranks off the stored combinedScore — it does not re-blend. To change the
 fit:music weights (or re-shape from JSON without re-parsing), use just rescore.
@@ -238,9 +243,9 @@ Flags:
   --dry-run                Resolve and print the pick without writing files.
 
 Example:
-  just pick tarot C --reason "thematic standouts on 75 anchor"
+  just pick <round> C --reason "thematic standouts on 75 anchor"
   just pick B --pin 11:3,12:3 --reason "lift top pair; shed bottom 1s"
-  just pick story-5 A --pin 9:2 --reason "pin Two Evils to 2"
+  just pick <round> A --pin 9:2 --reason "pin one song to 2"
   just help pin                       # full --pin reference`,
 
   rescore: `just rescore [<name>] [flags]
@@ -331,20 +336,25 @@ Example:
 
   leagues: `just leagues [<name>]
 
-Show the recurring-league registry (scripts/leagues.mjs; narrative in spec/leagues.md).
-Each descriptor ties a league to its slug family, mode, standing eligibility/DQ
-reminders, reusable scripts, rules, skills, and fit-guidance profiles.
+Show the recurring-league registry (facts in data/ref/leagues.json; narrative in
+spec/leagues.md). Each descriptor ties a league to its slug family, mode, standing
+eligibility/DQ reminders, reusable scripts, rules, skills, and fit-guidance profiles.
 
-  just leagues               List every league (id, slug family, summary).
-  just leagues <name>        Detail one league — matches by id, league name, or slug
-                             family/prefix (e.g. "bg", "bg-years", or "bg-2018").
+  just leagues               List every league. Active-first: leagues with a dated
+                             round in the last 2 weeks show their latest concrete
+                             slug plus 2 more recent ones for pattern recall; dormant
+                             ones collapse to a footer line. Rounds from history that
+                             were never parsed get plain descriptors on the spot
+                             (auto-registration — plain leagues carry no reminders).
+   just leagues <name>       Detail one league — matches by id, league name, or slug
+                             family/prefix.
 
 The matched league's reminders + scripts also print automatically after "just parse",
 and "just status <round>" shows which league a round belongs to.
 
 Example:
-  just leagues bg-years      # boy-group-years: groups/soloists/subunits; DQ girl/female solo/co-ed; release-year gate
-  just leagues story         # story chain: title-scan scripts + story-continuation`,
+  just leagues                # active-first registry digest (slug recall before saves)
+  just leagues <league-id>    # one league's reminders, scripts, fit profiles`,
 
   config: `just config [comment-width [auto|<n>|unset]]
 

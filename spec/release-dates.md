@@ -48,7 +48,7 @@ automation.
 
 ### `version-earliest` — earliest release of this version
 
-**Used by:** `bg-years` (Kpop Boy Group Years).
+**Used by:** year-slugged recurring leagues registered in the private registry (`data/ref/leagues.json`).
 
 The target year must match the **first official release of the submitted recording** —
 digital single, MV drop, album track debut, or version-specific promo all count. A pre-album

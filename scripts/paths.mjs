@@ -24,7 +24,7 @@ export const ARTIFACT = {
   versions: 'versions',
 };
 
-// Round ids are slugged with a leading ISO date: 2026-06-09-tarot-hanged-man.
+// Round ids are slugged with a leading ISO date: 2026-06-09-<family>-<topic>.
 export const DATE_PREFIX_RE = /^(\d{4})-(\d{2})-(\d{2})-/;
 
 /** True when a round id already starts with a YYYY-MM-DD- date slug. */
@@ -38,7 +38,7 @@ export function datePrefixOf(roundId) {
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
 }
 
-/** Round slug with any leading YYYY-MM-DD- prefix removed (e.g. lfm-art). */
+/** Round slug with any leading YYYY-MM-DD- prefix removed (the <family>-<topic> tokens). */
 export function bareSlugOf(roundId) {
   return roundId.replace(DATE_PREFIX_RE, '');
 }
@@ -48,7 +48,7 @@ export function datedSiblingsOf(bareSlug, ids = listAllRoundIds()) {
   return ids.filter((id) => hasDatePrefix(id) && bareSlugOf(id) === bareSlug).sort();
 }
 
-/** Round id from a saved input or output basename (e.g. 2026-06-09-tarot-hanged-man). */
+/** Round id from a saved input or output basename (e.g. 2026-06-09-<family>-<topic>). */
 function roundIdFromBasename(name) {
   return basename(name, extname(name));
 }
@@ -120,6 +120,35 @@ export function listAnalysisRoundIds() {
       return false;
     }
   }).sort();
+}
+
+/**
+ * Round ids that were archived past the 2-day keep window (rounds/archive +
+ * analysis/archive). Recency features (e.g. league slug activity) must include
+ * these — the active tree only ever holds the last ~2 days.
+ */
+export function listArchivedRoundIds() {
+  const ids = new Set();
+  for (const dir of [join(ROUNDS_DIR, ARCHIVE_DIR), join(ANALYSIS_DIR, ARCHIVE_DIR)]) {
+    let entries;
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      continue; // no archive folder yet
+    }
+    for (const f of entries) {
+      if (f.endsWith('.html') || f.endsWith('.txt')) {
+        ids.add(f.slice(0, f.length - extname(f).length));
+      } else {
+        try {
+          if (statSync(join(dir, f)).isDirectory()) ids.add(f);
+        } catch {
+          /* gone between list and stat */
+        }
+      }
+    }
+  }
+  return [...ids].sort();
 }
 
 /** All known round ids from inputs and analysis folders. */

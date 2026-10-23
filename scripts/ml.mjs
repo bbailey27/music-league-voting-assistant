@@ -18,9 +18,12 @@ import { existsSync, statSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
+  ANALYSIS_DIR,
+  ARCHIVE_DIR,
   ROUNDS_DIR,
   inputPathFor,
   listAllRoundIds,
+  listArchivedRoundIds,
   listRoundInputIds,
   musicPaths,
   fitPaths,
@@ -38,7 +41,7 @@ import {
   DEFAULT_CLI_COMMENT_WIDTH,
 } from './ml-config.mjs';
 import { HELP, HELP_TOPICS, cmdHelpText } from './cli-help.mjs';
-import { LEAGUES, leagueForRound, leagueDetailLines } from './leagues.mjs';
+import { leagueForRound, leagueDetailLines, leagueSlugActivity, loadLeagueRegistry, registerPlainLeaguesFromRounds } from './leagues.mjs';
 import { printPickCli } from './parse/cli-print.mjs';
 
 const SCRIPTS_DIR = 'scripts';
@@ -627,8 +630,13 @@ function cmdStatusOne(name) {
       ? st.txtPath
       : st.htmlPath;
   console.log(`Round: ${name}`);
-  const league = leagueForRound({ roundId: name, leagueName: readLeagueName(st.music.json) });
-  if (league) console.log(`  League: ${league.names[0] || league.slugFamily}  (ml leagues ${league.id})`);
+  const storedLeagueName = readLeagueName(st.music.json);
+  const league = leagueForRound({ roundId: name, leagueName: storedLeagueName });
+  if (league) {
+    console.log(`  League: ${league.names[0] || league.slugFamily}  (ml leagues ${league.id})`);
+  } else if (storedLeagueName) {
+    console.log(`  ⚠ Unregistered league: "${storedLeagueName}" — add a descriptor to scripts/leagues.mjs`);
+  }
   console.log(`  ${checkbox(st.hasInput)} Round input    ${inputLabel}`);
   console.log(`  ${checkbox(st.hasParse)} Parse (music)  ${st.music.md} + ${st.music.json}`);
   console.log(
@@ -693,25 +701,81 @@ function readLeagueName(jsonPath) {
   }
 }
 
+/**
+ * {roundId, leagueName} facts collected from all existing music.json payloads —
+ * active tree + analysis/archive. Feeds the plain-league backfill (save-round /
+ * parse register new ones; this covers every historical round once).
+ */
+function collectLeagueNames() {
+  const out = [];
+  const pathsFor = new Map(
+    listAllRoundIds().map((id) => [id, musicPaths(id).json])
+  );
+  for (const id of listArchivedRoundIds()) {
+    if (pathsFor.has(id)) continue;
+    pathsFor.set(id, join(ANALYSIS_DIR, ARCHIVE_DIR, id, 'music.json'));
+  }
+  for (const [id, jsonPath] of pathsFor) {
+    if (!hasDatePrefix(id)) continue;
+    const name = readLeagueName(jsonPath);
+    if (name) out.push({ roundId: id, leagueName: name });
+  }
+  return out;
+}
+
+/** Ensure every historical round's league has a registry entry (plain auto-register). */
+function backfillPlainLeagues() {
+  const facts = new Map();
+  for (const { roundId, leagueName } of collectLeagueNames()) {
+    const key = `${roundId}\u0000${leagueName}`;
+    if (!facts.has(key)) facts.set(key, { roundId, leagueName });
+  }
+  const addedNum = registerPlainLeaguesFromRounds([...facts.values()]);
+  if (addedNum > 0) console.log(`Registered ${addedNum} plain league(s) from round history.`);
+  return addedNum;
+}
+
 function cmdLeagues(query) {
   if (!query) {
     console.log('Recurring leagues (see spec/leagues.md):\n');
-    for (const lg of LEAGUES) {
-      console.log(`  ${lg.id.padEnd(12)} ${lg.slugFamily.padEnd(16)} ${lg.summary}`);
+    backfillPlainLeagues(); // register historical rounds first so the listing is complete
+    const activity = leagueSlugActivity([...listAllRoundIds(), ...listArchivedRoundIds()]).sort(
+      (a, b) => (b.ageDays ?? Infinity) - (a.ageDays ?? Infinity)
+    );
+    const active = activity.filter((a) => a.active);
+    const dormant = activity.filter((a) => !a.active);
+    for (const { league, latest, recent, ageDays, matched } of active) {
+      const main = matched
+        ? latest
+          ? `latest: ${latest.bare} (${ageDays}d ago)`
+          : 'no slug-tagged rounds'
+        : 'slug not prefix-tagged';
+      console.log(`  ${league.id.padEnd(12)} ${league.slugFamily.padEnd(16)} ${main} — ${league.summary}`);
+      const also = recent.slice(1).map((r) => `${r.bare} (${r.ageDays}d ago)`);
+      if (also.length) {
+        console.log(`${' '.repeat(30)}also: ${also.join(', ')}`);
+      }
+    }
+    if (dormant.length) {
+      console.log('');
+      console.log(
+        `Dormant (no round in 2 weeks):\n  ${dormant.map((d) => `${d.league.id} (${d.league.slugFamily})`).join(', ')}`
+      );
     }
     console.log('\nRun "ml leagues <name>" for reminders, scripts, and fit profiles.');
     return;
   }
+  const registry = loadLeagueRegistry();
   const q = query.trim().toLowerCase();
-  const matches = LEAGUES.filter(
+  const matches = registry.filter(
     (lg) =>
       lg.id.includes(q) ||
-      lg.names.some((n) => n.toLowerCase().includes(q)) ||
+      (lg.names || []).some((n) => n.toLowerCase().includes(q)) ||
       lg.slugFamily.toLowerCase().includes(q) ||
       (lg.slugPrefixes || []).some((p) => p && q.startsWith(p))
   );
   if (!matches.length) {
-    console.error(`No league matches "${query}". Known: ${LEAGUES.map((l) => l.id).join(', ')}`);
+    console.error(`No league matches "${query}". Known: ${registry.map((l) => l.id).join(', ')}`);
     process.exit(1);
   }
   if (matches.length > 1) {

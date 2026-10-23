@@ -1,16 +1,14 @@
-// Central registry of recurring Music League leagues and the machinery each one uses.
-//
-// Single source of truth for per-league context that was previously scattered across
-// `.cursor/rules/round-slug-naming.mdc` (slug families), `spec/fit-guidance.md`
-// (fit-profile associations), and individual script headers ("this script serves the
-// bg league"). A descriptor ties a league to its slug family, mode, standing
-// eligibility/DQ reminders, reusable scripts, rules, skills, and fit-guidance profiles.
-//
-// Consumers: `parse-round.mjs` surfaces the reminders + scripts after a parse;
-// `ml leagues` prints the full registry; `ml status <round>` shows the matched league.
-// Narrative + how to add a league: spec/leagues.md (this module stays authoritative).
+// League registry ENGINE — facts live in data/ref/leagues.json (private submodule).
+// This module holds no league names or slug families: it loads the descriptor file,
+// matches leagues to rounds, renders CLI banners, and tracks slug-family recency.
+// Plain leagues self-register into the JSON (save-round primary, parse secondary);
+// hand-crafted descriptors with reminders/scripts are edited in the data file.
+// Narrative + how to add a league: spec/leagues.md — examples live in the data file.
 
-import { bareSlugOf } from './paths.mjs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { bareSlugOf, datePrefixOf, hasDatePrefix, REF_DIR } from './paths.mjs';
+import { slugAgeDays } from './maintain-rounds.mjs';
 
 /**
  * @typedef {Object} LeagueScript
@@ -20,191 +18,88 @@ import { bareSlugOf } from './paths.mjs';
  * @typedef {Object} League
  * @property {string} id            Stable kebab-case key.
  * @property {string[]} names       Exact league names as they appear in the ML page title.
- * @property {string} slugFamily    Human slug shape (e.g. `bg-<year>`).
+ * @property {string} slugFamily    Human slug shape (e.g. `<prefix><token>`).
  * @property {string[]} slugPrefixes Bare-slug prefixes used to match a round when the
  *                                   league name is absent (text rounds) or unknown.
- * @property {'objective'|'thematic'} mode  Default scoring mode for the league.
+ * @property {'objective'|'thematic'|null} mode  Default scoring mode (null until a parse records one).
  * @property {string} summary       One-line description of the league.
  * @property {string[]} [reminders] Standing eligibility / DQ / scoring reminders.
  * @property {LeagueScript[]} [scripts] Reusable scripts for this league.
  * @property {string[]} [rules]     Relevant `.cursor/rules/*.mdc` files.
- * @property {string[]} [skills]    Relevant `.cursor/skills/*` ids.
- * @property {string[]} [fitProfiles] `spec/fit-guidance.md` profile ids.
+ * @property {string[]} [skills]    Relevant repo skill ids.
+ * @property {string[]} [fitProfile] fit-guidance profile ids.
  * @property {string[]} [refs]      Relevant spec files.
  * @property {'version-earliest'|'earliest-album-release'} [releaseDateRule]
- *                                   Which release-date gate rule applies (spec/release-dates.md).
+ *                                   Which release-date gate rule applies.
  */
 
-/** @type {League[]} */
-export const LEAGUES = [
-  {
-    id: 'bg-years',
-    names: ['Kpop Boy Group Years'],
-    slugFamily: 'bg-<year>',
-    slugPrefixes: ['bg-'],
-    mode: 'objective',
-    summary: 'K-pop songs from a specific release year — boy groups, male soloists, and boy group subunits (one year per round).',
-    reminders: [
-      'Eligible: boy groups, male soloists (feat. a female artist OK), and boy group subunits — disqualify girl-group, female soloist, and co-ed group/duo submissions (e.g. AKMU, ALLDAYPROJECT, KARD; write a DQ comment; a text-only comment DQs in objective mode).',
-      "Release-year gate (rule: version-earliest — spec/release-dates.md): this version's earliest official release must be the target year. A year-only comment like `2019` DQs a wrong-year pick — years are never scored (spec/score-parsing.md → Years Are Not Scores).",
-    ],
-    scripts: [
-      {
-        cmd: 'node scripts/release-year-gate.mjs <round> --year <year> [--fetch]',
-        role: 'Gate songs by earliest release year → fit.json (pass/fail); merge with --rank music --gate passFail.',
-      },
-      {
-        cmd: 'node scripts/one-off/bg-year-scan.mjs --year <year>',
-        role: 'Seed submission research: scan the library CSV for candidate songs by release year.',
-      },
-    ],
-    rules: ['.cursor/rules/round-slug-naming.mdc'],
-    skills: ['submission-song-search'],
-    fitProfiles: [],
-    releaseDateRule: 'version-earliest',
-    refs: ['spec/release-dates.md', 'spec/score-parsing.md'],
-  },
-  {
-    id: 'story-chain',
-    names: [],
-    slugFamily: 'story-<n>',
-    slugPrefixes: ['story-'],
-    mode: 'thematic',
-    summary: 'Collaborative sentence/story built by chaining song TITLES (lyrics do not matter).',
-    reminders: [
-      'Judge the TITLE only. Grammar of the attach and an interesting next beat are co-primary; music is a bonus (guidance profile `story-continuation`).',
-      'Never grep the song CSVs — use the title scan scripts (they parse only the title column).',
-    ],
-    scripts: [
-      {
-        cmd: 'node scripts/title-prefix-scan.mjs <prefix> [...]',
-        role: 'Find candidate titles that start with the anchor word(s).',
-      },
-      {
-        cmd: 'node scripts/title-complement-check.mjs --slot <slot>',
-        role: 'Tag structural complements for the running stem (default slot: copular).',
-      },
-      {
-        cmd: 'node scripts/title-candidate-score.mjs',
-        role: 'Weighted engagement score (scrobbles + Pandora playlist fields) for candidate titles.',
-      },
-    ],
-    rules: ['.cursor/rules/round-slug-naming.mdc', '.cursor/rules/no-grep-csvs.mdc'],
-    skills: ['title-chain'],
-    fitProfiles: ['story-continuation'],
-    refs: ['spec/fit-guidance.md'],
-  },
-  {
-    id: 'tarot',
-    names: [],
-    slugFamily: 'tarot-<arcana>',
-    slugPrefixes: ['tarot-'],
-    mode: 'thematic',
-    summary: 'One tarot arcana per round; submit a song that fits the card’s archetype.',
-    reminders: [
-      'Fit is the card’s archetype + personality traits, not just the literal symbol (profile `traits-over-symbols`); judge primarily from lyrics (profile `lyrics-first`).',
-    ],
-    scripts: [],
-    rules: ['.cursor/rules/round-slug-naming.mdc'],
-    skills: ['round-fit-research', 'submission-song-search'],
-    fitProfiles: ['traits-over-symbols', 'lyrics-first'],
-    refs: ['spec/fit-guidance.md', 'spec/fit-evaluation.md'],
-  },
-  {
-    id: 'astrology',
-    names: ['Chill Western Astrology League'],
-    slugFamily: '<sign>',
-    slugPrefixes: [],
-    mode: 'thematic',
-    summary: 'Western zodiac sign per round; match the sign’s traits / element.',
-    reminders: [
-      'A shared element across signs (e.g. water) is a positive secondary signal, never a penalty; traits + element together win (profile `traits-over-symbols`); judge from lyrics (`lyrics-first`).',
-    ],
-    scripts: [],
-    rules: [],
-    skills: ['round-fit-research', 'submission-song-search'],
-    fitProfiles: ['traits-over-symbols', 'lyrics-first'],
-    refs: ['spec/fit-guidance.md'],
-  },
-  {
-    id: 'lastfm',
-    names: [],
-    slugFamily: 'lfm-<topic>',
-    slugPrefixes: ['lfm-'],
-    mode: 'objective',
-    summary: 'Last.fm listening-stats prompts (top tracks, alliteration, curses, …).',
-    reminders: [
-      'Query the generated Last.fm tables with the scan scripts, never raw grep (spec/lastfm-data.md, no-grep-csvs rule).',
-    ],
-    scripts: [
-      {
-        cmd: 'node scripts/lastfm-aggregate.mjs',
-        role: 'Regenerate the Last.fm reference tables in data/ref/lastfm/ (title-table via table-map.json).',
-      },
-      {
-        cmd: 'node scripts/lastfm-export.mjs',
-        role: 'Export raw Last.fm scrobble data feeding the aggregate tables.',
-      },
-    ],
-    rules: ['.cursor/rules/round-slug-naming.mdc', '.cursor/rules/no-grep-csvs.mdc'],
-    skills: ['submission-song-search'],
-    fitProfiles: [],
-    refs: ['spec/lastfm-data.md'],
-  },
-  {
-    id: 'aaa',
-    names: [],
-    slugFamily: 'aaa-<topic>',
-    slugPrefixes: ['aaa-'],
-    mode: 'thematic',
-    summary: 'AAA league themed rounds (aaa-<topic>).',
-    reminders: [],
-    scripts: [],
-    rules: ['.cursor/rules/round-slug-naming.mdc'],
-    skills: ['submission-song-search', 'round-fit-research'],
-    fitProfiles: [],
-    refs: [],
-  },
-  {
-    id: 'kpop-themed',
-    names: [],
-    slugFamily: 'kpop-<theme>',
-    slugPrefixes: ['kpop-'],
-    mode: 'thematic',
-    summary: 'K-pop themed rounds (kpop-<theme>): pick a K-pop song fitting the theme.',
-    reminders: [],
-    scripts: [],
-    rules: ['.cursor/rules/round-slug-naming.mdc'],
-    skills: ['submission-song-search', 'round-fit-research'],
-    fitProfiles: [],
-    refs: ['spec/fit-guidance.md'],
-  },
-];
-
-function normalize(name) {
-  return String(name || '')
-    .trim()
-    .toLowerCase();
+function registryFile() {
+  // Tests point the engine at a generic fixture (the data dir holds the real one).
+  return process.env.ML_LEAGUES_JSON || join(REF_DIR, 'leagues.json');
 }
 
-const BY_NAME = new Map();
-for (const league of LEAGUES) {
-  for (const name of league.names) BY_NAME.set(normalize(name), league);
+let registryCache = { mtime: null, leagues: null, failed: false, key: null };
+
+/** Warn once per process/path when the registry file is unreadable. */
+function warnRegistryOnce(file, message) {
+  if (registryCache.key === file && registryCache.failed) return;
+  console.error(`⚠ ${file} is unreadable (${message}).`);
+  console.error('  Running without league facts — fix the file, or delete it and the next.');
+  console.error('  save/parse recreates the plain entries (history: data submodule git).');
+}
+
+/** Merge an entry-less template so late-arriving fields have sane defaults. */
+function normalizeDescriptor(raw) {
+  const lg = { ...raw };
+  lg.names = Array.isArray(raw.names) ? raw.names : [];
+  lg.slugPrefixes = Array.isArray(raw.slugPrefixes) ? raw.slugPrefixes : [];
+  lg.reminders = Array.isArray(raw.reminders) ? raw.reminders : [];
+  lg.scripts = Array.isArray(raw.scripts) ? raw.scripts : [];
+  lg.mode = raw.mode ?? null;
+  return lg;
+}
+
+/** Load registry descriptors (cached per path+mtime; missing file => empty facts). */
+export function loadLeagueRegistry() {
+  const file = registryFile();
+  if (!existsSync(file)) return [];
+  let mtime;
+  try {
+    mtime = statSync(file).mtimeMs;
+  } catch {
+    return [];
+  }
+  if (registryCache.key === file && registryCache.mtime === mtime && registryCache.leagues) {
+    return registryCache.leagues;
+  }
+  try {
+    const data = JSON.parse(readFileSync(file, 'utf8'));
+    const list = Array.isArray(data.leagues) ? data.leagues : [];
+    if (!Array.isArray(data.leagues)) throw new Error('a "leagues" array is missing');
+    const leagues = list.map(normalizeDescriptor);
+    registryCache = { mtime: mtime ?? null, leagues, failed: false, key: file };
+    return leagues;
+  } catch (err) {
+    warnRegistryOnce(file, err.message); // warn before the cache records this file as seen
+    registryCache = { mtime: null, leagues: [], failed: true, key: file };
+    return [];
+  }
+}
+
+function normalize(name) {
+  return String(name || '').trim().toLowerCase();
 }
 
 /** Descriptor matched by exact league name (case-insensitive), or null. */
 export function leagueByName(leagueName) {
-  return BY_NAME.get(normalize(leagueName)) || null;
+  return loadLeagueRegistry().find((lg) => (lg.names || []).some((n) => normalize(n) === normalize(leagueName))) || null;
 }
 
-/** Descriptor matched by a round id's bare slug prefix (e.g. bg-2018 → bg-years), or null. */
+/** Descriptor matched by a round id's bare slug prefix (e.g. <pattern>-), or null. */
 export function leagueBySlug(roundId) {
   if (!roundId) return null;
   const bare = bareSlugOf(roundId);
-  for (const league of LEAGUES) {
-    if ((league.slugPrefixes || []).some((p) => p && bare.startsWith(p))) return league;
-  }
-  return null;
+  return loadLeagueRegistry().find((lg) => (lg.slugPrefixes || []).some((p) => p && bare.startsWith(p))) || null;
 }
 
 /**
@@ -215,7 +110,143 @@ export function leagueForRound({ roundId = null, leagueName = null } = {}) {
   return leagueByName(leagueName) || leagueBySlug(roundId) || null;
 }
 
-/** Fill a script template with the known round id (and year for bg-YYYY slugs). */
+/** Family prefix from a round id: first dash token plus '-' (e.g. vim, sm, lfm). */
+export function deriveFamilyPrefix(roundId) {
+  const bare = bareSlugOf(roundId);
+  const tokens = bare.split('-');
+  return tokens.length >= 2 ? `${tokens[0]}-` : `${bare}-`;
+}
+
+/** Family-shape display for an auto-registered plain league. */
+function shapeForPrefix(prefix) {
+  if (/<.*>/.test(prefix)) return prefix; // hand-written shape
+  return `${prefix}<topic>`;
+}
+
+function uniquePlainId(registry, prefix) {
+  const base = `${prefix.replace(/-$/, '')}-plain`;
+  let id = base;
+  let n = 2;
+  while (registry.some((lg) => lg.id === id)) id = `${base}-${n++}`;
+  return id;
+}
+
+/**
+ * Upsert a plain-league descriptor (name + family prefix; no reminders/scripts).
+ * Covered-by-name/covered-by-slug rounds are left untouched — only genuinely
+ * unknown official names (or fresh slugs with no matching family) register. An
+ * entry created nameless by save-round gets its official name + mode on parse.
+ * @returns {{added: boolean, descriptor?: League, reason?: 'covered-name'|'covered-slug'|'unreadable'}}
+ */
+export function upsertPlainLeague({ roundId, leagueName = null, mode = null }) {
+  const file = registryFile();
+  const byName = leagueName ? leagueByName(leagueName) : null;
+
+  if (byName && byName.mode != null) return { added: false, reason: 'covered-name' };
+
+  let container;
+  const existed = existsSync(file);
+  container = existed
+    ? readFileSyncOrThrow(file)
+    : { version: 1, note: 'League registry — engine reads this file; plain leagues self-register here. Private data.', leagues: [] };
+
+  const leagues = container.leagues.map(normalizeDescriptor);
+  const prefix = deriveFamilyPrefix(roundId);
+  const coveredByName = leagueName
+    ? leagues.find((lg) => (lg.names || []).some((n) => normalize(n) === normalize(leagueName)))
+    : null;
+  const coveredBySlug = leagues.find((lg) => (lg.slugPrefixes || []).some((p) => p && bareSlugOf(roundId).startsWith(p)));
+  let changed = false;
+
+  if (coveredByName) {
+    if (coveredByName.mode == null && mode != null) {
+      coveredByName.mode = mode;
+      changed = true;
+    }
+    if (!coveredByName.slugPrefixes.includes(prefix)) {
+      coveredByName.slugPrefixes.push(prefix);
+      changed = true;
+    }
+  } else if (coveredBySlug) {
+    if (leagueName && !coveredBySlug.names.includes(leagueName)) {
+      coveredBySlug.names.push(leagueName);
+      changed = true;
+    }
+    if (coveredBySlug.mode == null && mode != null) {
+      coveredBySlug.mode = mode;
+      changed = true;
+    }
+  } else {
+    const descriptor = normalizeDescriptor({
+      id: uniquePlainId(leagues, prefix),
+      names: leagueName ? [leagueName] : [],
+      slugFamily: shapeForPrefix(prefix),
+      slugPrefixes: [prefix],
+      mode,
+      summary: leagueName
+        ? 'Auto-registered plain league.'
+        : 'Auto-registered plain league (official name filled by a later parse).',
+      reminders: [],
+      scripts: [],
+    });
+    leagues.push(descriptor);
+    changed = true; // appends always alter the file
+  }
+
+  if (changed) {
+    container.leagues = leagues;
+    mkdirSync(REF_DIR, { recursive: true });
+    writeFileSync(file, `${JSON.stringify(container, null, 2)}\n`, 'utf8');
+    registryCache = { mtime: null, leagues: null, failed: false, key: null };
+  }
+  const added = !coveredByName && !coveredBySlug;
+  return { added, reason: coveredByName ? 'covered-name' : coveredBySlug ? 'covered-slug' : 'added', descriptor: added ? leagues.at(-1) : coveredByName || coveredBySlug };
+}
+
+function readFileSyncOrThrow(file) {
+  try {
+    return JSON.parse(readFileSync(file, 'utf8'));
+  } catch (err) {
+    const wrapped = new Error(`${file} cannot be read (${err.message}) — fix it manually.`);
+    throw wrapped;
+  }
+}
+
+/** Backfill plain league entries from a [{roundId, leagueName, mode}] scan. */
+export function registerPlainLeaguesFromRounds(rounds) {
+  let added = 0;
+  for (const r of rounds || []) {
+    if (upsertPlainLeague(r).added) added++;
+  }
+  return added;
+}
+
+/** After a slug rename, follow the entry keyed on the old family to the new one. */
+export function rekeyPlainLeague(oldRoundId, newRoundId) {
+  const file = registryFile();
+  if (!existsSync(file)) return { rekeyed: false };
+  let container;
+  try {
+    container = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (err) {
+    console.error(`⚠ ${file} cannot be read for rename (${err.message}).`);
+    return { rekeyed: false };
+  }
+  const leagues = (container.leagues || []).map(normalizeDescriptor);
+  const oldPrefix = deriveFamilyPrefix(oldRoundId);
+  const newPrefix = deriveFamilyPrefix(newRoundId);
+  const entry = leagues.find((lg) => (lg.slugPrefixes || []).includes(oldPrefix));
+  if (!entry) return { rekeyed: false };
+  if (entry.slugPrefixes.length === 1) entry.slugPrefixes = [newPrefix];
+  else entry.slugPrefixes = entry.slugPrefixes.map((p) => (p === oldPrefix ? newPrefix : p));
+  entry.slugFamily = shapeForPrefix(newPrefix);
+  container.leagues = leagues;
+  writeFileSync(file, `${JSON.stringify(container, null, 2)}\n`, 'utf8');
+  registryCache = { mtime: null, leagues: null, failed: false, key: null };
+  return { rekeyed: true, entry };
+}
+
+/** Fill a script template with the known round id (and year for <year> slugs). */
 export function resolveScriptCmd(cmd, { roundId = null } = {}) {
   let out = String(cmd);
   if (roundId) {
@@ -227,8 +258,8 @@ export function resolveScriptCmd(cmd, { roundId = null } = {}) {
 }
 
 /**
- * Compact notes block for CLI banners: league name, standing reminders, and one-line
- * script hints. Returns an array of lines (no leading/trailing blanks).
+ * Compact notes block for CLI banners: league label, standing reminders (constraint
+ * leagues), and one-line script hints. Plain leagues get a two-line banner.
  */
 export function leagueNotesLines(league, { roundId = null } = {}) {
   if (!league) return [];
@@ -247,7 +278,7 @@ export function leagueNotesLines(league, { roundId = null } = {}) {
 export function leagueDetailLines(league) {
   if (!league) return [];
   const lines = [];
-  lines.push(`${league.id}  (${league.slugFamily}, ${league.mode})`);
+  lines.push(`${league.id}  (${league.slugFamily}${league.mode ? `, ${league.mode}` : ''})`);
   lines.push(`  ${league.summary}`);
   if (league.names.length) lines.push(`  Names: ${league.names.join(', ')}`);
   const section = (title, items, fmt = (x) => x) => {
@@ -262,4 +293,49 @@ export function leagueDetailLines(league) {
   section('Rules', league.rules);
   section('Specs', league.refs);
   return lines;
+}
+
+/**
+ * Recency of each league's slug family against the known round ids (dated ids only).
+ * A league is "active" while its newest dated slug match is within `activeWindowDays`
+ * (default 14; effective-date aware so the pre-5am window belongs to yesterday).
+ * `recent` holds the last `recentCount` (default 3) matches, newest first — the
+ * recent concrete slugs an owner copies when saving the next round.
+ * Call sites pass ALL round ids — active tree + archive (listAllRoundIds +
+ * listArchivedRoundIds): the archive sweep moves rounds out at 2 days.
+ * @returns {Array<{league: League, latest: {roundId: string, bare: string, date: string}|null,
+ *   recent: Array<{roundId: string, bare: string, date: string, ageDays: number}>,
+ *   ageDays: number|null, matched: boolean, active: boolean}>}
+ */
+export function leagueSlugActivity(
+  ids,
+  { leagues = null, now = new Date(), activeWindowDays = 14, recentCount = 3 } = {}
+) {
+  const registry = leagues ?? loadLeagueRegistry();
+  const out = [];
+  for (const league of registry) {
+    const matches = ids
+      .filter((id) =>
+        (league.slugPrefixes || []).some((p) => p && hasDatePrefix(id) && bareSlugOf(id).startsWith(p))
+      )
+      .sort()
+      .reverse(); // newest first
+    const recent = matches.slice(0, recentCount).map((roundId) => {
+      const date = datePrefixOf(roundId);
+      return { roundId, bare: bareSlugOf(roundId), date, ageDays: slugAgeDays(date, now) };
+    });
+    if (!recent.length) {
+      out.push({ league, latest: null, recent: [], ageDays: null, matched: false, active: false });
+      continue;
+    }
+    out.push({
+      league,
+      latest: { roundId: recent[0].roundId, bare: recent[0].bare, date: recent[0].date },
+      recent,
+      ageDays: recent[0].ageDays,
+      matched: true,
+      active: recent[0].ageDays !== null && recent[0].ageDays <= activeWindowDays,
+    });
+  }
+  return out;
 }

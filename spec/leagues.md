@@ -1,37 +1,35 @@
 # League registry
 
-The central index of **recurring leagues** and the machinery each one uses. Music League
-runs the same leagues over and over (a new K-pop Boy Group Years round every few weeks, a
-new story-chain installment, a new tarot arcana). Each league carries standing context —
-a slug family, an eligibility/DQ rule, reusable scripts, fit-guidance profiles, relevant
-rules and skills — that used to live scattered across `.cursor/rules/round-slug-naming.mdc`,
-`spec/fit-guidance.md`, and individual script headers. This registry pulls that into one
-place so it can be looked up and surfaced automatically.
+The engine that ties a round to its **recurring league** context, and the machinery
+each one carries (slug family, mode, standing eligibility/DQ reminders, reusable
+scripts, fit-guidance profiles).
 
-**Source of truth:** [`scripts/leagues.mjs`](../scripts/leagues.mjs) (`LEAGUES` array).
-This doc is the narrative; the module is authoritative and machine-readable. Keep them in
-sync when adding a league.
+**Source of truth: [`data/ref/leagues.json`](../../data/ref/leagues.json) — a private
+file in the data submodule.** The main repo publishes it, so no league or round facts
+(names, slug families, reminders, round examples) live here. This doc describes the
+machinery only; [`scripts/leagues.mjs`](../scripts/leagues.mjs) is the engine that
+reads the file (generic fixture for tests: `tests/fixtures/leagues-registry.json`).
 
 ## Descriptor shape
 
-Each entry in `LEAGUES` is a `League` descriptor:
+Each entry in the registry file is a `League` descriptor:
 
-| Field             | Meaning                                                                          |
-| ----------------- | -------------------------------------------------------------------------------- |
-| ----------------- | -------------------------------------------------------------------------------- |
-| `id`              | Stable kebab-case key (`bg-years`, `story-chain`, …).                            |
-| `names`           | Exact league names as they appear in the ML page `<title>`.                      |
-| `slugFamily`      | Human slug shape (`bg-<year>`, `story-<n>`) — matches `analysis-artifacts`.      |
-| `slugPrefixes`    | Bare-slug prefixes for matching a round when the league name is absent.          |
-| `mode`            | Default scoring mode (`objective` / `thematic`).                                 |
-| `summary`         | One-line description.                                                            |
-| `reminders`       | Standing eligibility / DQ / scoring reminders (surfaced on parse).               |
-| `releaseDateRule` | Release-date gate rule when the league is year-themed (`spec/release-dates.md`). |
-| `scripts`         | Reusable scripts + a one-line role each.                                         |
-| `rules`           | Relevant `.cursor/rules/*.mdc`.                                                  |
-| `skills`          | Relevant `.cursor/skills/*` ids.                                                 |
-| `fitProfiles`     | `spec/fit-guidance.md` profile ids (thematic leagues).                           |
-| `refs`            | Relevant spec files.                                                             |
+| Field             | Meaning                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| `id`              | Stable kebab-case key.                                                                      |
+| `names`           | Exact league names as they appear in the ML page `<title>`.                                 |
+| `slugFamily`      | Human slug shape — matches the per-round folder naming.                                     |
+| `slugPrefixes`    | Bare-slug prefixes for matching a round when the league name is absent.                     |
+| `mode`            | Default scoring mode (`objective` / `thematic`; `null` until a parse records one).          |
+| `summary`         | One-line description.                                                                       |
+| `reminders`       | Standing eligibility / DQ / scoring reminders (surfaced on parse). Empty for plain leagues. |
+| `releaseDateRule` | Release-date gate rule when the league is year-themed (`spec/release-dates.md`).            |
+| `scripts`         | Reusable scripts + a one-line role each.                                                    |
+| rules/skills/refs | Cross-links to rules, skills, fit profiles, and specs.                                      |
+
+**Plain vs. constraint leagues.** A plain league registers with only name/family/mode/
+summary — no reminders. Its parse banner is the league label alone. Constraint leagues
+(the ones an LLM must check against standing rules) carry the `reminders` text.
 
 ## How a round is matched
 
@@ -39,42 +37,34 @@ Each entry in `LEAGUES` is a `League` descriptor:
 
 1. **Exact league name** (case-insensitive) from the parsed round (`round.league`, read
    from the ML `<title>` — see [`extract-html.mjs`](../scripts/extract-html.mjs)).
-2. **Slug-family fallback** — the round id's bare slug prefix (`bg-2018` → `bg-`), for text
-   rounds or leagues whose ML name isn't registered.
+2. **Slug-family fallback** — the round id's bare slug prefix, for text rounds or
+   rounds whose ML name isn't registered.
 
 Unknown rounds resolve to `null` and surface no banner.
 
 ## Where it surfaces
 
 - **`just parse <round>`** prints the matched league's reminders + resolved script
-  commands (`<round>` / `<year>` filled in) right after writing `music.*`.
+  commands (`<round>` / `<year>` filled in) right after writing `music.*`; it also
+  fills a nameless family entry with the official name + mode (save-round created it
+  slug-first).
 - **`just status <round>`** shows which league the round belongs to.
-- **`just leagues [<name>]`** lists the registry, or details one league (matches by id,
-  name, or slug family/prefix — e.g. `bg`, `bg-years`, `bg-2018`).
-
-## Registry (summary)
-
-Authoritative list in [`scripts/leagues.mjs`](../scripts/leagues.mjs); this table is a map.
-
-| id            | Slug family      | Mode      | Standing notes / machinery                                                                                                           |
-| ------------- | ---------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| ------------- | ---------------- | --------- | ------------------------------------------------------------------------------------------                                           |
-| `bg-years`    | `bg-<year>`      | objective | Boy groups, male soloists (feat. OK), subunits; DQ girl groups, female soloists, co-ed groups; `version-earliest` release-year gate. |
-| `story-chain` | `story-<n>`      | thematic  | Title-only; `title-*-scan` scripts; profile `story-continuation`.                                                                    |
-| `tarot`       | `tarot-<arcana>` | thematic  | Profiles `traits-over-symbols` + `lyrics-first`.                                                                                     |
-| `astrology`   | `<sign>`         | thematic  | Chill Western Astrology League; `traits-over-symbols` + `lyrics-first`.                                                              |
-| `lastfm`      | `lfm-<topic>`    | objective | `lastfm-*` table scripts; query via scan scripts, never raw grep.                                                                    |
-| `aaa`         | `aaa-<topic>`    | thematic  | Themed AAA rounds.                                                                                                                   |
-| `kpop-themed` | `kpop-<theme>`   | thematic  | Themed K-pop song picks.                                                                                                             |
+- **`just leagues [<name>]`**: lists every family active-first with the 3 most recent
+  concrete slugs (a 14-day window counting archived rounds, since sweeps happen at
+  2 days); dormant families collapse to a footer. Details one league by id, name, or
+  slug prefix. Also backfills plain-league pages into the registry from round history.
+- **`just save-round <slug>`** is the naming-consistency moment: matching families
+  print their recent slugs; unknown families print the digest and (interactive
+  sessions) ask before saving, then auto-register the family. `just rename <slug>`
+  re-aligns afterwards, cascading input/analysis/picks/registry.
 
 ## Adding or editing a league
 
-1. Add/edit the descriptor in [`scripts/leagues.mjs`](../scripts/leagues.mjs) (`LEAGUES`).
-2. Keep `slugFamily` consistent with the
-   [recurring slug families](analysis-artifacts.md#recurring-league-slug-families) table and
-   [`round-slug-naming.mdc`](../.cursor/rules/round-slug-naming.mdc).
-3. List fit profiles that already exist in [`fit-guidance.md`](fit-guidance.md); add the
-   profile there first if it's new.
-4. Update the summary table above.
-5. Log a behavior change in [`decisions.md`](decisions.md) only if it changes tool behavior
-   (not for a new note on an existing league).
+1. Add/edit the descriptor in `data/ref/leagues.json` (private submodule). Plain
+   leagues usually get there automatically — editing one only matters when it needs
+   reminders, scripts, or cross-links.
+2. Constraint-league reminders follow the fit-profile vocabulary in
+   [`fit-guidance.md`](fit-guidance.md); add a new profile there first.
+3. Keep the description generic in docs — the examples live in the data file.
+4. Log a behavior change in [`decisions.md`](decisions.md) only if it changes tool
+   behavior (not for a new note on an existing league).

@@ -15,14 +15,15 @@ for the same round — so the pre-round research and the parsed votes never merg
 
 Before naming a new round or research folder:
 
-1. Check the active **and** `archive/` trees (`data/rounds/`, `data/analysis/`) for prior
-   installments of the same league.
-2. Reuse their exact slug shape for the research folder, the saved input file, and every
+1. **Let `just save-round <slug>` check for you first** — it prints the matching family's
+   recent concrete slugs, or the digest of other recent families when nothing matches
+   (interactive sessions ask before saving; `just rename <new-slug>` re-aligns after the
+   fact, cascading input/analysis/picks/registry).
+2. Otherwise check the active **and** `archive/` trees (`data/rounds/`, `data/analysis/`)
+   for prior installments of the same league.
+3. Reuse their exact slug shape for the research folder, the saved input file, and every
    analysis artifact.
 
-Known families (full table in [spec/analysis-artifacts.md](../../spec/analysis-artifacts.md)):
-
-- **K-pop Boy Group Years → `bg-<year>`** (`bg-2016`, `bg-2017`, `bg-2018`) — not `<year>-bg-kpop`.
-- Story chain → `story-<n>`; Tarot → `tarot-<arcana>`; Last.fm → `lfm-<topic>`; AAA → `aaa-<topic>`.
-
-If this file disagrees with the spec, follow **spec/**.
+The canonical slug families live in the **private** data submodule
+(`data/ref/leagues.json` — no league names or slug shapes in the main repo, see the
+`no-league-facts` rule). If this file disagrees with **spec/**, follow the spec.

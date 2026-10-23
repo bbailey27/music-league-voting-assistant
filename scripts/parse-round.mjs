@@ -23,6 +23,7 @@ import { parseRoundText } from './parse-text.mjs';
 import { matchFlag, matchRestFlag, takePositional } from './cli-args.mjs';
 import { roundIdFromInput, musicPaths } from './paths.mjs';
 import { ensureDateSlugForInput } from './maintain-rounds.mjs';
+import { upsertPlainLeague } from './leagues.mjs';
 import {
   parsePins,
   pinCapError,
@@ -325,6 +326,16 @@ async function main() {
     await mkdir(scoresPaths(roundId).dir, { recursive: true });
     await writeFile(scoresOut, JSON.stringify(fitData, null, 2), 'utf8');
     console.log(`Wrote ${scoresOut} (thematic merge from fit.json + parse flags)`);
+  }
+
+  // Plain-league registration (secondary surface — primary is just save-round):
+  // fills the official league name + mode, creating a nameless family entry when
+  // save-round (or a backfill) registered the slug first.
+  if (parsed.round?.league) {
+    const upsert = upsertPlainLeague({ roundId, leagueName: parsed.round.league, mode: args.mode });
+    if (upsert.added) {
+      console.log(`Registered plain league: "${parsed.round.league}" (round ${roundId})`);
+    }
   }
 
   const league = leagueForRound({ roundId, leagueName: parsed.round?.league });

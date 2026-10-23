@@ -14,7 +14,7 @@ Orientation:
 - Durable specs live in [spec/](./spec); decision history in [spec/decisions.md](./spec/decisions.md).
 - After editing or adding any [.cursor/rules/](./.cursor/rules) rule, run `just agents` to regenerate this file before finishing.
 
-## Always-applied rules (20)
+## Always-applied rules (21)
 
 ### avoidable-mistakes.mdc
 
@@ -415,6 +415,46 @@ and dedup, and produce a clean grouped report.
    must appear; do not summarize, filter, editorialize, or omit any hits.
 
 
+### no-league-facts.mdc
+
+*Main repo publishes — league names, slug families, songs, scores, comments, and round data stay in the private data submodule; use generic placeholders here*
+
+# No league or round facts in the main repo
+
+The main repo is **public**; the data submodule (`data/`) is private. Anything tied to
+a real league or round must live only in the data submodule — the main repo points at
+it, never reproduces it.
+
+## Never put in main-repo files (code, docs, rules, help, tests, fixtures)
+
+- **Official league or round names** as they appear on Music League.
+- **Slug family shapes or concrete slugs** (e.g. the family patterns or round ids you
+  actually saved) — use fully generic placeholders like `<round>`, `<league>-<topic>`.
+- **Songs, artists, scores, comments, votes** from any round.
+- **Analysis/registry content** (descriptors, reminders, fit profiles with league
+  specifics, pick records, per-round artifacts).
+
+## Where facts belong
+
+- League registry + slug families: `data/ref/leagues.json` (auto-registered by
+  save-round/parse; hand-edited for constraint leagues).
+- Round data: `data/rounds/`, `data/analysis/`, `data/ref/` (subject to the
+  no-grep-csvs and data-submodule-sync rules).
+- Narrative about the machinery stays in `spec/` — describe behavior, point at data
+  for examples instead of inlining them.
+
+## Enforcement habits
+
+- New docs/examples default to placeholders; copy nothing from the data tree into
+  main-repo prose.
+- When a doc or help line needs "an example", write `<round>`-style placeholders —
+  concrete ids make the leak easy to cause and hard to notice.
+- Test fixtures use synthetic entries (`Sample League`, `example round`) — never real
+  round/league names; `tests/fixtures/leagues-registry.json` is the pattern.
+- If you catch one slipping (in a diff you wrote or review), fix it in the same pass
+  and treat it as an avoidable mistake (capture a guard per `avoidable-mistakes`).
+
+
 ### output.mdc
 
 *Output conventions — tables, highlights, and fit-round artifacts in CLI and rendered reports*
@@ -605,17 +645,18 @@ for the same round — so the pre-round research and the parsed votes never merg
 
 Before naming a new round or research folder:
 
-1. Check the active **and** `archive/` trees (`data/rounds/`, `data/analysis/`) for prior
-   installments of the same league.
-2. Reuse their exact slug shape for the research folder, the saved input file, and every
+1. **Let `just save-round <slug>` check for you first** — it prints the matching family's
+   recent concrete slugs, or the digest of other recent families when nothing matches
+   (interactive sessions ask before saving; `just rename <new-slug>` re-aligns after the
+   fact, cascading input/analysis/picks/registry).
+2. Otherwise check the active **and** `archive/` trees (`data/rounds/`, `data/analysis/`)
+   for prior installments of the same league.
+3. Reuse their exact slug shape for the research folder, the saved input file, and every
    analysis artifact.
 
-Known families (full table in [spec/analysis-artifacts.md](./spec/analysis-artifacts.md)):
-
-- **K-pop Boy Group Years → `bg-<year>`** (`bg-2016`, `bg-2017`, `bg-2018`) — not `<year>-bg-kpop`.
-- Story chain → `story-<n>`; Tarot → `tarot-<arcana>`; Last.fm → `lfm-<topic>`; AAA → `aaa-<topic>`.
-
-If this file disagrees with the spec, follow **spec/**.
+The canonical slug families live in the **private** data submodule
+(`data/ref/leagues.json` — no league names or slug shapes in the main repo, see the
+`no-league-facts` rule). If this file disagrees with **spec/**, follow the spec.
 
 
 ### rule-frontmatter.mdc
@@ -686,14 +727,14 @@ and created stray round files.
 
 ## The runner
 
-    just smoke scripts/save-round.mjs lfm-4
-    echo '<html>…</html>' | just smoke scripts/save-round.mjs lfm-4
+    just smoke scripts/save-round.mjs <slug>
+    echo '<html>…</html>' | just smoke scripts/save-round.mjs <slug>
 
 `just smoke` spawns the script with a fresh sandbox seeded from the sample fixture
 and reports the sandbox path. Keep the same sandbox across invocations while
 iterating (seed once, tweak instructions, re-run):
 
-    ML_SMOKE_KEEP=1 just smoke scripts/save-round.mjs lfm-4
+    ML_SMOKE_KEEP=1 just smoke scripts/save-round.mjs <slug>
 
 ## When a change needs the real thing
 

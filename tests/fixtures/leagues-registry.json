@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "note": "Generic registry fixture for engine tests — real descriptors live in data/ref/leagues.json (private).",
+  "leagues": [
+    {
+      "id": "alpha-years",
+      "names": ["Example Series One"],
+      "slugFamily": "alpha-<year>",
+      "slugPrefixes": ["alpha-"],
+      "mode": "objective",
+      "summary": "Example objective league.",
+      "reminders": ["Example standing reminder about eligibility."],
+      "scripts": [
+        { "cmd": "echo example <round> --year <year>", "role": "Example script hint." }
+      ]
+    },
+    {
+      "id": "beta-themed",
+      "names": [],
+      "slugFamily": "beta-<topic>",
+      "slugPrefixes": ["beta-"],
+      "mode": "thematic",
+      "summary": "Example thematic league.",
+      "reminders": [],
+      "scripts": []
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # ── Start every round here ─────────────────────────────────────────
 # Copy the round HTML to your clipboard, then:
-#     just save-round <slug>    e.g. just save-round 5th-gen-bg
+#     just save-round <slug>    e.g. just save-round <slug>
 # After that: just run <slug> walks you through the pipeline (or "just help").
 
 # Pass recipe args as "$@" so quoted values (e.g. --reason "…") reach node intact.
@@ -66,6 +66,11 @@ tidy *args:
 config *args:
     node scripts/ml.mjs config "$@"
 
+# League registry with slug recency: active families + their latest concrete slug
+# (handy before just save-round when you forget the exact slug format)
+leagues *args:
+    node scripts/ml.mjs leagues "$@"
+
 # Diff pipeline output for the sample fixture against the committed baseline
 # (add `-- --update` to regenerate the baseline after an intended change)
 test-regression *args:
@@ -85,13 +90,18 @@ agents:
 fix:
     npm run --silent fix
 
-# Save clipboard HTML as a round file. Example: just save-round 5th-gen-bg
+# Save clipboard HTML as a round file. Example: just save-round <slug>
 save-round slug:
     pbpaste | node scripts/save-round.mjs {{slug}}
 
+# Rename an already-saved round's slug (keeps its date; cascades input/analysis/
+# picks.jsonl/registry/pointer). Example: just rename <new-slug>
+rename *args:
+    node scripts/rename-round.mjs "$@"
+
 # Smoke-run a script against a throwaway sandbox (fresh /tmp sandbox seeded with
 # the sample fixture; never touches live data/). stdin passes through:
-#     echo '<html>…</html>' | just smoke scripts/save-round.mjs lfm-4
+#     echo '<html>…</html>' | just smoke scripts/save-round.mjs <slug>
 # Iterate inside the same sandbox: ML_SMOKE_KEEP=1 just smoke …
 smoke *args:
     @sandbox="${ML_SMOKE_DIR:-/tmp/ml-smoke}"; \

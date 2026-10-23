@@ -91,7 +91,7 @@ registry ([`spec/leagues.md`](leagues.md) / `just leagues`), which points back h
 
 | League / style                           | Candidate profiles                    | Notes                                                               |
 | ---------------------------------------- | ------------------------------------- | ------------------------------------------------------------------- |
-| Chill Western Astrology League           | `traits-over-symbols`, `lyrics-first` | Zodiac: element shared across signs → secondary; traits + both win. |
+| A western-zodiac themed league           | `traits-over-symbols`, `lyrics-first` | Zodiac: element shared across signs → secondary; traits + both win. |
 | Any astrology / tarot / archetype series | `traits-over-symbols`                 | Shared symbols secondary; both symbol + traits strongest.           |
 | Lyric- or meaning-driven thematic rounds | `lyrics-first`                        | Prompt about meaning, not sonic genre.                              |
 | Continue-the-sentence / story leagues    | `story-continuation`                  | Grammar + continuation co-primary; music bonus.                     |

@@ -1,0 +1,39 @@
+---
+description: Main repo publishes — league names, slug families, songs, scores, comments, and round data stay in the private data submodule; use generic placeholders here
+alwaysApply: true
+---
+
+# No league or round facts in the main repo
+
+The main repo is **public**; the data submodule (`data/`) is private. Anything tied to
+a real league or round must live only in the data submodule — the main repo points at
+it, never reproduces it.
+
+## Never put in main-repo files (code, docs, rules, help, tests, fixtures)
+
+- **Official league or round names** as they appear on Music League.
+- **Slug family shapes or concrete slugs** (e.g. the family patterns or round ids you
+  actually saved) — use fully generic placeholders like `<round>`, `<league>-<topic>`.
+- **Songs, artists, scores, comments, votes** from any round.
+- **Analysis/registry content** (descriptors, reminders, fit profiles with league
+  specifics, pick records, per-round artifacts).
+
+## Where facts belong
+
+- League registry + slug families: `data/ref/leagues.json` (auto-registered by
+  save-round/parse; hand-edited for constraint leagues).
+- Round data: `data/rounds/`, `data/analysis/`, `data/ref/` (subject to the
+  no-grep-csvs and data-submodule-sync rules).
+- Narrative about the machinery stays in `spec/` — describe behavior, point at data
+  for examples instead of inlining them.
+
+## Enforcement habits
+
+- New docs/examples default to placeholders; copy nothing from the data tree into
+  main-repo prose.
+- When a doc or help line needs "an example", write `<round>`-style placeholders —
+  concrete ids make the leak easy to cause and hard to notice.
+- Test fixtures use synthetic entries (`Sample League`, `example round`) — never real
+  round/league names; `tests/fixtures/leagues-registry.json` is the pattern.
+- If you catch one slipping (in a diff you wrote or review), fix it in the same pass
+  and treat it as an avoidable mistake (capture a guard per `avoidable-mistakes`).
