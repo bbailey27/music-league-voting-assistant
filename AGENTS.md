@@ -362,7 +362,7 @@ Keep it to a short checklist, not a lecture.
 
 ### no-auto-commit.mdc
 
-*Never create git commits unless the user explicitly asks*
+*Never create git commits unless the user explicitly asks — plan approval ("implement it") does not count, and plans must not contain commit/push steps unless explicitly asked to draft a commit strategy*
 
 # Never commit unless explicitly asked
 
@@ -373,6 +373,23 @@ Only commit when the user explicitly asks you to in their request.
 - Leave changes in the working tree for the user to review.
 - Other git operations that don't create commits (`status`, `diff`, `log`,
   `add`) are fine when useful.
+
+## Approving the work is not approving the commit
+
+An implementation approval — "implement it", "confirm", "go ahead", or any other
+confirmation of a plan — does **not** authorize commits or pushes. A commit step
+written by the agent into its own plan is the agent's intent, never the owner's.
+Commiting requires the owner to **separately echo a commit directive** after the work
+exists (e.g. "commit it", "commit as one"). When in doubt after finishing, end with a
+short "left uncommitted — say commit if you want it" note instead of committing.
+
+## Plans must not include commit/push steps
+
+Do not write commit, push, or PR steps into plans (`.cursor/plans/*.plan.md`) or
+summaries unless the owner explicitly asked you to draft a commit strategy. When they
+did ask, keep it in a single `## Commit strategy` section (ordering only — e.g. data
+submodule before parent per the data-sync rules) and mark it "owner-confirmed?" — an
+unanswered plan section still does not authorize execution.
 
 When in doubt, leave the work uncommitted and let the user decide.
 
@@ -527,6 +544,13 @@ If this file disagrees with **spec/**, follow the spec.
 
 Plans are scratch paper during implementation. Durable context lives in `spec/`,
 `spec/decisions.md`, and git history — not a growing plans folder.
+
+## Plan content constraints
+
+Plans describe the work only — state, behavior, verification. **Never include commit,
+push, or PR steps** unless the owner explicitly asked you to draft a commit strategy
+(then mark it `## Commit strategy` and leave it for owner confirmation at execution
+time — see `no-auto-commit.mdc`: plan approval ≠ commit approval).
 
 ## Commit timing
 

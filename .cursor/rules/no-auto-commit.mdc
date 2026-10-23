@@ -1,5 +1,5 @@
 ---
-description: Never create git commits unless the user explicitly asks
+description: Never create git commits unless the user explicitly asks — plan approval ("implement it") does not count, and plans must not contain commit/push steps unless explicitly asked to draft a commit strategy
 alwaysApply: true
 ---
 
@@ -12,5 +12,22 @@ Only commit when the user explicitly asks you to in their request.
 - Leave changes in the working tree for the user to review.
 - Other git operations that don't create commits (`status`, `diff`, `log`,
   `add`) are fine when useful.
+
+## Approving the work is not approving the commit
+
+An implementation approval — "implement it", "confirm", "go ahead", or any other
+confirmation of a plan — does **not** authorize commits or pushes. A commit step
+written by the agent into its own plan is the agent's intent, never the owner's.
+Commiting requires the owner to **separately echo a commit directive** after the work
+exists (e.g. "commit it", "commit as one"). When in doubt after finishing, end with a
+short "left uncommitted — say commit if you want it" note instead of committing.
+
+## Plans must not include commit/push steps
+
+Do not write commit, push, or PR steps into plans (`.cursor/plans/*.plan.md`) or
+summaries unless the owner explicitly asked you to draft a commit strategy. When they
+did ask, keep it in a single `## Commit strategy` section (ordering only — e.g. data
+submodule before parent per the data-sync rules) and mark it "owner-confirmed?" — an
+unanswered plan section still does not authorize execution.
 
 When in doubt, leave the work uncommitted and let the user decide.

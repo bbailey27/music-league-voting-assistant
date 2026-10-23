@@ -8,6 +8,13 @@ alwaysApply: true
 Plans are scratch paper during implementation. Durable context lives in `spec/`,
 `spec/decisions.md`, and git history — not a growing plans folder.
 
+## Plan content constraints
+
+Plans describe the work only — state, behavior, verification. **Never include commit,
+push, or PR steps** unless the owner explicitly asked you to draft a commit strategy
+(then mark it `## Commit strategy` and leave it for owner confirmation at execution
+time — see `no-auto-commit.mdc`: plan approval ≠ commit approval).
+
 ## Commit timing
 
 - **Multi-step effort (several commits):** include any related
