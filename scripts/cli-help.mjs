@@ -82,7 +82,10 @@ export const HELP = {
 
 Stages (each reads/writes JSON; only save-round and parse touch HTML):
   0. save-round  clipboard → data/rounds/<dated id>.html (self-dates; reuses a
-                 round's existing dated id, sets the current round)
+                 round's existing dated id, sets the current round; an unknown
+                 slug family prints recent ones and lets you y-keep it, type a
+                 correction, or n-cancel; warns when the clipboard has no HTML
+                 <table> — a stray copy still saves, replace it by re-running)
   1. parse   HTML/text → music.md + music.json
   2. merge   music.json + fit.json → scores.json   (thematic only)
   3. pick    record distribution choice (A/B/C) → pick in JSON + picks.jsonl

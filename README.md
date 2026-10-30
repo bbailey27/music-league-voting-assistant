@@ -163,15 +163,21 @@ through to the underlying scripts. Run `just --list` or `just help` for the over
 
 save-round self-dates: it resolves the slug to the round's dated id when one already
 exists (an undated export never re-appears beside it), stamps today's date for a new
-round, and stamps the saved id as the current round. Later commands accept either name;
+round, and stamps the saved id as the current round. It warns when the clipboard has
+no HTML `<table>` — a stray copy (branch name, selected transcript) still saves and
+poisons the next `just run` with "No songs found"; the same slug on re-run replaces
+the file with the proper export. Later commands accept either name;
 a bare slug snaps to its single dated sibling.
 
 Naming-consistency: save-round prints your slug's family with its 3 most recent
 concrete slugs; an unknown family shows the digest of other recent families and
-(when run from a terminal) asks before saving, then auto-registers the family in
-`data/ref/leagues.json` (plain leagues get no reminders — special rules stay
-optional). `just rename <new-slug>` re-aligns a saved round afterwards, keeping the
-date and cascading input/analysis/picks/registry. `just leagues` lists every family
+prompts (from a terminal): `y` saves with the slug you typed (auto-registering the
+new family), typing a different bare slug saves under that instead, `n`/Enter cancels
+without writing (the clipboard stays intact). Non-interactive runs save as typed.
+Kept slugs auto-register their family in `data/ref/leagues.json` (plain leagues get
+no reminders — special rules stay optional). `just rename <new-slug>` re-aligns a
+saved round afterwards, keeping the date and cascading input/analysis/picks/registry.
+`just leagues` lists every family
 active-first (14-day recency window; archived rounds still count) and details one by
 id/name/prefix.
 

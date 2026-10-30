@@ -11,6 +11,42 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-10-30 — save-round unknown-slug prompt states its options and accepts a correction
+
+**Change.** When `just save-round <slug>` matches no slug family, the interactive
+prompt (`scripts/save-round.mjs` `resolveWithNamingCheck`, read from /dev/tty since
+stdin carries the clipboard) no longer shows a bare `Save as … anyway? [y/N]`. It
+prints the choice list — `y` saves with the slug as typed (auto-registering the new
+family), `<slug>` replaces the slug inline (re-resolved against the registry and the
+rounds tree, so a correction that lands on an existing family takes that family's
+dated sibling immediately), `n`/Enter cancels with nothing written — and prompts
+`[y | <slug> | n]`. Non-interactive runs (no tty) still save as typed with a rename
+hint. Cancel wording: "Saved nothing. / No file written; the clipboard is intact for
+the next attempt."
+
+**Change (same pass).** save-round warns (does not block) when the clipboard has no
+HTML `<table>` before writing: a non-round copy (stray selection — e.g. a branch
+name — or a pasted transcript) previously saved silently and surfaced only as a
+confusing "No songs found" on the next `just run`. The save still proceeds and the
+warning tells the owner that re-running with the same slug replaces the file.
+
+**Change (same pass).** The confirm's `/dev/tty` reading switched from
+`fs.createReadStream` to `node:tty` `ReadStream`: the fs stream read on the libuv
+threadpool and, after the answer, queued another blocking kernel read that cannot be
+cancelled — every _confirmed_ save hung the process after finishing (the terminal
+never returned to the shell). uv TTY reads poll in the event loop, so `rl.close()` +
+`stream.destroy()` ends the process immediately. Reproduced under `expect` (real pty)
+and verified fixed the same way against the sandbox data dir.
+
+**Why.** A real save (`halloween-*`) hit this digest with no instruction on how to
+keep the typed slug: everything not `y` aborted, and the question was so unlabeled it
+read as a shell prompt — command text typed into it aborted the save twice.
+
+**Refs.** `working tree` — `scripts/save-round.mjs`, `scripts/cli-help.mjs`,
+`README.md`.
+
+---
+
 ## 2026-10-22 — `just leagues` lists active-first with the latest concrete slug
 
 **Change.** Bare [`just leagues`](../scripts/leagues.mjs) now computes each league's
@@ -119,7 +155,7 @@ bookkeeping leaking into the owner's workflow.
 line are reversed above; two manual plain registrations (5th-gen/sm/vim entries
 hand-added in the same entry) are now auto-managed.
 
-**Refs.** `working tree` — `scripts/leagues.mjs`, `scripts/save-round.mjs`,
+**Refs.** `12a32af` — `scripts/leagues.mjs`, `scripts/save-round.mjs`,
 `scripts/rename-round.mjs`, `scripts/parse-round.mjs`, `scripts/ml.mjs`,
 `data/ref/leagues.json`, `.cursor/rules/no-league-facts.mdc`, `.cursor/rules/round-slug-naming.mdc`.
 
@@ -399,7 +435,7 @@ show the pin-reflowed preview.
 Passing `--pin` on pick had the same problem because it forced a full re-allocate instead
 of layering new pins onto the reviewed menu.
 
-**Refs.** `working tree` — `scripts/round/explore.mjs`, `scripts/round/pick.mjs`
+**Refs.** `26578bb` — `scripts/round/explore.mjs`, `scripts/round/pick.mjs`
 (`resolvePickMenu`, `mergePickPinOverrides`), `scripts/pick-round.mjs`,
 `scripts/score/render.mjs` (`menuTradeoffs`), `tests/rescore-e2e.test.mjs`.
 
@@ -453,7 +489,7 @@ planned** — agents must not suggest configuring credentials
 **Why.** MB alone misses many K-pop tracks; MB compilation rows falsely fail good picks.
 Spotify API is not available in this workspace and should stop being recommended.
 
-**Refs.** `working tree` — `scripts/release-year-gate.mjs`, `spec/release-dates.md`,
+**Refs.** `af7e345` — `scripts/release-year-gate.mjs`, `spec/release-dates.md`,
 `tests/release-year-gate.test.mjs`, `.cursor/rules/release-dates-no-spotify.mdc`
 
 ---

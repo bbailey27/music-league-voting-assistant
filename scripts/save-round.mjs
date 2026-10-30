@@ -7,7 +7,8 @@
 //   3. Otherwise stamp today's (effective) date: YYYY-MM-DD-<slug>.html.
 // Naming-consistency moment: matching a known slug family prints its recent
 // concrete slugs; an unknown family gets a digest + (interactive sessions) a
-// confirm before writing, then auto-registers the family in the league registry.
+// prompt before writing — y keeps the slug as typed, a word replaces it inline,
+// n cancels — then the family auto-registers in the league registry.
 // Round ids and artifact layout: spec/analysis-artifacts.md; registry: leagues.mjs.
 
 import { existsSync, writeFileSync, mkdirSync, openSync } from 'node:fs';
@@ -76,18 +77,65 @@ async function confirmOnTty(question) {
   } catch {
     return null;
   }
+  // node:tty ReadStream (uv TTY handle), NOT fs.createReadStream: the fs stream
+  // reads on the libuv threadpool, and after the answer it queues another blocking
+  // kernel read that cannot be cancelled — the process then never exits until new
+  // tty input arrives (uv TTY reads poll in the loop instead, so destroy() ends it).
   const { createInterface } = await import('node:readline/promises');
-  const { createReadStream } = await import('node:fs');
-  const stream = createReadStream('', { fd });
+  const { ReadStream } = await import('node:tty');
+  const stream = new ReadStream(fd);
   stream.on('error', () => {}); // late ENXIO between open and read — degrade below
   const rl = createInterface({ input: stream, terminal: true });
   try {
     const answer = await rl.question(question);
     return answer.trim().toLowerCase();
   } catch {
-    return null;
+    return null; // late ENXIO between open and read — degrade below
   } finally {
     rl.close();
+    stream.destroy();
+  }
+}
+
+/**
+ * Resolve the save target, then (when the bare slug matches no league family)
+ * run the interactive naming check. Returns {target, digest}; exits on cancel.
+ * At the unknown-family prompt the slug is selectable: y keeps it as typed, any
+ * other word replaces it (re-resolved against the registry), n cancels.
+ */
+async function resolveWithNamingCheck(query) {
+  let slug = query;
+  for (;;) {
+    const target = resolveSaveTarget(slug);
+    if (target.error) {
+      console.error(target.error);
+      for (const s of target.siblings) console.error(`  ${s}`);
+      process.exit(1);
+    }
+
+    const digest = familyDigestLines(target.id);
+    if (digest.matched) {
+      for (const line of digest.lines) console.log(line);
+      return { target, digest };
+    }
+
+    console.log(`No known slug family for "${bareSlugOf(target.id)}". Other recent families:`);
+    for (const line of digest.lines) console.log(line);
+    console.log('  y       save as typed (registers it as a new slug family)');
+    console.log('  <slug>  save under this slug instead — type it here');
+    console.log('  n       cancel — nothing is written; the clipboard is intact');
+    const answer = await confirmOnTty('[y | <slug> | n] ');
+    if (answer == null) {
+      console.log('(no interactive terminal — saving as typed; re-run just rename <slug> to align)');
+      return { target, digest };
+    }
+    if (answer === 'y' || answer === 'yes') return { target, digest };
+    if (answer === 'n' || answer === '') {
+      console.log('Saved nothing.');
+      console.log('No file written; the clipboard is intact for the next attempt.');
+      process.exit(1);
+    }
+    slug = answer; // inline correction — re-resolve against the chosen slug
   }
 }
 
@@ -102,36 +150,22 @@ async function main() {
   // exists, let the (newer-wins) fold logic see it rather than add a second copy.
   const undated = existsSync(join(ROUNDS_DIR, `${query}.html`));
 
-  const target = resolveSaveTarget(query);
-  if (target.error) {
-    console.error(target.error);
-    for (const s of target.siblings) console.error(`  ${s}`);
-    process.exit(1);
-  }
-
-  // Naming-consistency check BEFORE writing: match the slug family (or the full
-  // digest when it is unknown) so alignment with previous rounds is front and center.
-  const digest = familyDigestLines(target.id);
-  if (digest.matched) {
-    for (const line of digest.lines) console.log(line);
-  } else {
-    console.log(`No known slug family for "${bareSlugOf(target.id)}". Other recent families:`);
-    for (const line of digest.lines) console.log(line);
-    const answer = await confirmOnTty(`Save as ${target.id}.html anyway? [y/N] `);
-    if (answer && answer !== 'y' && answer !== 'yes') {
-      console.log('Saved nothing — re-run with the slug you wanted.');
-      console.log('No file written; the clipboard is intact for the next attempt.');
-      process.exit(1);
-    }
-    if (answer == null) {
-      console.log('(no interactive terminal — saving anyway; re-run just rename <slug> to align)');
-    }
-  }
+  // Naming-consistency check BEFORE writing (see resolveWithNamingCheck).
+  const { target } = await resolveWithNamingCheck(query);
 
   const html = await readStdin();
   if (!html.trim()) {
     console.error('Clipboard is empty — nothing saved.');
     process.exit(1);
+  }
+
+  // Content sanity check upfront: a copy that is not the round export (stray text
+  // selection, transcript) still saves today and poisons the next `just run` with
+  // a confusing "No songs found". Announce it at save time instead.
+  if (!/<table[\s>]/i.test(html)) {
+    console.log('warning: clipboard content has no <table> — Music League round exports are');
+    console.log('HTML with a song table. This may not be the round page. Saved anyway;');
+    console.log('re-run after copying the export — same slug replaces the file.');
   }
 
   const bytes = Buffer.byteLength(html, 'utf8');
@@ -157,7 +191,7 @@ async function main() {
   }
 
   console.log(`Next: just parse ${target.id}`);
-  console.log('Renamed your mind? just rename <new-slug>');
+  console.log('Changed your mind? just rename <new-slug>');
 }
 
 if (process.argv[1] && process.argv[1].endsWith('save-round.mjs')) {
