@@ -71,13 +71,17 @@ music score, so thematic/blended rounds can be scored without an LLM when you
 already know the fit. The fit signal feeds the same shape the LLM fit JSON
 produces (`fitScore` / `fitTier` / `gate`, `fitSource: 'manual'`).
 
-### Peel-first (scoring line)
+### Score-first, peel-first (scoring line)
 
 Comments split on the **first newline**. Line 1 is the **scoring line**; the
 submission tail is never scanned for fit/tier/gate.
 
-1. **First number** on the scoring line (+ mods) → **music** `score`. Always — leading
-   `fit` / `music` / prose does not change which digit is music.
+1. **The scoring line must START with the number** (+ mods). Leading whitespace is
+   fine, and the word `fit` / `music` may sit just before the number (`fit 8` scores
+   the 8 as music). Any other prose before the first digit means **there is no score**
+   — a number later in a sentence is prose ("it already got 3rd place"), never music.
+   Such a line falls back to words-only handling (DQ in `objective`, needs-review in
+   `subjective`); its trailing numbers are not scraped into fit either.
 2. **Remainder** of the scoring line (after that number) → fit signals.
 
 There is no fit-only notation; music is always the first number you write.
@@ -90,6 +94,7 @@ There is no fit-only notation; music is always the first number you write.
 | `75. 80`          | 75    | 80 (bare 2nd # — auto-detected round-wide) |
 | `80. fit 75`      | 80    | 75 (explicit `fit 75`)                     |
 | `76 fit bonus`    | 76    | shorthand → strong / 85                    |
+| `got 3rd place…`  | —     | prose-first → words-only (DQ / review)     |
 
 ### Fit channels (remainder unless noted)
 

@@ -65,6 +65,32 @@ test('scoreComment disqualification + needs-input', () => {
   assert.equal(scoreComment('78 todo list vibes', 'objective').needsUserInput, false);
 });
 
+test('scoreComment score-first rule', () => {
+  // A number later in a sentence is prose, never a music score.
+  const prose = scoreComment(
+    'Great song, but it already got 3rd place in the vocal round',
+    'objective'
+  );
+  assert.equal(prose.score, null, 'mid-sentence digits are not scores');
+  assert.equal(prose.isDisqualified, true);
+  assert.equal(
+    scoreComment('This was a 2017 single (pre-debut)', 'objective').score,
+    null,
+    'year-only sentence stays words-only'
+  );
+  // Subjective mode: same first-token rule, needs instead of DQ.
+  assert.equal(
+    scoreComment('got 3rd place in the vocal round', 'subjective').needsReview,
+    true
+  );
+  // Score-first comments still parse, including punctuated keywords after the number.
+  assert.equal(scoreComment('  75', 'objective').score, 75, 'leading whitespace tolerated');
+  const keyword = scoreComment('fit 8', 'objective');
+  assert.equal(keyword.score, 80, 'leading `fit` keyword is allowed before the number');
+  assert.equal(scoreComment('music 78', 'objective').score, 78, 'leading `music` keyword tolerated');
+  assert.equal(scoreComment('73 great, released 2019', 'objective').score, 73);
+});
+
 test('scoreComment manual fit notation', () => {
   const both = scoreComment('78 music, 8 fit', 'subjective');
   assert.equal(both.score, 78, 'music score preserved');

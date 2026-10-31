@@ -197,17 +197,24 @@ export function flagMissingFitSignals(scored, ratio = NUMERIC_FIT_MIN_RATIO) {
   return missing;
 }
 
-// First non-year number on the scoring line is always music; return the rest for fit
-// parsing. A comment whose only number is a year (e.g. "2019" or a sentence mentioning
-// one) peels to null → handled as a words-only comment (DQ in objective mode).
+// The scoring line must START with the music number (leading whitespace is fine, and
+// the word `fit` or `music` may precede it — the owner occasionally types `fit` first,
+// never a keyword before a number that belongs to prose). A number anywhere later in
+// the line is prose ("it already got 3rd place"), never a score: peel to null → the
+// line is handled as a words-only comment (DQ in objective mode). A comment whose
+// number is a year (e.g. "2019") peels to null the same way.
 function peelMusic(scoringLine) {
-  const m = matchScoreToken(scoringLine);
-  if (!m) return null;
+  let rest = scoringLine.replace(/^\s+/, '');
+  const kw = /^(?:fit|music)\s+/.exec(rest);
+  if (kw) rest = rest.slice(kw[0].length);
+  rest = rest.replace(/^\s+/, '');
+  const m = matchScoreToken(rest);
+  if (!m || m.index !== 0) return null;
   return {
     intPart: m.intPart,
     decPart: m.decPart,
     mods: m.mods,
-    remainder: scoringLine.slice(m.index + m.length),
+    remainder: rest.slice(m.length),
   };
 }
 

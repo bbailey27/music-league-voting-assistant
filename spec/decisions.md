@@ -11,6 +11,31 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-10-31 — Score-first rule: prose before the number means no music score
+
+**Change.** `peelMusic` (scripts/score/comment.mjs) no longer takes the **first
+number anywhere** on the scoring line as the music score. The scoring line must
+**start** with the number (+ mods); leading whitespace and the word `fit` / `music`
+directly before the number are tolerated. Any other prose before the first digit →
+no score, and the line falls through to words-only handling (DQ in objective mode,
+needs-review in subjective). Trailing numbers in such lines are no longer scraped
+into fit channels either. Spec: `spec/score-parsing.md` → Score-first, peel-first.
+
+**Why.** Recurring real-round damage: a number hidden in a sentence ("Great song,
+but it already got 3rd place in the vocal round") parsed as music 30 and threw off
+allocation; same class as the earlier First Love / year-in-text incidents
+(bugs.plan:889, 2026-10-12). Owner restated the intent: "If the first thing in the
+text box is not a number, there is no score and that's just a DQ comment."
+
+**Overruled.** The old peel-first spec wording "leading `fit` / `music` / prose does
+not change which digit is music" — prose-first scoring was never the owner's habit;
+the documented `fit 8` row is kept via the keyword allowance, not an excuse for
+prose-first parsing.
+
+**Refs.** scripts/score/comment.mjs · spec/score-parsing.md — working tree.
+
+---
+
 ## 2026-10-31 — CLI shortcuts, score-value literal grammar, bare-cutoff music default
 
 **Change.** Future-plans item 25 shipped across the CLI:
@@ -59,35 +84,14 @@ rules. One parser + one alias table removes all four at once.
 (unscaled, no >100 guard); the redundant per-flag regexes in
 `parseScoreOverrides`.
 
-**Refs.** `working tree` — `scripts/parse/cli-flags.mjs`, `scripts/cli-args.mjs`,
+**Refs.** `0a1a7d7` — `scripts/parse/cli-flags.mjs`, `scripts/cli-args.mjs`,
 `scripts/ml.mjs`, `scripts/{parse,merge,pick,rescore}*.mjs`,
 `scripts/cli-help.mjs`, README, `spec/point-allocation.md`, tests
 (`allocate`, `cli-args`, `ml`).
 
 ---
 
-## 2026-10-31 — Score-first rule: prose before the number means no music score
-
-**Change.** `peelMusic` (scripts/score/comment.mjs) no longer takes the **first
-number anywhere** on the scoring line as the music score. The scoring line must
-**start** with the number (+ mods); leading whitespace and the word `fit` / `music`
-directly before the number are tolerated. Any other prose before the first digit →
-no score, and the line falls through to words-only handling (DQ in objective mode,
-needs-review in subjective). Trailing numbers in such lines are no longer scraped
-into fit channels either. Spec: `spec/score-parsing.md` → Score-first, peel-first.
-
-**Why.** Recurring real-round damage: a number hidden in a sentence ("Great song,
-but it already got 3rd place in the vocal round") parsed as music 30 and threw off
-allocation; same class as the earlier First Love / year-in-text incidents
-(bugs.plan:889, 2026-10-12). Owner restated the intent: "If the first thing in the
-text box is not a number, there is no score and that's just a DQ comment."
-
-**Overruled.** The old peel-first spec wording "leading `fit` / `music` / prose does
-not change which digit is music" — prose-first scoring was never the owner's habit;
-the documented `fit 8` row is kept via the keyword allowance, not an excuse for
-prose-first parsing.
-
-**Refs.** scripts/score/comment.mjs · spec/score-parsing.md — working tree.
+## 2026-10-30 — Unknown-league auto-save defaults to 1-round families; widening needs proof or a confirmed merge
 
 **Change.** A round saved under a slug matching no family registers with the
 **exact-slug family** (prefix = the bare slug, shape = the bare slug) instead of the

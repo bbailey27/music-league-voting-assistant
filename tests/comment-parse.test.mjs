@@ -33,15 +33,17 @@ test('comment parse: peel-first music (fitWords off)', () => {
   assert.equal(bonusOnly.fitTier, null);
   assert.equal(bonusOnly.needsReview, true);
 
-  assert.equal(parse('maybe great song 75').score, 75);
+  // Score-first rule: prose before the number means no music score, even though a
+  // number appears later on the line ("maybe great song 75" is words-only).
+  assert.equal(parse('maybe great song 75').score, null);
   assert.equal(parse('maybe great song 75').gate, null);
 
-  assert.equal(parse('off-theme 80').score, 80);
+  assert.equal(parse('off-theme 80').score, null);
   assert.equal(parse('off-theme 80').gate, null);
 
   assert.equal(parse('strong fit').fitTier, null);
 
-  assert.equal(parse('solid track 72').score, 72);
+  assert.equal(parse('solid track 72').score, null);
   assert.equal(parse('solid track 72').fitTier, null);
 
   assert.equal(parse('74 soft punk').score, 74);
@@ -88,10 +90,12 @@ test('comment parse: peel-first + remainder fit (fitWords on)', () => {
   assert.equal(parse('strong', opts).fitTier, 'strong');
   assert.equal(parse('pass', opts).gate, 'pass');
 
-  assert.equal(parse('maybe a 70?', opts).score, 70);
+  // Score-first rule: prose-first "maybe a 70?" has no music score; the gate word
+  // still parses (gate scanning is unaffected, only the score is gone).
+  assert.equal(parse('maybe a 70?', opts).score, null);
   assert.equal(parse('maybe a 70?', opts).gate, 'maybe');
 
-  assert.equal(parse('maybe great song 75', opts).score, 75);
+  assert.equal(parse('maybe great song 75', opts).score, null);
   assert.equal(parse('maybe great song 75', opts).gate, 'maybe');
 
   const bonusNl = parse('76 fit bonus\npublic comment', opts);
