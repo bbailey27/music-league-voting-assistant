@@ -11,6 +11,55 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-10-31 — Pin lifecycle: additive persistent pins, rebuilt labels, `--reset`
+
+**Change.** `just rescore <round>` pin handling reworked:
+
+- **Additive + persisted** — pins already saved into `music.json`
+  (`profile.overrides` / `downOverrides` via `slimProfile`) survive; every rescore
+  merges the stored set with the invocation's `--pin` values (same song → new
+  value wins), so a second `--pin` call keeps the first instead of replacing or
+  forgetting it. When no `--pin` is passed but pins are stored, rescore says
+  "Pins carried from earlier runs …" instead of shaping the menu silently.
+- **Rebuilt labels** — `reflowMenuOption` (`scripts/round/pick.mjs` + browser twin
+  `scripts/web-pick-core.mjs`) no longer patches the old tier word and
+  "(bucket-count K)" quote onto a pinned curve. The label is rebuilt from the
+  post-reflow votes (`"3 tiers — 3×1 / 2×1 / 1×1 · pins applied"`) and
+  `option.tierCount` recomputed — the pinned curve no longer claims to reproduce
+  from the original bucket count. `patchLabelShape` removed (was dead after the
+  rebuild).
+- **`--reset`** — clears stored pins and stored knobs (weights/shapes/gate/tier
+  counts/favorite band) and rebuilds the menu from defaults. Manual `--score`
+  edits stay on song records; the JSON payload strips the emptied pin maps so
+  they cannot leak back through the old-profile spread. A full reset (scores
+  too) remains a re-parse.
+- **Flags register line** — every CLI table run (parse / merge / rescore / pick
+  Applied / `ml status`) prints `Pins: … · Flags: …` ahead of the option tables
+  (`formatProfileKnobsCli` in `scripts/parse/cli-print.mjs`): all active pins
+  (unsigned up `i:v` — signs belong only to downvotes — `i:-v`, no-vote `i:0`)
+  and non-default knobs
+  (weights / cutoff / gate / tiers / bucket / options / shape / down shape /
+  favorite band toggle). Defaults (`shape auto`, rank `music`/`combined`) are
+  suppressed so the line stays short; empty profile renders nothing. Owner
+  follow-up on the pin batch: "don't just mention silent pins — display all
+  active pins and flags on each table output."
+
+**Why.** Four real-round complaints in one thread (2026-08-17-bg-2026,
+2026-10-12-vim-26-feb): pins replaced, pins forgotten between runs, held
+shape/bucket-count labels printed after pins changed every column, and no undo
+once knobs or pins were set — the narrowing-cutoff workflow had no way back.
+
+**Overruled.** The old implicit rule that pin state was invocation-only (stored
+only as a pick-time reconciler input); label truth-by-prefix (tier word +
+bucket-count carried from the unpinned enumeration after reflow).
+
+**Refs.** `9794371` (score-first companion entry in the same session) ·
+scripts/rescore-round.mjs · scripts/round/pick.mjs ·
+scripts/web-pick-core.mjs · scripts/ml.mjs (KNOWN flags) ·
+spec/point-allocation.md — working tree.
+
+---
+
 ## 2026-10-31 — Score-first rule: prose before the number means no music score
 
 **Change.** `peelMusic` (scripts/score/comment.mjs) no longer takes the **first
@@ -32,7 +81,7 @@ not change which digit is music" — prose-first scoring was never the owner's h
 the documented `fit 8` row is kept via the keyword allowance, not an excuse for
 prose-first parsing.
 
-**Refs.** scripts/score/comment.mjs · spec/score-parsing.md — working tree.
+**Refs.** `9794371` — scripts/score/comment.mjs · spec/score-parsing.md.
 
 ---
 

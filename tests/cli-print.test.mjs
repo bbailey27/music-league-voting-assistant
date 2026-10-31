@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   actionTradeoffsForCli,
+  formatProfileKnobsCli,
   printAppliedAllocationCli,
   printPickCli,
 } from '../scripts/parse/cli-print.mjs';
@@ -267,4 +268,65 @@ test('actionTradeoffsForCli keeps ties and drops pick tables', () => {
     notes.map((t) => t.kind),
     ['tier-split', 'forced-spill', 'budget-mismatch']
   );
+});
+
+test('formatProfileKnobsCli renders active pins and flags on one line', () => {
+  const line = formatProfileKnobsCli({
+    overrides: { 2: 3, 1: 2 },
+    downOverrides: { 6: 1, 14: 0 },
+    weights: { fit: 0.7, music: 0.3 },
+    gate: { type: 'cutoff', axis: 'music', min: 73.5 },
+    tierCount: 3,
+    shape: 'bell',
+    favoriteBand: false,
+  });
+  assert.equal(
+    line,
+    'Pins: 1:2, 2:3, 6:-1, 14:0 · Flags: weights 7:3 (fit:music), cutoff music:73.5, tiers 3, shape bell, no-favorite-band'
+  );
+  // String keys (JSON round-trip) render identically, and a no-vote pin on its own
+  // keeps its `i:0` form.
+  assert.equal(
+    formatProfileKnobsCli({
+      overrides: { '14': 0 },
+      downOverrides: { '14': 0 },
+    }),
+    'Pins: 14:0'
+  );
+  // Only-local defaults render nothing.
+  assert.equal(formatProfileKnobsCli({ shape: 'auto' }), '');
+  assert.equal(formatProfileKnobsCli(null), '');
+});
+
+test('printPickCli pins-and-flags line appears when knobs are active, never when bare', () => {
+  const tradeoffs = [
+    {
+      kind: 'tier-structure',
+      options: [
+        {
+          label: '2 tiers — 2×2',
+          perSong: [
+            { rawOrderIndex: 11, votes: 2 },
+            { rawOrderIndex: 12, votes: 2 },
+          ],
+        },
+      ],
+    },
+  ];
+  const withKnobs = captureLog(() =>
+    printPickCli(
+      tradeoffs,
+      'demo-round',
+      sampleSongs,
+      [],
+      { upvoteBankSize: 4, downvoteBankSize: 0 },
+      { overrides: { 12: 2 } }
+    )
+  );
+  assert.ok(withKnobs.indexOf('Pins: 12:2') < withKnobs.indexOf('\nUp'), 'status line prints above the Up table');
+
+  const bare = captureLog(() =>
+    printPickCli(tradeoffs, 'demo-round', sampleSongs, [], { upvoteBankSize: 4, downvoteBankSize: 0 }, null)
+  );
+  assert.doesNotMatch(bare, /Pins:/, 'no knobs line when nothing is active');
 });

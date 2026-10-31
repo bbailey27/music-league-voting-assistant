@@ -378,3 +378,40 @@ test('pick rejects --weights and points to rescore', async () => {
     await rm(tmpRoot, { recursive: true, force: true });
   }
 });
+
+test('rescore pins persist and merge additively; --reset clears knobs and pins but keeps scores', async () => {
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'ml-rescore-pins-'));
+  const dataDir = join(tmpRoot, 'data');
+  const env = { ...process.env, ML_DATA_DIR: dataDir };
+  try {
+    await mkdir(join(dataDir, 'rounds'), { recursive: true });
+    await copyFile(fixtureHtml, join(dataDir, 'rounds', `${ROUND}.html`));
+    const musicJson = join(dataDir, 'analysis', ROUND, 'music.json');
+    const profileOf = (data) => data.profile || {};
+
+    await ml(env, 'parse', ROUND);
+
+    // First pin persists into music.json's profile.
+    let { stdout } = await ml(env, 'rescore', ROUND, '--pin', '2:3');
+    assert.equal(profileOf(JSON.parse(await readFile(musicJson, 'utf8'))).overrides['2'], 3);
+
+    // A second --pin call keeps the stored pin instead of replacing it.
+    ({ stdout } = await ml(env, 'rescore', ROUND, '--pin', '1:2'));
+    assert.match(stdout, /Pins \(stored ⊕ --pin\): 1:2, 2:3/);
+    const stored = profileOf(JSON.parse(await readFile(musicJson, 'utf8')));
+    assert.deepEqual(stored.overrides, { '2': 3, '1': 2 });
+
+    // Manual score edits are separate state and must survive a --reset.
+    await ml(env, 'rescore', ROUND, '--score', '2:78+');
+    let after = JSON.parse(await readFile(musicJson, 'utf8'));
+    assert.equal(songByIndex(after, 2).score, 78);
+
+    ({ stdout } = await ml(env, 'rescore', ROUND, '--reset'));
+    assert.match(stdout, /--reset: stored knobs and pins cleared/);
+    after = JSON.parse(await readFile(musicJson, 'utf8'));
+    assert.equal(profileOf(after).overrides, undefined, 'pins cleared');
+    assert.equal(songByIndex(after, 2).score, 78, 'manual --score kept across --reset');
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});

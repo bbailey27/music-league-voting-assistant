@@ -291,6 +291,16 @@ accepts a modifier suffix — `74.5+`, `76-`, `75?`, `74.5+?` — targeting the 
 re-parse** and reset any committed pick to draft; repeatable and comma-separable
 (`--score 5:74.5+,7:75`). `--dry-run` shows the effect without writing.
 
+**Pin persistence across rescore runs:** pins written to `music.json` under
+`profile.overrides` / `profile.downOverrides` persist and each new rescore merges
+the stored set with any `--pin` values on that call (same song → the new value
+wins). Stored pins reflow the menu even when no `--pin` is passed, with a
+"Pins carried from earlier runs" note so the shaping is never silent.
+`just rescore <round> --reset` clears the stored pins and stored knobs
+(weights/shapes/gate/tier counts/favorite band) while manual `--score` edits stay
+on the song records; resetting score state altogether is a re-parse
+(`just parse <round>`), which re-derives everything from the comment text.
+
 ### Standing shape preference (owner default)
 
 The repo owner's default voting style, applied unless a round dictates otherwise.

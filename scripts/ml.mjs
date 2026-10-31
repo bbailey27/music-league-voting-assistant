@@ -113,6 +113,7 @@ const VALUE_FLAGS = new Set([
 
 const KNOWN_BOOLEAN_FLAGS = new Set([
   '--dry-run',
+  '--reset',
   '--scores',
   '--no-favorite-band',
   '--no-json',

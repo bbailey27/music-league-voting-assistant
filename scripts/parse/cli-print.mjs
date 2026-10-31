@@ -21,6 +21,56 @@ import { computeCliCommentWidth } from '../ml-config.mjs';
 
 const SONG_COL = 1;
 
+// One-line register of everything actively shaping the allocation: pins (up + down
+// + no-vote pins) and non-default profile knobs. Printed ahead of the option
+// tables, ballot, and applied views so stored knobs/pins are never silent. Pin
+// display matches the pin grammar: unsigned positive, signed negative (`3:2`,
+// `6:-1`, no-vote `14:0`).
+export function formatProfileKnobsCli(profile) {
+  if (!profile) return '';
+  const byIdx = new Map();
+  for (const [k, v] of Object.entries(profile.overrides || {})) {
+    if (Number(v) > 0) byIdx.set(Number(k), Number(v));
+  }
+  for (const [k, v] of Object.entries(profile.downOverrides || {})) {
+    const i = Number(k);
+    if (Number(v) < 0 || Number(v) > 0) byIdx.set(i, -Number(v));
+    else if ((byIdx.get(i) ?? 0) <= 0) byIdx.set(i, 0); // no-vote pin (overrides[i] unset or 0)
+  }
+  const pins = [...byIdx.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([i, v]) => `${i}:${v}`);
+  const knobs = [];
+  const w = profile.weights;
+  if (w && Number.isFinite(w.fit) && Number.isFinite(w.music)) {
+    knobs.push(`weights ${Math.round(w.fit * 10)}:${Math.round(w.music * 10)} (fit:music)`);
+  }
+  if (profile.gate) {
+    knobs.push(
+      profile.gate.type === 'cutoff'
+        ? `cutoff ${profile.gate.axis}:${profile.gate.min}`
+        : `gate ${profile.gate.type}`
+    );
+  }
+  if (profile.tierCount != null) knobs.push(`tiers ${profile.tierCount}`);
+  if (profile.bucketCount != null) knobs.push(`bucket ${profile.bucketCount}`);
+  if (profile.optionCount != null) knobs.push(`options ${profile.optionCount}`);
+  if (profile.shape && profile.shape !== 'auto') knobs.push(`shape ${profile.shape}`);
+  if (profile.downShape) knobs.push(`down ${profile.downShape}`);
+  if (profile.favoriteBand === false) knobs.push('no-favorite-band');
+  else if (profile.favoriteBand != null) knobs.push(`favorite-band ${profile.favoriteBand}`);
+  if (profile.rankBy === 'fit') knobs.push('rank fit');
+  const parts = [];
+  if (pins.length) parts.push(`Pins: ${pins.join(', ')}`);
+  if (knobs.length) parts.push(`Flags: ${knobs.join(', ')}`);
+  return parts.join(' · ');
+}
+
+function printProfileKnobsCli(profile) {
+  const line = formatProfileKnobsCli(profile);
+  if (line) console.log(`\n${line}`);
+}
+
 function commentColIndex(headers) {
   return headers.indexOf('Comment');
 }
@@ -276,6 +326,7 @@ export function printPickCli(tradeoffs, roundId, songs = [], ownSongs = [], budg
   const down = list.filter((t) => t.kind === 'down-structure');
   const signed = (budget?.downvoteBankSize ?? 0) > 0;
 
+  printProfileKnobsCli(profile);
   for (const t of up) printOptionTableCli(t, roundId, songs, ownSongs, false, profile);
   for (const t of down) printOptionTableCli(t, roundId, songs, ownSongs, true, profile);
   if (up.length || down.length) {
@@ -314,6 +365,7 @@ export function printAppliedAllocationCli(
 ) {
   const rows = rawOrderRows(songs, ownSongs);
   if (!rows.length) return;
+  printProfileKnobsCli(profile);
   const signed = (budget?.downvoteBankSize ?? 0) > 0;
   if (pick?.chosen) {
     printOptionPinComparisonCli(songs, ownSongs, pick, profile, baseline);

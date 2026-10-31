@@ -273,7 +273,16 @@ draft; never reads HTML): takes the shared allocation/profile flags above (`--we
 | --- | --- | --- |
 | `--score` | `<index\|title>:<value>` | Write a music score to `music.json` (modifiers `+`/`-`/`?`/`play`, `=` typo → `+`, digit scaling `7`→70 / `705`→70.5 — same literal grammar as comments; `:DQ` disqualifies and reflows). Clears `needsUserInput`, and clears a DQ held only for lack of a score. No HTML re-parse. |
 | `--fit-score` | `<index\|title>:<value>` | Write fit score to `fit.json` (thematic) or song record (music-only). Same value grammar; `:DQ` disqualifies the song like `--score <i>:DQ`. |
+| `--reset` | — | Clear stored knobs (weights/shapes/gate/tier counts/favorite band) and stored pins; manual `--score` edits stay. A full reset is `just parse <round>`. |
 | `--dry-run` | — | Preview re-score without writing files. |
+
+`--pin` on rescore is **additive**: pins persist in `music.json` between rescore runs,
+each new `--pin` merges on top (same song → new value wins), and `--reset` clears them.
+
+Every CLI table run (parse / merge / rescore / pick / status) prints a one-line
+register ahead of the option tables: `Pins: 1:+2, 6:-1, 14:0 · Flags: weights 7:3
+(fit:music), cutoff music:73.5, tiers 3, shape bell, no-favorite-band` — stored pins
+and non-default knobs, so pinned/drifted menus are visible without re-running flags.
 
 Repeatable spec flags (`--pin`, `--score`, `--fit-score`) accept comma-separated
 pairs or space-separated pairs: `--score 5:74 7:DQ`.

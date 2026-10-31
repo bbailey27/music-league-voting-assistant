@@ -54,11 +54,16 @@ function parseArgs(argv) {
     score: [],
     fitScore: [],
     pin: [],
+    reset: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run') {
       args.dryRun = true;
+      continue;
+    }
+    if (a === '--reset') {
+      args.reset = true;
       continue;
     }
     if (a === '--no-favorite-band') {
@@ -106,6 +111,73 @@ function resolveExplorePins(args) {
   if (!args.pin.length) return { overrides: undefined, downOverrides: undefined };
   const pins = parsePins(args.pin);
   return { overrides: pins?.overrides, downOverrides: pins?.downOverrides };
+}
+
+// Numeric keys: JSON round-trips override maps with string keys; allocation code
+// indexes by Number(rawOrderIndex), so normalize on the way in.
+function normalizedPins(map) {
+  if (!map) return undefined;
+  const out = {};
+  for (const [k, v] of Object.entries(map)) out[Number(k)] = v;
+  return Object.keys(out).length ? out : undefined;
+}
+
+// Pins are additive across rescore runs: stored pins (music.json profile) merge with
+// any new --pin values, and a new value for the same song replaces the old one. The
+// reset flag starts from this invocation's pins alone (--reset also clears the
+// stored knobs — see buildProfile).
+function mergeExplorePins(stored, resolved, reset) {
+  if (reset) return resolved;
+  return {
+    overrides: mergePinMaps(stored?.overrides, resolved.overrides),
+    downOverrides: mergePinMaps(stored?.downOverrides, resolved.downOverrides),
+  };
+}
+
+function mergePinMaps(stored, incoming) {
+  if (stored == null || !Object.keys(stored).length) return incoming;
+  if (incoming == null || !Object.keys(incoming).length) return normalizedPins(stored);
+  return { ...normalizedPins(stored), ...incoming };
+}
+
+// Cleared knobs vanish via undefined spreads, but slimProfile omits empty pin maps
+// entirely — strip them from the stored profile so the JSON payload loses them too.
+function withoutStoredPins(stored) {
+  const copy = { ...(stored || {}) };
+  delete copy.overrides;
+  delete copy.downOverrides;
+  return copy;
+}
+
+// "2:3, 6:-1" — sorted by song, downvote magnitudes signed negative.
+function pinsLabel(overrides, downOverrides) {
+  const entries = [];
+  for (const [i, v] of Object.entries(overrides || {})) {
+    if (Number(v) !== 0 || downOverrides?.[Number(i)] == null) entries.push([Number(i), Number(v)]);
+  }
+  for (const [i, v] of Object.entries(downOverrides || {})) {
+    if (Number(v) !== 0 || overrides?.[Number(i)] == null) entries.push([Number(i), -Number(v)]);
+  }
+  entries.sort((a, b) => a[0] - b[0]);
+  return entries.map(([i, v]) => `${i}:${v}`).join(', ');
+}
+
+function noteExplorePins(args, stored, merged, reset) {
+  if (reset) {
+    console.log('--reset: stored knobs and pins cleared (manual --score edits kept — a full reset is just parse <round>).');
+  }
+  const label = pinsLabel(merged.overrides, merged.downOverrides);
+  if (!label) return;
+  const incoming = resolveExplorePins(args);
+  if (reset || !(incoming.overrides || incoming.downOverrides)) {
+    // Only stored pins (or only fresh ones after reset) — skip the noise unless it
+    // could surprise: stored pins shape the menu silently otherwise.
+    if (!reset && (stored?.overrides || stored?.downOverrides)) {
+      console.log(`Pins carried from earlier runs: ${label} (pass --reset to clear).`);
+    }
+    return;
+  }
+  console.log(`Pins (stored ⊕ --pin): ${label} — pass --reset to clear stored.`);
 }
 
 function applyScoreOverrides(songs, overrides) {
@@ -185,18 +257,29 @@ function applyFitScoreOverrides(songs, overrides, where) {
 }
 
 function buildProfile(args, stored, budget, mode) {
-  const gate = buildGate(args) ?? stored?.gate;
-  const weights = parseWeights(args.weights) ?? stored?.weights;
-  const { overrides, downOverrides } = resolveExplorePins(args);
-  const tierCount = parseTierCount(args.tierCount) ?? stored?.tierCount;
-  const bucketCount = parseBucketCount(args.bucketCount) ?? stored?.bucketCount;
-  const optionCount = parseOptionCount(args.optionCount) ?? stored?.optionCount;
+  const reset = args.reset === true;
+  const gate = buildGate(args) ?? (reset ? undefined : stored?.gate);
+  const weights = parseWeights(args.weights) ?? (reset ? undefined : stored?.weights);
+  const { overrides, downOverrides } = mergeExplorePins(stored, resolveExplorePins(args), reset);
+  const tierCount = parseTierCount(args.tierCount) ?? (reset ? undefined : stored?.tierCount);
+  const bucketCount = parseBucketCount(args.bucketCount) ?? (reset ? undefined : stored?.bucketCount);
+  const optionCount = parseOptionCount(args.optionCount) ?? (reset ? undefined : stored?.optionCount);
   const favoriteBand =
-    args.favoriteBand !== null ? parseFavoriteBand(args.favoriteBand) : stored?.favoriteBand;
-  const downShape = parseDownShape(args.downShape) ?? stored?.downShape;
-  const shape = args.shape ?? stored?.shape ?? 'auto';
-  const rankBy = args.rank ?? stored?.rankBy ?? (mode === 'thematic' ? 'combined' : 'music');
-  const fitTrust = stored?.fitTrust;
+    args.favoriteBand !== null
+      ? parseFavoriteBand(args.favoriteBand)
+      : reset
+        ? undefined
+        : stored?.favoriteBand;
+  const downShape = parseDownShape(args.downShape) ?? (reset ? undefined : stored?.downShape);
+  const shape = args.shape ?? (reset ? 'auto' : (stored?.shape ?? 'auto'));
+  const rankBy =
+    args.rank ??
+    (reset
+      ? mode === 'thematic'
+        ? 'combined'
+        : 'music'
+      : (stored?.rankBy ?? (mode === 'thematic' ? 'combined' : 'music')));
+  const fitTrust = reset ? undefined : stored?.fitTrust;
   return enrichProfileWithBudget(
     {
       shape,
@@ -224,7 +307,7 @@ async function main() {
     console.error(
       'Usage: just rescore <round-id> [--weights fit:music] [--shape …] [--gate …] [--down-shape …] ' +
         '[--rank …] [--options N] [--tier-count N] [--bucket-count N] [--pin <i>:<v>] ' +
-        '[--score <i>:<v>] [--fit-score <i>:<v>] [--dry-run]'
+        '[--score <i>:<v>] [--fit-score <i>:<v>] [--reset] [--dry-run]'
     );
     process.exit(1);
   }
@@ -246,6 +329,7 @@ async function main() {
   const upCap = budget?.maxUpvotesPerSong ?? Infinity;
   const downCap = budget?.maxDownvotesPerSong ?? Infinity;
   const profile = buildProfile(args, musicData.profile, budget, musicData.mode);
+  noteExplorePins(args, musicData.profile, profile, args.reset === true);
   const capErr = pinCapError(profile.overrides, profile.downOverrides, upCap, downCap);
   if (capErr) {
     console.error(capErr);
@@ -353,7 +437,7 @@ async function main() {
 
   const payload = buildJsonPayload({
     ...ctx,
-    profile: { ...(musicData.profile || {}), ...slim },
+    profile: { ...(args.reset ? withoutStoredPins(musicData.profile) : musicData.profile || {}), ...slim },
     combineWeights,
   });
   await writeFile(paths.json, JSON.stringify(payload, null, 2), 'utf8');

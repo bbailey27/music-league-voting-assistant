@@ -26,7 +26,13 @@ const PIN = `  --pin <index|title>:<votes>
                           candidates. votes > 0 = upvotes; votes < 0 = downvotes
                           when the round has downs enabled. Other songs reflow
                           so each bank stays exact. On pick, pins reconcile at
-                          the margin against the chosen option. Short form: -p.`;
+                          the margin against the chosen option. On rescore, pins
+                          are additive: stored pins persist and new --pin values
+                          merge on top (same song = new value wins); --reset
+                          clears them. Every table run prints an active register
+                          line — "Pins: … · Flags: …" — covering stored pins and
+                          non-default knobs (weights/tiers/cutoff/shape/band).
+                          Short form: -p.`;
 
 const SCORE_OVERRIDE = `  --score <index|title>:<value>
                           Write a music score onto music.json (no HTML re-parse).
@@ -348,6 +354,9 @@ Flags:
   ${PIN}
   ${SCORE_OVERRIDE}
   ${FAVORITE_BAND}
+  --reset                  Clear stored knobs (weights/shapes/gate/tier counts,
+                          favorite band) and stored pins; manual --score edits
+                          stay — a full reset is just parse <round>.
   --dry-run                Report the re-weight target without writing files.
 
 Example:
@@ -355,7 +364,8 @@ Example:
   just rescore --pin 8:1,5:1          # reflow every option column around pins
   just rescore --score 17:78+         # fill a blank box; re-tier + re-allocate
   just rescore --score 5:74.5+,7:75   # break a tiebreak-limited flat field
-  just rescore --shape bell           # re-shape the current round's menu`,
+  just rescore --shape bell           # re-shape the current round's menu
+  just rescore --reset                # back to the stored scores' own menu`,
 
   final: `just final [<name>] [flags]
 

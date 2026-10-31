@@ -515,6 +515,9 @@ D. 4 tiers (bucket-count 3) — 3×2 / 2×2 / 1×5 / 0×6
 E. 3 tiers (bucket-count 2) — 3×3 / 2×3 / 0×9 · merges a tier (2→0 jump, no tiebreak)
 
 Also pins should be additive. My 2nd pin here replaced the old one. should keep both.
+**Pin batch RESOLVED (2026-10-31):** pins persist in `music.json` and each rescore
+merges stored ⊕ new `--pin` (same song → new value wins); an old pin is no longer
+replaced or forgotten between calls.
 
 ❯ just rescore --pin 2:2
 node scripts/ml.mjs rescore "$@"
@@ -887,6 +890,12 @@ Up
     E. 4 tiers (bucket-count 3) — 3×3 / 2×4 / 1×4 / 0×9
     ---
     Wwe've clarified this before. A random number hidden in a sentence is not a score. If the first thing in the text box is not a number, there is no score and that's just a DQ comment. I know it may be adjustable to have like 'music 8, fit 7' as a format. But that's not really a format I use. I'll type the word fit maybe but never music. Tighten up this parsing logic.
+    **RESOLVED (2026-10-31)** — score-first rule: the scoring line must start with the
+    number; leading whitespace and the word `fit`/`music` before it are tolerated.
+    Prose-first lines ("…got 3rd place…") fall to words-only → DQ (objective) or
+    needsReview (subjective); their trailing numbers no longer parse as fit either.
+    Spec rewritten (`spec/score-parsing.md` → Score-first, peel-first); decisions.md
+    2026-10-31. (The `music 8` format stays tolerated-but-unused, per your note.)
 
     Wrote data/analysis/2026-10-12-sm-bridge/music.json
 
@@ -1011,6 +1020,9 @@ Up
     E. 4 tiers (bucket-count 3) — 3×6 / 2×1 / 1×1 / 0×7
 
     Extra misleading to print the wrong bucket count and curve shape when the pick is only in ballot form so it's hard to count and double check the shape myself.
+    **Label RESOLVED (2026-10-31):** pinned option labels rebuild from the reflowed
+    votes — `N tiers — <shape> · pins applied` — and no longer quote the stale tier
+    word / "(bucket-count K)" curve. tierCount on the option recomputed.
 
     ❯ just pick d
 node scripts/ml.mjs pick "$@"
@@ -1276,6 +1288,10 @@ Up
 
 
 Also definitely need a reset option since it's hard to undo those command tweaks. I think re-parse might work but a flag on rescore would be good. potentially with optons to keep manual scores but clear algorithm flags like tier-count and cutoff. That could be default and an extra param to ALSO clear score, or use parse for that.
+**--reset RESOLVED (2026-10-31).** `just rescore <round> --reset` clears stored pins +
+stored knobs (weights/shapes/gate/tier counts/favorite band) and rebuilds the menu;
+manual `--score` edits stay (your keep-manual-scores default). Clearing score state
+too is `just parse <round>`, as you offered.
 This attempt to bump the cutoff back up seems to have ignored me. Maybe again it doesn't actually reflow, just filters the existing options, maybe with a limit to keep one? idk why it did nothing. I just want my original options back to see if cutoff is what messed it up. I already changed cutoff lower and that didn't reflow anything since there was only one candidate left. I need each of these changes to allow options to come back if they now fit the critera. Not constantly narrow with no undo option.
 
 [main ≡ +0 ~2 -0]$$ just rescore --tier-count 4

@@ -533,6 +533,42 @@ test('applyPinsToMenuTradeoffs dedupes options that collapse to the same distrib
   assert.ok(notes.some((n) => /merged/i.test(n)), 'reports deduped options');
 });
 
+test('applyPinsToMenuTradeoffs rebuilds option labels from the reflowed votes', () => {
+  // A pinned curve no longer reproduces from the original bucket count, so the
+  // label must not keep quoting it (the stale "4 tiers (bucket-count 3)" prefix).
+  const tradeoffs = [
+    {
+      kind: 'tier-structure',
+      options: [
+        {
+          label: '4 tiers (bucket-count 3) — 2×3',
+          tierCount: 4,
+          bucketCount: 3,
+          perSong: [
+            { rawOrderIndex: 0, votes: 2 },
+            { rawOrderIndex: 1, votes: 2 },
+            { rawOrderIndex: 2, votes: 2 },
+          ],
+        },
+      ],
+    },
+  ];
+  applyPinsToMenuTradeoffs(tradeoffs, { overrides: { 0: 3 } });
+  const opt = tradeoffs[0].options[0];
+  assert.equal(
+    opt.label,
+    '3 tiers — 3×1 / 2×1 / 1×1 · pins applied',
+    'label states the post-pin shape, not the stale bucket curve'
+  );
+  assert.doesNotMatch(opt.label, /bucket-count/);
+  assert.equal(opt.tierCount, 3, 'tierCount recomputed from reflowed votes');
+  assert.equal(
+    opt.perSong.reduce((a, p) => a + p.votes, 0),
+    6,
+    'budget exact after reflow'
+  );
+});
+
 test('reconcileDownOptionPins promotes worst unfunded songs when shedding from the top', () => {
   // best-first down menu: best songs listed first, downvotes on worst
   const perSong = [
