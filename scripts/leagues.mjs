@@ -95,11 +95,33 @@ export function leagueByName(leagueName) {
   return loadLeagueRegistry().find((lg) => (lg.names || []).some((n) => normalize(n) === normalize(leagueName))) || null;
 }
 
-/** Descriptor matched by a round id's bare slug prefix (e.g. <pattern>-), or null. */
-export function leagueBySlug(roundId) {
+/**
+ * Longest matching slug prefix wins, so a broader family cannot swallow a more
+ * specific one's rounds (e.g. <family>- over <family>-constraints-). Equal-length
+ * ties go to the league listed LATER in the registry file — entries are appended
+ * (save-round/parse hand-edit appends too), so order is creation order and the
+ * newest family wins. Returns the winning {league, prefix} or null.
+ */
+export function mostSpecificSlugMatch(registry, roundId) {
   if (!roundId) return null;
   const bare = bareSlugOf(roundId);
-  return loadLeagueRegistry().find((lg) => (lg.slugPrefixes || []).some((p) => p && bare.startsWith(p))) || null;
+  let best = null;
+  let bestLen = -1;
+  for (const league of registry) {
+    for (const p of league.slugPrefixes || []) {
+      if (!p || !bare.startsWith(p)) continue;
+      if (p.length >= bestLen) {
+        best = { league, prefix: p };
+        bestLen = p.length;
+      }
+    }
+  }
+  return best;
+}
+
+/** Descriptor matched by a round id's bare slug prefix (most-specific match), or null. */
+export function leagueBySlug(roundId) {
+  return mostSpecificSlugMatch(loadLeagueRegistry(), roundId)?.league || null;
 }
 
 /**
@@ -117,7 +139,7 @@ export function deriveFamilyPrefix(roundId) {
   return tokens.length >= 2 ? `${tokens[0]}-` : `${bare}-`;
 }
 
-/** Family-shape display for an auto-registered plain league. */
+/** Family-shape display for an auto-registered token prefix (dashed value). */
 function shapeForPrefix(prefix) {
   if (/<.*>/.test(prefix)) return prefix; // hand-written shape
   return `${prefix}<topic>`;
@@ -131,18 +153,94 @@ function uniquePlainId(registry, prefix) {
   return id;
 }
 
+/** Family-shape display from a prefix: token families open with <topic>, exact-slug ones stay concrete. */
+function familyShapeForPrefixes(prefixes) {
+  const list = prefixes.filter(Boolean);
+  if (!list.length) return '<unknown>';
+  const p = list[0];
+  return p.endsWith('-') ? `${p}<topic>` : p;
+}
+
+/**
+ * Longest common token-run prefix across slugs, shaped for startsWith matching:
+ * every slug lands under `kpop-` (full shared tokens + tail) or under the exact
+ * shared run (`group-one` owns `group-one` and `group-one-covers`). Null when the
+ * slugs share no leading token.
+ */
+export function commonSlugRun(slugs) {
+  const parts = (slugs || []).map((s) => String(s).split('-'));
+  if (!parts.length || !parts[0].length) return null;
+  let run = '';
+  for (let k = 0; ; k++) {
+    const token = parts[0][k];
+    if (token === undefined) break;
+    if (!parts.every((p) => p[k] === token)) break;
+    run = k === 0 ? token : `${run}-${token}`;
+  }
+  if (!run) return null;
+  if (slugs.every((s) => s.startsWith(`${run}-`))) return `${run}-`;
+  if (slugs.every((s) => s === run || s.startsWith(`${run}-`))) return run;
+  return null;
+}
+
+/** Apply a round's bare slug to a matched entry: a no-op when owned, a common-run
+ *  upgrade when the league can be folded one level wider, else an exact-slug add. */
+function applySlugToEntry(entry, bare) {
+  const prefixes = entry.slugPrefixes || [];
+  if (prefixes.some((p) => p && bare.startsWith(p))) return false;
+  // Token-anchored families keep their shape: a divergent sibling slug joins as
+  // an exact add, never widening the pattern below the anchor (`kpop-constraints-`
+  // + `kpop-free-1` stays `['kpop-constraints-', 'kpop-free-1']`, not `kpop-`).
+  // Exact-slug (1-round) families are the ones that widen to the shared run.
+  const tokenAnchored = prefixes.some((p) => p && p.endsWith('-'));
+  const common = tokenAnchored ? null : commonSlugRun([...prefixes, bare]);
+  if (common) {
+    entry.slugPrefixes = [common];
+  } else {
+    entry.slugPrefixes.push(bare);
+  }
+  entry.slugFamily = familyShapeForPrefixes(entry.slugPrefixes);
+  return true;
+}
+
+/**
+ * Merge a confirmed second round into its 1-round family (CLI/save-round path).
+ * @returns {{merged: boolean, upgraded: boolean, entry: League}}
+ */
+export function mergeRoundIntoLeague(leagueId, roundId) {
+  const file = registryFile();
+  let container;
+  try {
+    container = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (err) {
+    throw new Error(`${file} cannot be read for merge (${err.message}).`, { cause: err });
+  }
+  const leagues = (container.leagues || []).map(normalizeDescriptor);
+  const entry = leagues.find((lg) => lg.id === leagueId);
+  if (!entry) throw new Error(`No league "${leagueId}" in ${file}.`);
+  const bare = bareSlugOf(roundId);
+  const before = [...(entry.slugPrefixes || [])];
+  const changed = applySlugToEntry(entry, bare);
+  const upgraded = changed && !(entry.slugPrefixes || []).includes(bare);
+  container.leagues = leagues;
+  mkdirSync(REF_DIR, { recursive: true });
+  writeFileSync(file, `${JSON.stringify(container, null, 2)}\n`, 'utf8');
+  registryCache = { mtime: null, leagues: null, failed: false, key: null };
+  return { merged: changed, upgraded, before, entry };
+}
+
 /**
  * Upsert a plain-league descriptor (name + family prefix; no reminders/scripts).
- * Covered-by-name/covered-by-slug rounds are left untouched — only genuinely
- * unknown official names (or fresh slugs with no matching family) register. An
- * entry created nameless by save-round gets its official name + mode on parse.
+ * A genuinely unknown round registers a **1-round family** (exact bare slug) — the
+ * safe default until a second same-league round proves broader shape (league name
+ * match on parse upgrades the family automatically; text-family merges at
+ * save-round ask for confirmation). Covered-by-name/covered-by-slug rounds are
+ * left untouched. An entry created nameless by save-round gets its official name
+ * + mode on parse.
  * @returns {{added: boolean, descriptor?: League, reason?: 'covered-name'|'covered-slug'|'unreadable'}}
  */
-export function upsertPlainLeague({ roundId, leagueName = null, mode = null }) {
+export function upsertPlainLeague({ roundId, leagueName = null, mode = null, forceFresh = false, addName = false, freshPrefix = null }) {
   const file = registryFile();
-  const byName = leagueName ? leagueByName(leagueName) : null;
-
-  if (byName && byName.mode != null) return { added: false, reason: 'covered-name' };
 
   let container;
   const existed = existsSync(file);
@@ -151,11 +249,13 @@ export function upsertPlainLeague({ roundId, leagueName = null, mode = null }) {
     : { version: 1, note: 'League registry — engine reads this file; plain leagues self-register here. Private data.', leagues: [] };
 
   const leagues = container.leagues.map(normalizeDescriptor);
-  const prefix = deriveFamilyPrefix(roundId);
-  const coveredByName = leagueName
+  // forceFresh (owner confirmed "different league") bypasses both coverage checks
+  // so the slug gets its own fresh 1-round family even when another family's
+  // prefix would claim it.
+  const coveredByName = !forceFresh && leagueName
     ? leagues.find((lg) => (lg.names || []).some((n) => normalize(n) === normalize(leagueName)))
     : null;
-  const coveredBySlug = leagues.find((lg) => (lg.slugPrefixes || []).some((p) => p && bareSlugOf(roundId).startsWith(p)));
+  const coveredBySlug = !forceFresh ? mostSpecificSlugMatch(leagues, roundId)?.league || null : null;
   let changed = false;
 
   if (coveredByName) {
@@ -163,12 +263,18 @@ export function upsertPlainLeague({ roundId, leagueName = null, mode = null }) {
       coveredByName.mode = mode;
       changed = true;
     }
-    if (!coveredByName.slugPrefixes.includes(prefix)) {
-      coveredByName.slugPrefixes.push(prefix);
-      changed = true;
-    }
+    // Official-name match is the same-league proof (no mode gate — repeat parses
+    // with owned slugs stay no-ops): fold the round in — owned slugs stay,
+    // otherwise widen to the common run (or add an exact slug when the round's
+    // naming diverged entirely). Never a broad first-token prefix that could
+    // claim unrelated leagues' rounds.
+    if (applySlugToEntry(coveredByName, bareSlugOf(roundId))) changed = true;
   } else if (coveredBySlug) {
-    if (leagueName && !coveredBySlug.names.includes(leagueName)) {
+    // An official name lands on a slug-matched family only as the FIRST name
+    // (nameless fill) or on the owner's explicit confirm — never as a silent
+    // alias, so shared-prefix reuse has to be confirmed somewhere.
+    const nameless = !(coveredBySlug.names || []).length;
+    if (leagueName && (nameless || addName) && !coveredBySlug.names.includes(leagueName)) {
       coveredBySlug.names.push(leagueName);
       changed = true;
     }
@@ -177,11 +283,18 @@ export function upsertPlainLeague({ roundId, leagueName = null, mode = null }) {
       changed = true;
     }
   } else {
+    // Fresh family: the full bare slug by default (1-round), or the owner-staked
+    // root (`freshPrefix`, typically trailing dash) when they declare one at save.
+    const bare = bareSlugOf(roundId);
+    const fresh = forceFresh && freshPrefix ? normalizeLeaguePrefix(freshPrefix) : bare;
+    if (freshPrefix && bare && !bare.startsWith(fresh) && !fresh.startsWith(bare)) {
+      console.error(`warning: staked family root "${fresh}" does not cover the saved slug "${bare}" — it will not claim this round.`);
+    }
     const descriptor = normalizeDescriptor({
-      id: uniquePlainId(leagues, prefix),
+      id: uniquePlainId(leagues, fresh),
       names: leagueName ? [leagueName] : [],
-      slugFamily: shapeForPrefix(prefix),
-      slugPrefixes: [prefix],
+      slugFamily: familyShapeForPrefixes([fresh]), // 1-round shape until a sibling round widens it
+      slugPrefixes: [fresh],
       mode,
       summary: leagueName
         ? 'Auto-registered plain league.'
@@ -244,6 +357,61 @@ export function rekeyPlainLeague(oldRoundId, newRoundId) {
   writeFileSync(file, `${JSON.stringify(container, null, 2)}\n`, 'utf8');
   registryCache = { mtime: null, leagues: null, failed: false, key: null };
   return { rekeyed: true, entry };
+}
+
+/**
+ * Prefix semantics — trailing dash = token family (<family>- claims every round
+ * under it), no trailing dash = exact-slug family: a one-off league owns its saved
+ * slug itself (plus same-league sub-slugs like <slug>-covers) without implying a
+ * broader <thing>-<topic> series.
+ */
+function normalizeLeaguePrefix(p) {
+  return String(p || '').trim() || null;
+}
+
+/**
+ * Manually adjust a descriptor's slug-family facts (CLI: ml leagues <name> --set-*).
+ * Registry auto-registration never revises a matched entry's shape, so families drift
+ * when a league changes its round naming — this is the hand-fix. Applies only the
+ * provided fields.
+ * @returns {{before: League, after: League}}
+ */
+export function updateLeagueSlugs(leagueId, { family = null, prefixes = null, summary = null } = {}) {
+  const file = registryFile();
+  let container;
+  try {
+    container = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (err) {
+    throw new Error(`${file} cannot be read for edit (${err.message}).`, { cause: err });
+  }
+  if (family == null && prefixes == null && summary == null) return null;
+  const leagues = (container.leagues || []).map(normalizeDescriptor);
+  const entry = leagues.find((lg) => lg.id === leagueId);
+  if (!entry) throw new Error(`No league "${leagueId}" in ${file}.`);
+  const before = { ...entry };
+  if (family != null) {
+    const shape = String(family).trim();
+    if (!shape) throw new Error('--set-family needs a non-empty shape (e.g. <prefix>-<token>).');
+    entry.slugFamily = shape;
+  }
+  if (prefixes != null) {
+    const list = (Array.isArray(prefixes) ? prefixes : [prefixes]).map(normalizeLeaguePrefix);
+    if (list.some((p) => !p)) throw new Error('--set-prefixes needs non-empty prefix values.');
+    entry.slugPrefixes = [...new Set(list)];
+  }
+  if (summary != null) {
+    const text = String(summary).trim();
+    if (!text) throw new Error('--summary needs non-empty text.');
+    entry.summary = text;
+  }
+  container.leagues = leagues;
+  try {
+    writeFileSync(file, `${JSON.stringify(container, null, 2)}\n`, 'utf8');
+  } catch (err) {
+    throw new Error(`${file} cannot be written for edit (${err.message}).`, { cause: err });
+  }
+  registryCache = { mtime: null, leagues: null, failed: false, key: null };
+  return { before, after: entry };
 }
 
 /** Fill a script template with the known round id (and year for <year> slugs). */
@@ -312,12 +480,19 @@ export function leagueSlugActivity(
   { leagues = null, now = new Date(), activeWindowDays = 14, recentCount = 3 } = {}
 ) {
   const registry = leagues ?? loadLeagueRegistry();
+  // Dated ids belong to at most one family: the most-specific matching prefix
+  // (longest wins) — a broader family must not re-claim a narrower league's rounds
+  // in its recency digest.
+  const ownerOf = new Map();
+  for (const id of ids) {
+    if (!hasDatePrefix(id)) continue;
+    const win = mostSpecificSlugMatch(registry, id);
+    if (win) ownerOf.set(id, win.league.id);
+  }
   const out = [];
   for (const league of registry) {
     const matches = ids
-      .filter((id) =>
-        (league.slugPrefixes || []).some((p) => p && hasDatePrefix(id) && bareSlugOf(id).startsWith(p))
-      )
+      .filter((id) => ownerOf.get(id) === league.id)
       .sort()
       .reverse(); // newest first
     const recent = matches.slice(0, recentCount).map((roundId) => {

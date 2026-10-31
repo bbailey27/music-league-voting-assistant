@@ -11,6 +11,149 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-10-30 — Unknown-league auto-save defaults to 1-round families; widening needs proof or a confirmed merge
+
+**Change.** A round saved under a slug matching no family registers with the
+**exact-slug family** (prefix = the bare slug, shape = the bare slug) instead of the
+broad first-token `<family>-<topic>` shape. It widens only two ways.
+
+1. **Proof** — a parsed round whose official league name matches the entry
+   (`upsertPlainLeague` covered-by-name) folds its slug in via
+   `commonSlugRun`: the family widens to the common token run (`kpop-solo` +
+   `kpop-ost` → `kpop-`; `halloween-kpop` + `halloween-kpop-covers` → the exact
+   `halloween-kpop` run that claims both), or appends the bare slug when the
+   round's naming shares no leading token.
+2. **Name match on a covered slug** — save-round drains the clipboard FIRST and
+   extracts the round's official league name from the export `<title>`
+   (`leagueNameFromHtml`); the round's registered-name block shows in every prompt.
+   When the slug matches a family but that name is not one of the entry's, the
+   prompt asks once: `m` = same league with a new official name (family alias list
+   grows — the once-per-new-iteration confirm), `y` = different league → the slug
+   becomes its own fresh 1-round family (`forceFresh` upsert even under a claimed
+   prefix), `<slug>` rename to stake a longer prefix, `n` cancel. Nameless
+   families keep parse-fill semantics (no prompt).
+3. **Name proof on an unmatched slug** — a slug matching no family but whose
+   league name IS registered folds straight into that entry
+   (`mergeRoundIntoLeague`; common-run widen or exact-slug add) without asking.
+4. **Confirmation by token** — save-round offers `m` when the new slug's first token
+   matches an existing 1-round family (`relatedExactFamilies`), showing that
+   family's registered names: `m` = same league →
+   `mergeRoundIntoLeague` widens the family; `y` = separate leagues → own 1-round
+   family; `<slug>` rename and `n` cancel as before. Non-interactive runs save
+   their own 1-round family and print the manual-link hint
+   (`ml leagues <id> --set-prefixes …`). Non-interactive name-mismatch saves stay
+   covered without registering the name (parse still records it silently).
+
+**Why.**
+
+The owner asked for the safe default: single-round until proven otherwise —
+"another matching round appears and I confirm they go together." The broad
+first-token default repeatedly caused two kinds of damage the audit had to undo:
+unrelated leagues pooling under their shared first token, and one-off leagues
+(e.g. a single round that never recurs) left with an open-ended `halloween-<topic>`
+family implying future rounds that stay wrong until hand-narrowed. Exact-slug
+families keep both failure modes away by default and still merge cleanly when
+evidence arrives.
+
+**Overruled.** The broad first-token registration (plain-league auto-register since
+2026-10-23), and the interim choice to make manual `--set-prefixes` the only
+1-round mechanism (same day, superseded in-session: the default flipped instead,
+keeping the manual flags for drift fixes and registry curation).
+
+**Refs.** `working tree` — `scripts/leagues.mjs`, `scripts/save-round.mjs`,
+`spec/leagues.md`, `README.md`, `tests/leagues.test.mjs`.
+
+(Final shape note: name-aware coverage landed in the same pass — see items 2–3
+above; save-round now drains the clipboard before prompting so the extracted
+league name can drive or skip every prompt.)
+
+Final tree (same pass), uniform across family kinds: (1) owned slug + name check
+(`m` alias / `y` separate / `<round-slug>` rename — prompted only when the family
+is named and the round's league name is unregistered), (2) unowned slug with a
+registered-league-name proof → auto-fold, (3) unowned slug sharing a first token
+with any family → merge (`m` or numbered `1..N`) or separate, (4) nothing matches
+anywhere → fully new league auto-saves its own 1-round family. `<round-slug>`
+answers are used as THIS round's bare slug (date-stamped), never as a family id;
+the loop re-runs family rules on it. Merging INTO a token family never weakens its
+anchor: `applySlugToEntry` only widens exact-slug (1-round) families to their
+shared run; token-anchored families keep their prefix and take divergent sibling
+slugs as exact adds. Two save-time additions the audit follow-up needed:
+`root <x-test->` answers stake an owner-chosen family root at save (forceFresh
+plus `freshPrefix` — "y alone" keeps the FULL round slug, while `root
+kpop-test-` makes `kpop-test-run` the first round of a `kpop-test-<topic>`
+series that later `kpop-test-*` rounds auto-join via the registered name), and
+when the round's league name is registered under a DIFFERENT family than the
+slug owner, that family is offered as the suggested correction (numbered `1` →
+fold, name is the proof) before generic first-token candidates.
+
+---
+
+## 2026-10-30 — Slug matching is most-specific-first (longest prefix wins)
+
+**Change.** `leagueBySlug`, `upsertPlainLeague`'s covered-by-slug check, and
+`leagueSlugActivity` all resolve slugs through a new shared
+[`mostSpecificSlugMatch`](../scripts/leagues.mjs): among every league whose
+`slugPrefixes` match a round's bare slug, the **longest prefix** claims the round;
+equal-length ties go to the family listed **later** in the registry file — entries
+are appended, so file order is creation order and the **newest family wins a tie**.
+The broader family no longer re-claims those rounds in its recency digest either,
+and save-round's `familyDigestLines` recalls slugs from this resolving winner
+instead of the first prefix-matching family it saw. Same pass (final form):
+prefixes are dash-explicit — a value ending in `-` is a token family, one without
+is an **exact-slug family**, so a one-off league (a round that will never recur)
+owns its saved slug itself via `--set-family '<slug>' --set-prefixes '<slug>'`
+without implying an open `<topic>` series; `upsertPlainLeague` covered-by-name
+correspondingly appends a returning league round's exact bare slug (never a broad
+first-token prefix) when it lands outside the entry's prefixes, and auto-save
+leaves every saved league with at least a family record — one-off ones narrow to the 1-round
+shape by hand.
+
+**Why.** Registry order was previously the only thing keeping overlapping-league
+prefixes (`kpop-` before a later `kpop-constraints-`) from swallowing each other, and
+the audit that surfaced the drifted kpop family also showed overlapping broad/narrow
+families are a real layout ("Kpop songs!" rounds stay bare `kpop-<theme>` while the
+Constraints Edition rounds use `kpop-constraints-<theme>`). With specific-first
+matching both descriptors coexist cleanly; the registry was split accordingly —
+the Constraints Edition descriptor's id changed from the stale generic
+`kpop-themed` to `kpop-constraints` (matching its family and official name) and it
+no longer carries the "Kpop songs!" name, while a new `kpop-songs` descriptor holds
+the broad `kpop-` family for that league. (A later correction un-did the planned
+Spooky Kpop 👻 re-keying: `halloween-kpop` stays under the `halloween-` family —
+`halloween` is the owner's search key and no family was in conflict.)
+
+**Overruled.** First-match-by-registry-order (the rule `leagueBySlug` had since
+2026-07-17 and auto-registration since 2026-10-23) — with append-at-the-bottom
+ordering that granted ties to the _oldest_ family, exactly backwards from how
+leagues evolve.
+
+**Refs.** `working tree` — `scripts/leagues.mjs`, `spec/leagues.md`,
+`scripts/cli-help.mjs`, `README.md`, `tests/leagues.test.mjs`,
+`tests/fixtures/leagues-registry.json`.
+
+---
+
+## 2026-10-30 — `ml leagues <name>` edit flags fix a drifted slug family
+
+**Change.** `just leagues <name>` accepts `--set-family '<shape>'`,
+`--set-prefixes 'p1,p2'`, and `--summary '<text>'` (new engine function
+[`updateLeagueSlugs`](../scripts/leagues.mjs)). It diffs before → after, re-details the
+entry, and warns when the family shape's concrete prefix is not covered by
+`slugPrefixes`. Writes `data/ref/leagues.json` in place and busts the engine cache
+in-process. Also: the registry listing footer now points to `ml help leagues`.
+
+**Why.** Auto-registration never revises a descriptor it already matches, so a league
+whose round naming evolves keeps its stale `slugFamily` — a real drift hit the
+kpop-themed entry (shape `kpop-<theme>`, actually saved every constraint era round as
+`<family>-constraints-<topic>`). The broad prefix also risked pulling unrelated future
+rounds into the family. A hand fix was possible by editing the private JSON, but the
+shift happened repeatedly enough to want a reviewed-from-CLI path with file layout
+enforced.
+
+**Refs.** `working tree` — `scripts/leagues.mjs`, `scripts/ml.mjs`,
+`scripts/cli-help.mjs`, `README.md`, `spec/leagues.md`, `tests/leagues.test.mjs`.
+
+---
+
 ## 2026-10-30 — save-round unknown-slug prompt states its options and accepts a correction
 
 **Change.** When `just save-round <slug>` matches no slug family, the interactive
@@ -42,7 +185,7 @@ and verified fixed the same way against the sandbox data dir.
 keep the typed slug: everything not `y` aborted, and the question was so unlabeled it
 read as a shell prompt — command text typed into it aborted the save twice.
 
-**Refs.** `working tree` — `scripts/save-round.mjs`, `scripts/cli-help.mjs`,
+**Refs.** `bf96bc5` — `scripts/save-round.mjs`, `scripts/cli-help.mjs`,
 `README.md`.
 
 ---
@@ -87,7 +230,7 @@ entry); the registry itself moved into the data submodule.
 was how stray round folders happened (2026-10-13 dated-id incident). The static registry
 knew only families, never what you actually typed last week.
 
-**Refs.** `working tree` — `scripts/leagues.mjs`, `scripts/ml.mjs`, `justfile`,
+**Refs.** `12a32af` — `scripts/leagues.mjs`, `scripts/ml.mjs`, `justfile`,
 `scripts/cli-help.mjs`, `README.md`, `tests/leagues.test.mjs` (ships with the
 2026-10-23 entry's commit).
 
@@ -453,7 +596,7 @@ writes.
 **Why.** Two year leagues differ on whether pre-album singles count; `albumReleaseDate`
 read like a gate field when it only records what the URI points at.
 
-**Refs.** `working tree` — `spec/release-dates.md`, `scripts/leagues.mjs`,
+**Refs.** `12a32af` — `spec/release-dates.md`, `scripts/leagues.mjs`,
 `scripts/release-year-gate.mjs`, `data/ref/release-dates.json`
 
 ---
@@ -472,7 +615,7 @@ levels. `bg-years` carries `releaseDateRule: version-earliest` in
 **Why.** The file was referenced from the league registry and gate script but missing;
 eligibility rules differ by league and by recording version, not one global "earliest ever."
 
-**Refs.** `working tree` — `spec/release-dates.md`, `scripts/leagues.mjs`,
+**Refs.** `12a32af` — `spec/release-dates.md`, `scripts/leagues.mjs`,
 `scripts/release-year-gate.mjs`, `data/ref/release-dates.json`
 
 ---
@@ -506,7 +649,7 @@ track is fine; standing co-ed acts are not boy groups or male soloists.
 **Overruled.** Reminder text that DQ'd all male–female collabs (added when soloists
 became eligible 2026-07-28).
 
-**Refs.** `working tree` — `scripts/leagues.mjs`, `spec/leagues.md`, `scripts/cli-help.mjs`,
+**Refs.** `7971919` — `scripts/leagues.mjs`, `spec/leagues.md`, `scripts/cli-help.mjs`,
 `tests/leagues.test.mjs`
 
 ---
@@ -540,7 +683,7 @@ tables. All explore commands always print Up/Down/Ballot via `finishExploreCli`;
 **Why.** Owner wanted `--pin 8:1,5:1` to constrain every option column while keeping
 distinct staircases, and `--weights` on parse to show updated tables on thematic rounds.
 
-**Refs.** `working tree` — `scripts/round/explore.mjs`, `scripts/round/pick.mjs`
+**Refs.** `d5ad9b7` — `scripts/round/explore.mjs`, `scripts/round/pick.mjs`
 (`applyPinsToMenuTradeoffs`, `reconcileDownOptionPins`, `menuProfile`,
 `syncBallotFromExploreMenu`), `scripts/parse-round.mjs`, `scripts/merge-scores.mjs`,
 `scripts/rescore-round.mjs`, `scripts/pick-round.mjs`, `scripts/parse/pipeline.mjs`

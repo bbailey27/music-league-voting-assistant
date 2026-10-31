@@ -41,7 +41,7 @@ import {
   DEFAULT_CLI_COMMENT_WIDTH,
 } from './ml-config.mjs';
 import { HELP, HELP_TOPICS, cmdHelpText } from './cli-help.mjs';
-import { leagueForRound, leagueDetailLines, leagueSlugActivity, loadLeagueRegistry, registerPlainLeaguesFromRounds } from './leagues.mjs';
+import { leagueForRound, leagueDetailLines, leagueSlugActivity, loadLeagueRegistry, registerPlainLeaguesFromRounds, updateLeagueSlugs } from './leagues.mjs';
 import { printPickCli } from './parse/cli-print.mjs';
 
 const SCRIPTS_DIR = 'scripts';
@@ -105,6 +105,9 @@ const VALUE_FLAGS = new Set([
   '--out',
   '--order',
   '--age',
+  '--set-family',
+  '--set-prefixes',
+  '--summary',
 ]);
 
 const KNOWN_BOOLEAN_FLAGS = new Set([
@@ -735,7 +738,7 @@ function backfillPlainLeagues() {
   return addedNum;
 }
 
-function cmdLeagues(query) {
+function cmdLeagues(query, edits = null) {
   if (!query) {
     console.log('Recurring leagues (see spec/leagues.md):\n');
     backfillPlainLeagues(); // register historical rounds first so the listing is complete
@@ -762,27 +765,122 @@ function cmdLeagues(query) {
         `Dormant (no round in 2 weeks):\n  ${dormant.map((d) => `${d.league.id} (${d.league.slugFamily})`).join(', ')}`
       );
     }
-    console.log('\nRun "ml leagues <name>" for reminders, scripts, and fit profiles.');
+    console.log('\nRun "ml help leagues" for detail + slug-family flags.');
     return;
   }
   const registry = loadLeagueRegistry();
   const q = query.trim().toLowerCase();
-  const matches = registry.filter(
-    (lg) =>
-      lg.id.includes(q) ||
-      (lg.names || []).some((n) => n.toLowerCase().includes(q)) ||
-      lg.slugFamily.toLowerCase().includes(q) ||
-      (lg.slugPrefixes || []).some((p) => p && q.startsWith(p))
-  );
+  // Score each candidate so specificity wins detail lookup the same way slug
+  // matching does: id > official name > family shape > prefix, and among prefix
+  // matches the longest (most specific) wins, later-listed family breaks ties.
+  const scored = registry
+    .map((lg) => {
+      let score = -1;
+      if (lg.id.includes(q)) score = 140;
+      else if ((lg.names || []).some((n) => n.toLowerCase().includes(q))) score = 90;
+      else if (lg.slugFamily.toLowerCase().includes(q)) score = 60;
+      else {
+        let p = -1;
+        for (const prefix of lg.slugPrefixes || []) {
+          if (prefix && q.startsWith(prefix) && prefix.length >= p) p = prefix.length;
+        }
+        if (p >= 0) score = p;
+      }
+      return score >= 0 ? { lg, score } : null;
+    })
+    .filter(Boolean);
+  const matches = scored;
   if (!matches.length) {
     console.error(`No league matches "${query}". Known: ${registry.map((l) => l.id).join(', ')}`);
     process.exit(1);
   }
-  if (matches.length > 1) {
-    console.error(`"${query}" is ambiguous — matches: ${matches.map((l) => l.id).join(', ')}`);
+  const best = matches.reduce((acc, cur) => (cur.score > acc.score ? cur : acc));
+  const tied = matches.filter((m) => m.score === best.score);
+  if (tied.length > 1) {
+    console.error(`"${query}" is ambiguous — matches: ${tied.map((m) => m.lg.id).join(', ')}`);
     process.exit(1);
   }
-  console.log(leagueDetailLines(matches[0]).join('\n'));
+  const target = best.lg;
+  if (edits) {
+    let result;
+    try {
+      result = updateLeagueSlugs(target.id, edits);
+    } catch (err) {
+      console.error(String(err.message));
+      process.exit(1);
+    }
+    const { before, after } = result;
+    console.log(`Updated ${after.id} (data/ref/leagues.json — commit data submodule):`);
+    if (before.slugFamily !== after.slugFamily) {
+      console.log(`  slugFamily: ${before.slugFamily} → ${after.slugFamily}`);
+    }
+    if (JSON.stringify(before.slugPrefixes) !== JSON.stringify(after.slugPrefixes)) {
+      console.log(`  slugPrefixes: ${before.slugPrefixes.join(', ')} → ${after.slugPrefixes.join(', ')}`);
+    }
+    if (before.summary !== after.summary) {
+      console.log(`  summary: ${before.summary} → ${after.summary}`);
+    }
+    const concrete = after.slugFamily.replace(/<[^>]*>+/g, '');
+    if (
+      concrete &&
+      !(after.slugPrefixes || []).some((p) => p.startsWith(concrete) || concrete.startsWith(p))
+    ) {
+      console.error(
+        `⚠ slugFamily's concrete prefix "${concrete}" is not covered by slugPrefixes (${after.slugPrefixes.join(', ')}) — adjust with --set-prefixes.`
+      );
+    }
+    console.log('');
+  }
+  const detailed = edits ? loadLeagueRegistry().find((lg) => lg.id === target.id) : target;
+  console.log(leagueDetailLines(detailed).join('\n'));
+}
+
+/** Slug-family edit flags for `ml leagues <name>` (registry manual fix, spec/leagues.md). */
+const LEAGUES_EDIT_FLAGS = new Set(['--set-family', '--set-prefixes', '--summary']);
+
+/** `ml leagues` args: one optional league query + the edit flags; unknown flags rejected. */
+function parseLeaguesArgs(rest) {
+  let query = null;
+  const flags = {};
+  for (let i = 0; i < rest.length; i++) {
+    const t = rest[i];
+    if (t.startsWith('-')) {
+      if (!LEAGUES_EDIT_FLAGS.has(t)) rejectUnknownFlag(t);
+      const v = flags[t];
+      if (v != null) {
+        console.error(`Flag ${t} passed twice.`);
+        process.exit(1);
+      }
+      const value = rest[i + 1];
+      if (value == null || value.startsWith('-')) {
+        console.error(`Flag ${t} needs a value.`);
+        process.exit(1);
+      }
+      if (t === '--set-prefixes') {
+        flags[t] = value.split(',').map((s) => s.trim()).filter(Boolean);
+      } else {
+        flags[t] = value;
+      }
+      i++;
+    } else if (query == null) {
+      query = t;
+    } else {
+      console.error(`Unexpected argument "${t}".`);
+      process.exit(1);
+    }
+  }
+  const edits = flags['--set-family'] || flags['--set-prefixes'] || flags['--summary']
+    ? {
+        family: flags['--set-family'] ?? null,
+        prefixes: flags['--set-prefixes'] ?? null,
+        summary: flags['--summary'] ?? null,
+      }
+    : null;
+  if (edits && !query) {
+    console.error('Edit flags need a league name (ml leagues <name> --set-family ...).');
+    process.exit(1);
+  }
+  return { query, flags: edits };
 }
 
 function usage() {
@@ -879,8 +977,8 @@ function main() {
       return cmdTidy(rest);
     case 'leagues':
     case 'league': {
-      const { name } = splitRoundArgs(rest);
-      return cmdLeagues(name);
+      const { query, flags } = parseLeaguesArgs(rest);
+      return cmdLeagues(query, flags);
     }
     case 'config':
       return cmdConfig(rest);

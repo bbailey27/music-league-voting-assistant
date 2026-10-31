@@ -1,6 +1,7 @@
 // CLI help text — single source for `just help` / `ml help` and README parity.
 
 export const HELP_TOPICS = [
+  'save-round',
   'parse',
   'merge',
   'pick',
@@ -81,11 +82,10 @@ export const HELP = {
   overview: `Music League pipeline — parse → (merge) → pick → render
 
 Stages (each reads/writes JSON; only save-round and parse touch HTML):
-  0. save-round  clipboard → data/rounds/<dated id>.html (self-dates; reuses a
-                 round's existing dated id, sets the current round; an unknown
-                 slug family prints recent ones and lets you y-keep it, type a
-                 correction, or n-cancel; warns when the clipboard has no HTML
-                 <table> — a stray copy still saves, replace it by re-running)
+  0. save-round  clipboard → data/rounds/<dated id>.html. Reads the league name
+                 from the export <title> and runs the family check — merging,
+                 staking a family root, or separating all prompt with registered
+                 names shown. Full ladder: just help save-round.
   1. parse   HTML/text → music.md + music.json
   2. merge   music.json + fit.json → scores.json   (thematic only)
   3. pick    record distribution choice (A/B/C) → pick in JSON + picks.jsonl
@@ -118,7 +118,7 @@ Omit it to continue the same round (e.g. just parse --fit, just run, just merge)
 Name a round explicitly to switch (e.g. just parse <round> --fit).
 
 Fuzzy match: a slug token or a full date ("2026-06-09").
-Run "just help <cmd>" for flags (parse, merge, pick, final, fit, scores, pin, flags, tidy, config).`,
+Run "just help <cmd>" for detail (save-round, parse, merge, pick, final, fit, scores, pin, flags, tidy, config, leagues).`,
 
   pin: `just help pin — manual vote overrides (--pin)
 
@@ -149,6 +149,60 @@ Examples:
   just rescore --pin 8:1,5:1               # every option column honors both pins
   just merge <round> --pin 3:3               # thematic explore with pinned menu
   just pick <round> A --pin 9:2 --reason "pin two songs to 2; reflow drops bottom 1"`,
+
+  'save-round': `just save-round <slug>
+
+Save the clipboard as a round export and decide what slug family it joins, with
+the league name read from the export <title>. Every family decision shows the
+registered names of the families being considered.
+
+Vocabulary:
+  round slug   the bare round name saved under (e.g. kpop-test-run) — always
+               date-stamped; this is the round's identity on disk
+  family       a descriptor in data/ref/leagues.json that claims rounds via
+               slugPrefixes (dash-prefixed token families or exact-slug 1-round
+               families); visible under just leagues, recalled from parse
+  family root  the prefix you stake so later rounds of a series auto-join it
+
+The family ladder, in order:
+1. Slug owned by a family and the round's league name is registered for it
+   → saves silently. A nameless family fills its first name from parse.
+2. Slug owned but the league name is new → asked once:
+     m               same league, new official name — the alias joins the owning
+                     family (this is the once-per-iteration confirm, e.g. a new
+                     last.fm numbering)
+     1..N            merge into numbered OTHER family instead — suggested
+                     correction first when the round's league name is already
+                     registered elsewhere (the name is the proof), then fami-
+                     lies sharing the slug's first token
+     root <x-test->  different league — stake the family root yourself: the
+                     round keeps its FULL slug but joins the typed root
+                     (root kpop-test- makes kpop-test-run the first round of a
+                     kpop-test-<topic> series). Answering y instead keeps the
+                     FULL slug as a 1-round (solo) family.
+     <round-slug>    save under a NEW bare round slug — it is a round name,
+                     never a family id, and family rules re-check it
+     n               cancel — nothing is written; the clipboard is intact
+3. Slug matches nothing but the league name is registered → folds into that
+   family automatically (the name is the same-league proof).
+4. Slug matches nothing and shares a first token with some family → merge or
+   separate prompt: m / 1..N / root <…> / y / <round-slug> / n, names shown.
+5. Nothing matches anywhere (slug, first token, league name) → fully new
+   league: saves without a prompt as its own 1-round family.
+
+Non-interactive runs never merge — a mismatch saves covered (no name) or as its
+own 1-round family, with the later link-up hint printed.
+
+Later corrections:
+  just rename <new-slug>               # re-align a saved round (cascades)
+  just leagues <id> --set-family …     # re-shape / re-root a drifted family
+  just leagues <id> --set-prefixes …   # replace the matching prefixes
+
+Example:
+  just save-round kpop-test-run
+  # owned by kpop-<theme>, page title "Kpop Test Series" not registered:
+  #   root kpop-test-  → family kpop-test-<topic>; kpop-test-two joins it later
+  #   y alone          → 1-round family kpop-test-run (solo-league assumption)`,
 
   parse: `just parse [<name>] [flags]
 
@@ -352,12 +406,39 @@ eligibility/DQ reminders, reusable scripts, rules, skills, and fit-guidance prof
    just leagues <name>       Detail one league — matches by id, league name, or slug
                              family/prefix.
 
+Slug-family edit flags (name + flags together) — auto-registration never revises
+a matched entry, so fix a drifted family by hand. Round matching is specific-first:
+the longest matching slugPrefixes entry claims the round (registry order breaks ties),
+so overlapping families coexist as long as the narrow one has the longer prefix:
+
+  --set-family '<shape>'    Set the slugFamily display shape (quote values with <…>).
+  --set-prefixes 'p1,p2'    Replace slugPrefixes — the bare prefixes that actually
+                            match rounds (startsWith). Dash-explicit: trailing '-'
+                            is a token family (<family>- claims every round under
+                            it); no dash is an exact-slug family — a one-off league
+                            owns its saved slug itself. Match rule: the longest
+                            matching prefix claims a round; equal-length ties go to
+                            the newest (last-listed) family.
+  --summary '<text>'        Replace the one-line summary.
+
+Flags print a before → after diff, refresh the detail card, and warn when the
+family's concrete prefix is not covered by slugPrefixes. Writes data/ref/leagues.json
+(commit the data submodule); tests write a fixture instead (ML_LEAGUES_JSON).
+
+At save time the same decisions are available inline: the save-round ladder (m /
+1..N merge / root <x-test-> stake / y separate) asks league-name-aware questions
+with registered names shown — full ladder: just help save-round.
+
 The matched league's reminders + scripts also print automatically after "just parse",
 and "just status <round>" shows which league a round belongs to.
 
 Example:
   just leagues                # active-first registry digest (slug recall before saves)
-  just leagues <league-id>    # one league's reminders, scripts, fit profiles`,
+  just leagues <league-id>    # one league's reminders, scripts, fit profiles
+  just leagues <league-id> --set-family 'kpop-constraints-<theme>'
+      --set-prefixes 'kpop-constraints-' --summary '…'   # narrow a drifted family
+  just leagues <one-off-id> --set-family 'halloween-kpop'
+      --set-prefixes 'halloween-kpop'                    # one-off: 1-round family`,
 
   config: `just config [comment-width [auto|<n>|unset]]
 

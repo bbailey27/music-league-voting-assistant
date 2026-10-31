@@ -169,17 +169,50 @@ poisons the next `just run` with "No songs found"; the same slug on re-run repla
 the file with the proper export. Later commands accept either name;
 a bare slug snaps to its single dated sibling.
 
-Naming-consistency: save-round prints your slug's family with its 3 most recent
-concrete slugs; an unknown family shows the digest of other recent families and
-prompts (from a terminal): `y` saves with the slug you typed (auto-registering the
-new family), typing a different bare slug saves under that instead, `n`/Enter cancels
-without writing (the clipboard stays intact). Non-interactive runs save as typed.
+Naming-consistency: save-round drains the clipboard first, extracts the round's
+official league name from the export `<title>`, and runs the family check with it
+(registered names of candidate families shown in every prompt). One uniform ladder:
+
+- slug matches a family — the prompt lists the slug owner plus any stronger
+  candidates: a family already carrying your round's league name (suggested
+  correction, `1` = fold into it — the name is the proof), then families sharing
+  the first token (numbered). Answers: `m` = same league as the slug owner
+  (official-name alias; once per new league iteration for series like the
+  last.fm ones); `1..N` = merge into that numbered family instead; `root
+  <kpop-test->` = different league — stake the family root yourself (the round
+  saves under its slug but joins the root you type, e.g. `root kpop-test-` makes
+  `kpop-test-run` the first round of a `kpop-test-<topic>` series);
+  `y` = full round slug as its own 1-round family; `<round-slug>` = save under a
+  NEW bare round slug (date-stamped; a round name, never a family id, and family
+  rules re-check it); `n` cancels. Nameless
+  families fill their first name from parse without a prompt.
+- slug matches nothing but its league name is registered → folds into that family
+  automatically (the name is the proof).
+- slug matches nothing and shares a first token with any family (1-round or token)
+  → merge-or-separate prompt: `m`/`1..N` = merge into that numbered family
+  (1-round families widen to their shared run; token families keep their anchor
+  and add the sibling slug as-is), `y` = separate, `<round-slug>` renames.
+- nothing matches — slug, token, and name all unregistered → **fully new league:
+  auto-saves** as its own 1-round family without a prompt.
+- `n`/Enter cancels without writing (the clipboard stays intact). Non-interactive
+  runs never merge: a mismatch saves its own or the covered family unchanged, and
+  the hint names the later `ml leagues <id> --set-prefixes …` link-up.
 Kept slugs auto-register their family in `data/ref/leagues.json` (plain leagues get
-no reminders — special rules stay optional). `just rename <new-slug>` re-aligns a
+no reminders — special rules stay optional); a parsed round whose official name
+matches an entry widens that entry's family automatically — the name is the proof.
+`just rename <new-slug>` re-aligns a saved round afterwards; family re-shaping for
+drift is `ml leagues <id> --set-family/--set-prefixes`. **Full ladder, including
+the `root <x-test->` answer: `just help save-round`.**
 saved round afterwards, keeping the date and cascading input/analysis/picks/registry.
 `just leagues` lists every family
 active-first (14-day recency window; archived rounds still count) and details one by
-id/name/prefix.
+id/name/prefix. When a league drifts to a new slug pattern, `just leagues <name>`
+accepts `--set-family`, `--set-prefixes`, and `--summary` to fix the descriptor by
+hand (auto-registration never revises a matched entry). Match rule: the longest
+matching `slugPrefixes` entry claims a round, equal-length ties go to the
+newest (last-listed) family. Prefixes are dash-explicit: `x-` is a token family,
+`x-y` without dash an exact-slug family — the 1-round shape for one-off leagues.
+Details: `just help leagues`.
 
 ### CLI flags
 

@@ -23,6 +23,16 @@
       "summary": "Example thematic league.",
       "reminders": [],
       "scripts": []
+    },
+    {
+      "id": "alpha-constraints",
+      "names": [],
+      "slugFamily": "alpha-constraints-<theme>",
+      "slugPrefixes": ["alpha-constraints-"],
+      "mode": "objective",
+      "summary": "Example constraint-era league (more specific than the broad alpha- family).",
+      "reminders": [],
+      "scripts": []
     }
   ]
 }
