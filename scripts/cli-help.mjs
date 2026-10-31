@@ -16,46 +16,58 @@ export const HELP_TOPICS = [
   'leagues',
 ];
 
-const PIN = `  --pin <index>:<votes>
+const PIN = `  --pin <index|title>:<votes>
                           Pin one song's vote count (repeatable; comma-separate:
-                          --pin 9:2,12:1). Index = raw submission order (# column
-                          in music.md and CLI tables). votes > 0 = upvotes;
-                          votes < 0 = downvotes when the round has downs enabled.
-                          Other songs reflow so each bank stays exact. On pick,
-                          pins reconcile at the margin against the chosen option.`;
+                          --pin 9:2,12:1 — or space-separated: --pin 9:2 12:1).
+                          Index = raw submission order (# column in music.md and
+                          CLI tables); a title fragment may stand in for the
+                          index (--pin fox:2) resolving exact → substring →
+                          subsequence, ambiguous fragments error with the
+                          candidates. votes > 0 = upvotes; votes < 0 = downvotes
+                          when the round has downs enabled. Other songs reflow
+                          so each bank stays exact. On pick, pins reconcile at
+                          the margin against the chosen option. Short form: -p.`;
 
-const SCORE_OVERRIDE = `  --score <index>:<value>
+const SCORE_OVERRIDE = `  --score <index|title>:<value>
                           Write a music score onto music.json (no HTML re-parse).
-                          Index = raw submission order. Value accepts modifier
-                          suffixes: 74.5+, 76-, 75?, 74.5+? (same as parsed
-                          comments). Clears needsUserInput — song enters allocation
-                          normally. Adding a score also clears a DQ that held only
-                          because the song had no score. <index>:DQ instead
-                          disqualifies the song (kept score stays on the record;
-                          allocation reflows without it). Repeatable;
-                          comma-separate.
-  --fit-score <index>:<value>
+                          Index = raw submission order (a title fragment may
+                          stand in, e.g. --score bohemian:74). Value uses the same
+                          grammar as scoring comments: literal digits scale
+                          (7 → 70, 705 → 70.5), \`=\` reads as \`+\` (73= → 73+),
+                          and modifiers attach: 74.5+, 76-, 75?, 74.5+?,
+                          76play / 76 play / 76play?, or plain DQ to disqualify
+                          the song (kept score stays on the record; allocation
+                          ignores DQ songs — valid on both --score and
+                          --fit-score). Clears needsUserInput — song enters
+                          allocation normally; adding a score also clears a DQ
+                          that held only because the song had no score.
+                          Repeatable; comma-separate (or space-separate pairs:
+                          --score 5:74 7:DQ). Short form: -sc.
+  --fit-score <index|title>:<value>
                           Same for fitScore on fit.json (thematic) or the song
-                          record on music-only rounds (numeric values only —
-                          DQ belongs on --score).`;
+                          record on music-only rounds (numeric values use the
+                          same grammar; DQ disqualifies the song like
+                          --score <i>:DQ). Short form: -fs.`;
 
 const SHAPE = `  --shape <preset>
                           Allocation curve preset: auto (default — enumerates
                           budget-exact staircases), bell, balanced (alias for
-                          bell), top-heavy, compressed, relative.`;
+                          bell), top-heavy, compressed, relative. Short: -sh.`;
 
 const DOWN_SHAPE = `  --down-shape <shape>
                           Downvote distribution when downs are enabled:
                           concentrated | flat | curved (aliases: worst, even,
                           curve, bell). Pick also accepts short positional
                           codes after the letter: cv (curved), fl (flat), cc
-                          (concentrated) — e.g. just pick <round> A cv.`;
+                          (concentrated) — e.g. just pick <round> A cv.
+                          Short form: -ds.`;
 
-const TIER_KNOBS = `  --tier-count <n>         Force exactly n distinct upvote point tiers.
-  --bucket-count <n>       Force n funded score-cluster tiers (lower-level knob).`;
+const TIER_KNOBS = `  --tier-count <n>          Force exactly n distinct upvote point tiers (--tc).
+  --bucket-count <n>        Force n funded score-cluster tiers (--bc).`;
 
 const FAVORITE_BAND = `  --favorite-band <min>    Merge raw music scores ≥ min into one shared
-                          top tier (default 80 on music-only rounds).
+                          top tier (floor scales like comments: -fb 7 = 80-style
+                          min 70 column). Short: -fb.
   --no-favorite-band       Disable favorite-band merge.`;
 
 const RANK = `  --rank combined|fit|music
@@ -63,20 +75,24 @@ const RANK = `  --rank combined|fit|music
                           combined — blended fit+music (default on merge and
                           thematic pick; auto on parse when comments carry manual
                           fit scores); fit — fit score only; music — music score
-                          only (default on music-only pick/parse).`;
+                          only (default on music-only pick/parse). Short: -rk.`;
 
 const WEIGHTS = `  --weights <fit>:<music>  Blend ratio for combined ranking, e.g. 3:2 or
-                          0.6:0.4 (normalized to sum 1). Stored in profile when
-                          set. Defaults when omitted:
+                          0.6:0.4 (normalized to sum 1). Short form: -w.
+                          Stored in profile when set. Defaults when omitted:
                           • merge / thematic rounds — 7:3 (fit:music)
                           • parse with manual fit in comments — 5:5 (50:50)`;
 
 const GATE = `  --gate passFail|passFailMaybe
                           Thematic gate model (pass/fail or pass/maybe/fail).
-  --cutoff <axis>:<min>    Numeric cutoff gate instead, e.g. fit:70, music:65, or
-                          combined:76. axis = fit | music | combined. A combined
-                          cutoff gates allocation only — it does NOT rescale the
-                          combined scores (reflows votes to songs above the line).`;
+  --cutoff [<f|m|c>|<axis>]:<min>
+                          Numeric cutoff gate instead, e.g. fit:70, music:65,
+                          combined:76 — axis shorthand m | f | c (m:65 = music:65),
+                          and a bare value assumes music (-c 70 = music:70, -c 735
+                          = music ≥ 73.5 — values scale like scoring comments).
+                          A combined cutoff gates allocation only — it does NOT
+                          rescale the combined scores (reflows votes to songs
+                          above the line). Short form: -c.`;
 
 export const HELP = {
   overview: `Music League pipeline — parse → (merge) → pick → render
@@ -109,9 +125,12 @@ Re-parse only when you replace the HTML export. Pick is always a separate step.
 
 Commands:
   ml parse | merge | pick | rescore | fit | scores | final | run | status | tidy | leagues | config | help
+Command shortcuts: s = save-round, p = pick, r = rescore (just s <slug>, ml r …).
+Short flags: -w weights · -c cutoff · -p pin · -rk rank · -sh shape · -ds down-shape ·
+  -tc tier-count · -bc bucket-count · -fb favorite-band · -sc score · -fs fit-score.
 
-Re-weight/re-shape a parsed round from JSON (no HTML re-read): just rescore <name> --weights 5:5.
-Set a missing or wrong raw score: just rescore <name> --score <i>:<v> (see just help rescore).
+Re-weight/re-shape a parsed round from JSON (no HTML re-read): just rescore <name> -w 5:5.
+Set a missing or wrong raw score: just rescore <name> -sc <i>:<v> (see just help rescore).
 
 <name> is optional after the first explicit use — stored in data/.current-round.
 Omit it to continue the same round (e.g. just parse --fit, just run, just merge).
@@ -122,11 +141,17 @@ Run "just help <cmd>" for detail (save-round, parse, merge, pick, final, fit, sc
 
   pin: `just help pin — manual vote overrides (--pin)
 
-Format:  --pin <index>:<votes>     (repeatable; comma-separate: --pin 9:2,12:1)
+Format:  --pin <index|title>:<votes>     (repeatable; comma-separate or
+                                          space-separate pairs: --pin 9:2,12:1
+                                          ≡ --pin 9:2 12:1; short form: -p)
 
   index   Raw submission order — the # column in music.md "Raw order (for entering
           votes)" and the ballot printed after parse/pick. Same numbering Music
-          League uses when you enter votes by position (0, 1, 2, …).
+          League uses when you enter votes by position (0, 1, 2, …). A title
+          fragment may replace the index (--pin fox:2) — exact → substring →
+          subsequence match, case-insensitive; an ambiguous fragment errors with
+          the candidate list, and an all-numeric head is always an index even
+          when a song's title is that number.
 
   votes   Integer count on that song:
           • positive → upvotes   (9:2  = give song #9 exactly 2 upvotes)
@@ -464,7 +489,8 @@ Shared allocation / profile flags (see spec/point-allocation.md):
                                                     5:5 parse w/ manual fit. NOT on
                                                     pick (inert) — use just rescore
   --gate passFail|…           ✓       ✓       ✓     Thematic pass/maybe/fail model
-  --cutoff axis:min           ✓       ✓       ✓     Numeric fit/music/combined cutoff gate
+  --cutoff [f|m|c|axis]:min   ✓       ✓       ✓     Cutoff gate; bare value → music;
+                                                    values scale like comments
   --shape preset              ✓       ✓       ✓     Upvote curve (auto, bell, …)
   --down-shape shape          ✓       ✓       ✓     Downvote curve (flat/curved/…)
   --tier-count n              ✓       ✓       ✓     Force n point tiers
@@ -496,6 +522,13 @@ Rescore-only (re-blend/re-allocate from JSON; resets pick to draft):
                                     | --tier-count | --bucket-count | --pin
                                     | --score i:v | --fit-score i:v | --favorite-band | --dry-run
                                     (--score / --fit-score write raw scores; not vote pins)
+
+Single-dash aliases (same meaning, expand to the long form):
+  -w weights   -c cutoff    -p pin       -rk rank     -sh shape    -ds down-shape
+  -tc tier-count  -bc bucket-count  -fb favorite-band  -sc score  -fs fit-score
+  Booleans keep long forms (--dry-run, --no-json, …).
+
+Command shortcuts (dispatcher + justfile): s = save-round, p = pick, r = rescore.
 
 Other commands:
   just tidy     --dry-run | --no-name | --no-archive | --age <days>

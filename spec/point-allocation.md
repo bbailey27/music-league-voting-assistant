@@ -376,6 +376,9 @@ a specific field calls for it.
     cutoff leaves every `combinedScore` unchanged and simply reflows the bank onto
     the songs at/above the line. `gateClass` compares against the cutoff's **own**
     axis, independent of `rankBy`. Unknown axes are rejected by `buildGate`.
+    CLI value grammar: `--cutoff [f|m|c|<axis>]:<min>` (shorthand `m`/`f`/`c`) —
+    a **bare value assumes the music axis** (`--cutoff 70` = `music:70`), and the
+    numeric part scales like scoring comments (`7` → 70, `735` → 73.5).
   - `{ type: 'passFail' }` — binary; `fail` → 0, allocate among passes.
   - `{ type: 'passFailMaybe', leniency }` — three-state. `fail` → 0. **Passes are
     shaped first, always**, and the governing rule is `max(maybe) ≤ min(funded

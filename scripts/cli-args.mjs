@@ -1,5 +1,29 @@
 // Shared CLI argv helpers for Music League scripts.
 
+/**
+ * Single-dash aliases for the value flags. Expanded long early (see
+ * expandShortFlags) so every argv consumer — dispatcher or direct script — sees
+ * the long form. Long flags keep working; booleans have no short forms.
+ */
+export const SHORT_FLAGS = {
+  '-w': '--weights',
+  '-c': '--cutoff',
+  '-p': '--pin',
+  '-rk': '--rank',
+  '-sh': '--shape',
+  '-ds': '--down-shape',
+  '-tc': '--tier-count',
+  '-bc': '--bucket-count',
+  '-fb': '--favorite-band',
+  '-sc': '--score',
+  '-fs': '--fit-score',
+};
+
+/** Rewrite known single-dash flags to their long form. Pure; unknown tokens pass. */
+export function expandShortFlags(argv) {
+  return argv.map((a) => SHORT_FLAGS[a] ?? a);
+}
+
 /** Parse `--name value` or `--name=value`; returns new index if matched. */
 export function matchFlag(argv, i, name, onValue) {
   const a = argv[i];
@@ -13,6 +37,32 @@ export function matchFlag(argv, i, name, onValue) {
     return i;
   }
   return null;
+}
+
+/** Value flags whose spec may repeat as space-separated pairs (`--pin 9:2 12:1`). */
+const PAIR_VALUE_FLAGS = new Set(['pin', 'score', 'fit-score']);
+
+// A pair segment carries its own ref:value colon. Anything not starting with
+// '-' and containing a colon counts; malformed segments still fail downstream
+// with the flag's own error (never silently swallowed).
+const isPairToken = (t) => !t.startsWith('-') && t.includes(':');
+
+/**
+ * Parse `--name value[=value]` plus any following space-separated pair tokens
+ * for the repeatable pair flags (pin / score / fit-score); other flags behave
+ * exactly like matchFlag.
+ */
+export function matchRepeatableFlag(argv, i, name, onValue) {
+  const once = matchFlag(argv, i, name, onValue);
+  if (once == null) return null;
+  if (!PAIR_VALUE_FLAGS.has(name)) return once;
+  let end = once;
+  for (let k = once + 1; k < argv.length; k++) {
+    if (!isPairToken(argv[k])) break;
+    onValue(argv[k]);
+    end = k;
+  }
+  return end;
 }
 
 /** True when `token` starts a new long option (`--foo` or `--foo=bar`). */

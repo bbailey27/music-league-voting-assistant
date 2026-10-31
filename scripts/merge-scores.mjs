@@ -8,7 +8,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { enrichProfileWithBudget } from './score-core.mjs';
-import { matchFlag } from './cli-args.mjs';
+import { matchRepeatableFlag, expandShortFlags } from './cli-args.mjs';
 import { musicPaths, fitPaths, scoresPaths } from './paths.mjs';
 import { slimProfile } from './parse/pipeline.mjs';
 import { exploreAllocate, finishExploreCli } from './round/explore.mjs';
@@ -22,6 +22,7 @@ import {
   parseDownShape,
   parseWeights,
   buildGate,
+  resolveSongRefs,
 } from './parse/cli-flags.mjs';
 
 function parseArgs(argv) {
@@ -82,7 +83,7 @@ function parseArgs(argv) {
     ];
     let matched = false;
     for (const [name, setter] of flags) {
-      const next = matchFlag(argv, i, name, setter);
+      const next = matchRepeatableFlag(argv, i, name, setter);
       if (next != null) {
         i = next;
         matched = true;
@@ -102,16 +103,16 @@ function songsFromMusicPayload(data) {
   return (data.songs || []).map((s) => ({ ...s }));
 }
 
-function resolveExplorePins(args) {
+function resolveExplorePins(args, songs) {
   if (!args.pin.length) return { overrides: undefined, downOverrides: undefined };
-  const pins = parsePins(args.pin);
+  const pins = parsePins(resolveSongRefs(args.pin, songs, '--pin'));
   return { overrides: pins?.overrides, downOverrides: pins?.downOverrides };
 }
 
-function buildProfile(args, stored, budget) {
+function buildProfile(args, stored, budget, songs) {
   const gate = buildGate(args) ?? stored?.gate;
   const weights = parseWeights(args.weights) ?? stored?.weights;
-  const { overrides, downOverrides } = resolveExplorePins(args);
+  const { overrides, downOverrides } = resolveExplorePins(args, songs);
   const tierCount = parseTierCount(args.tierCount) ?? stored?.tierCount;
   const bucketCount = parseBucketCount(args.bucketCount) ?? stored?.bucketCount;
   const optionCount = parseOptionCount(args.optionCount) ?? stored?.optionCount;
@@ -126,7 +127,7 @@ function buildProfile(args, stored, budget) {
 }
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2));
+  const args = parseArgs(expandShortFlags(process.argv.slice(2)));
   if (!args.roundId) {
     console.error(
       'Usage: node scripts/merge-scores.mjs <round-id> [--rank combined] [--weights <fit>:<music>] [--gate ...] [--cutoff ...] [--shape ...] [--pin ...]'
@@ -158,7 +159,7 @@ async function main() {
   const budget = musicData.budget;
   const upCap = budget?.maxUpvotesPerSong ?? Infinity;
   const downCap = budget?.maxDownvotesPerSong ?? Infinity;
-  const profile = buildProfile(args, musicData.profile, budget);
+  const profile = buildProfile(args, musicData.profile, budget, songsFromMusicPayload(musicData));
   const capErr = pinCapError(profile.overrides, profile.downOverrides, upCap, downCap);
   if (capErr) {
     console.error(capErr);

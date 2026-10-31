@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm, mkdir, copyFile } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, copyFile, readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -96,6 +96,34 @@ test('deprecated --reason on parse redirects to just pick', async () => {
     const { code, out } = await ml(env, 'parse', ROUND, '--reason', 'nope');
     assert.equal(code, 1);
     assert.match(out, /Deprecated: --reason on parse\. Use: just pick/);
+  } finally {
+    await rm(dirname(dataDir), { recursive: true, force: true });
+  }
+});
+
+test('command aliases p and r route like the full names', async () => {
+  const { dataDir, env } = await makeWorkspace();
+  try {
+    const p = await ml(env, 'p', ROUND);
+    assert.match(p.out, /Usage: ml pick/);
+    const r = await ml(env, 'r', ROUND);
+    assert.match(r.out, /Run just parse first/);
+  } finally {
+    await rm(dirname(dataDir), { recursive: true, force: true });
+  }
+});
+
+test('short flags + space-separated pairs flow through the dispatcher', async () => {
+  const { dataDir, env } = await makeWorkspace();
+  try {
+    assert.equal((await ml(env, 'parse', ROUND)).code, 0);
+    const res = await ml(env, 'r', ROUND, '-c', '70', '-sc', '1:74', '2:DQ');
+    assert.equal(res.code, 0);
+    const json = JSON.parse(await readFile(join(dataDir, 'analysis', ROUND, 'music.json'), 'utf8'));
+    const byIdx = new Map(json.songs.map((s) => [s.rawOrderIndex, s]));
+    assert.equal(byIdx.get(1).score, 74);
+    assert.equal(byIdx.get(2).isDisqualified, true);
+    assert.deepEqual(json.profile.gate, { type: 'cutoff', axis: 'music', min: 70 });
   } finally {
     await rm(dirname(dataDir), { recursive: true, force: true });
   }

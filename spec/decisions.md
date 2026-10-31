@@ -11,7 +11,83 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
-## 2026-10-30 — Unknown-league auto-save defaults to 1-round families; widening needs proof or a confirmed merge
+## 2026-10-31 — CLI shortcuts, score-value literal grammar, bare-cutoff music default
+
+**Change.** Future-plans item 25 shipped across the CLI:
+
+- **Command shortcuts** — `ml s|save-round` (new dispatcher shim: clipboard →
+  stdin → `scripts/save-round.mjs`), `ml p|pick`, `ml r|rescore`; justfile
+  `alias s := save-round`, `alias p := pick`, `alias r := rescore`. Full names
+  unchanged.
+- **Single-dash flag aliases** — `expandShortFlags` in `scripts/cli-args.mjs`
+  (`-w weights, -c cutoff, -p pin, -rk rank, -sh shape, -ds down-shape,
+  -tc tier-count, -bc bucket-count, -fb favorite-band, -sc score, -fs
+  fit-score`), expanded at entry in the dispatcher and at the top of
+  parse/merge/pick/rescore so direct script runs behave identically. Booleans
+  keep long forms.
+- **Shared literal score-value parser** (`parseScoreValue` in
+  `scripts/parse/cli-flags.mjs`) — the comment grammar now applies where any
+  score-like value is typed: `--score` / `--fit-score` (digit scaling `7`→70,
+  `705`→70.5; `\`=\` typo → `+`; `play`/`play?` modifiers, attached or spaced;
+  `DQ` case-insensitive), `--cutoff` and `--favorite-band` (same scaling,
+  modifiers/DQ rejected as meaningless on a threshold, >100 rejected). The
+  pre-existing scaling on `--score` was already there (`scaleScoreToken`), now
+  via the one shared helper.
+- **Bare cutoff = music** (owner decision) — `--cutoff 70` ≡ `--cutoff music:70`;
+  axis shorthand `m:` / `f:` / `c:` (`combined`'s `c` is value-level, no flag
+  collision). `--cutoff music:735` no longer silently sets min 735 (everything
+  below gates out) — it becomes 73.5.
+- **Space-separated repeatable pairs** — `--pin 9:2 12:1`,
+  `--score 5:74 7:DQ` alongside the comma form, via `matchRepeatableFlag`
+  (scripts) + pair-aware token collection in the dispatcher.
+- **Title references** — `--pin fox:2`, `--score bohemian:74`,
+  `--fit-score <ref>:DQ` resolve after the round JSON loads with the same
+  fuzzy ladder as round names (exact → substring → subsequence);
+  ambiguous → error listing candidates, never auto-picked; all-numeric heads
+  stay indices.
+- **DQ on `--fit-score`** — earlier help said "DQ belongs on --score"; both
+  flags accept it now (owner request). DQ is a song-level state, so it writes
+  the music song record even from `--fit-score`, holding in both music-only
+  and merged rounds.
+
+**Why.** The owner's workflow keeps hitting full spelling ("type out the full
+music:x format when that's the only option"), raw-index friction, and
+value-grammar mismatches between flags and comments — same text, different
+rules. One parser + one alias table removes all four at once.
+
+**Overruled.** `--fit-score` DQ rejection; bare `Number()` cutoff floors
+(unscaled, no >100 guard); the redundant per-flag regexes in
+`parseScoreOverrides`.
+
+**Refs.** `working tree` — `scripts/parse/cli-flags.mjs`, `scripts/cli-args.mjs`,
+`scripts/ml.mjs`, `scripts/{parse,merge,pick,rescore}*.mjs`,
+`scripts/cli-help.mjs`, README, `spec/point-allocation.md`, tests
+(`allocate`, `cli-args`, `ml`).
+
+---
+
+## 2026-10-31 — Score-first rule: prose before the number means no music score
+
+**Change.** `peelMusic` (scripts/score/comment.mjs) no longer takes the **first
+number anywhere** on the scoring line as the music score. The scoring line must
+**start** with the number (+ mods); leading whitespace and the word `fit` / `music`
+directly before the number are tolerated. Any other prose before the first digit →
+no score, and the line falls through to words-only handling (DQ in objective mode,
+needs-review in subjective). Trailing numbers in such lines are no longer scraped
+into fit channels either. Spec: `spec/score-parsing.md` → Score-first, peel-first.
+
+**Why.** Recurring real-round damage: a number hidden in a sentence ("Great song,
+but it already got 3rd place in the vocal round") parsed as music 30 and threw off
+allocation; same class as the earlier First Love / year-in-text incidents
+(bugs.plan:889, 2026-10-12). Owner restated the intent: "If the first thing in the
+text box is not a number, there is no score and that's just a DQ comment."
+
+**Overruled.** The old peel-first spec wording "leading `fit` / `music` / prose does
+not change which digit is music" — prose-first scoring was never the owner's habit;
+the documented `fit 8` row is kept via the keyword allowance, not an excuse for
+prose-first parsing.
+
+**Refs.** scripts/score/comment.mjs · spec/score-parsing.md — working tree.
 
 **Change.** A round saved under a slug matching no family registers with the
 **exact-slug family** (prefix = the bare slug, shape = the bare slug) instead of the
@@ -60,7 +136,7 @@ evidence arrives.
 1-round mechanism (same day, superseded in-session: the default flipped instead,
 keeping the manual flags for drift fixes and registry curation).
 
-**Refs.** `working tree` — `scripts/leagues.mjs`, `scripts/save-round.mjs`,
+**Refs.** `23097d6` — `scripts/leagues.mjs`, `scripts/save-round.mjs`,
 `spec/leagues.md`, `README.md`, `tests/leagues.test.mjs`.
 
 (Final shape note: name-aware coverage landed in the same pass — see items 2–3
@@ -126,7 +202,7 @@ Spooky Kpop 👻 re-keying: `halloween-kpop` stays under the `halloween-` family
 ordering that granted ties to the _oldest_ family, exactly backwards from how
 leagues evolve.
 
-**Refs.** `working tree` — `scripts/leagues.mjs`, `spec/leagues.md`,
+**Refs.** `23097d6` — `scripts/leagues.mjs`, `spec/leagues.md`,
 `scripts/cli-help.mjs`, `README.md`, `tests/leagues.test.mjs`,
 `tests/fixtures/leagues-registry.json`.
 
@@ -149,7 +225,7 @@ rounds into the family. A hand fix was possible by editing the private JSON, but
 shift happened repeatedly enough to want a reviewed-from-CLI path with file layout
 enforced.
 
-**Refs.** `working tree` — `scripts/leagues.mjs`, `scripts/ml.mjs`,
+**Refs.** `23097d6` — `scripts/leagues.mjs`, `scripts/ml.mjs`,
 `scripts/cli-help.mjs`, `README.md`, `spec/leagues.md`, `tests/leagues.test.mjs`.
 
 ---

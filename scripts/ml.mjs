@@ -35,6 +35,7 @@ import {
 } from './paths.mjs';
 import { applyDateSlugs, archiveStaleRounds, tidyRounds } from './maintain-rounds.mjs';
 import { downShapeFromShort, parsePickSpec } from './cli-commands.mjs';
+import { expandShortFlags } from './cli-args.mjs';
 import {
   formatConfigDisplay,
   writeMlConfig,
@@ -167,6 +168,30 @@ function nextFlagValue(argv, i, flag) {
   return null;
 }
 
+// Repeatable pair flags may carry further `ref:value` segments as separate argv
+// tokens: --pin 9:2 12:1, --score 5:74 7:DQ (same as the comma form).
+const REPEATABLE_PAIR_FLAGS = new Set(['--pin', '--score', '--fit-score']);
+
+/** Flag + its value tokens (a `--name=value` flag keeps tokens inline). */
+function collectFlagTokens(rest, i, flag) {
+  const tokens = [];
+  const v = nextFlagValue(rest, i, flag);
+  let last = i;
+  if (v != null) {
+    tokens.push(v);
+    last = i + 1;
+  }
+  if (REPEATABLE_PAIR_FLAGS.has(flag)) {
+    for (let k = last + 1; k < rest.length; k++) {
+      const t = rest[k];
+      if (t.startsWith('-') || !t.includes(':')) break;
+      tokens.push(t);
+      last = k;
+    }
+  }
+  return { tokens, last };
+}
+
 /** Split positional round name from flags; name may be omitted (uses current round). */
 function splitRoundArgs(rest) {
   let name = null;
@@ -176,11 +201,9 @@ function splitRoundArgs(rest) {
     if (t.startsWith('-')) {
       rejectUnknownFlag(t);
       flags.push(t);
-      const v = nextFlagValue(rest, i, t);
-      if (v != null) {
-        flags.push(v);
-        i++;
-      }
+      const { tokens, last } = collectFlagTokens(rest, i, t);
+      flags.push(...tokens);
+      i = last;
     } else if (name == null) {
       name = t;
     } else {
@@ -201,11 +224,9 @@ function splitPickArgs(rest) {
     if (t.startsWith('-')) {
       rejectUnknownFlag(t);
       flags.push(t);
-      const v = nextFlagValue(rest, i, t);
-      if (v != null) {
-        flags.push(v);
-        i++;
-      }
+      const { tokens, last } = collectFlagTokens(rest, i, t);
+      flags.push(...tokens);
+      i = last;
     } else if (option == null) {
       const parsed = parsePickSpec(t);
       if (parsed.letter) {
@@ -478,6 +499,27 @@ function cmdRescore(explicitName, flags) {
 function cmdParse(explicitName, flags) {
   const base = resolveRoundName(explicitName, listRoundInputIds(), 'round');
   process.exit(runScript('parse-round.mjs', [inputPathFor(base), ...flags]));
+}
+
+/** Command alias: `ml s <slug>` / `ml save-round <slug>` — clipboard → stdin pipe. */
+function cmdSaveRound(rest) {
+  const slug = rest.find((t) => !t.startsWith('-')) ?? null;
+  if (!slug) {
+    console.error('Usage: ml save-round <slug>');
+    process.exit(1);
+  }
+  const paste = spawnSync('pbpaste', [], { encoding: 'utf8' });
+  if (paste.status !== 0 || paste.error) {
+    console.error(`ml save-round: could not read the clipboard (pbpaste failed).`);
+    process.exit(1);
+  }
+  const res = spawnSync('node', ['scripts/save-round.mjs', slug], {
+    input: paste.stdout ?? '',
+    encoding: 'utf8',
+  });
+  process.stdout.write(res.stdout || '');
+  process.stderr.write(res.stderr || '');
+  process.exit(res.status ?? 1);
 }
 
 function cmdFit(explicitName, flags) {
@@ -932,43 +974,49 @@ function cmdConfig(rest) {
 
 function main() {
   const [, , cmd, ...rest] = process.argv;
+  const args = expandShortFlags(rest);
 
   switch (cmd) {
+    case 's':
+    case 'save-round':
+      return cmdSaveRound(args);
+    case 'p':
+    case 'pick': {
+      const { name, option, flags } = splitPickArgs(args);
+      return cmdPick(name, option, flags);
+    }
+    case 'r':
+    case 'rescore': {
+      const { name, flags } = splitRoundArgs(args);
+      return cmdRescore(name, flags);
+    }
     case 'parse': {
-      const { name, flags } = splitRoundArgs(rest);
+      const { name, flags } = splitRoundArgs(args);
       return cmdParse(name, flags);
     }
     case 'merge': {
-      const { name, flags } = splitRoundArgs(rest);
+      const { name, flags } = splitRoundArgs(args);
       return cmdMerge(name, flags);
     }
-    case 'pick': {
-      const { name, option, flags } = splitPickArgs(rest);
-      return cmdPick(name, option, flags);
-    }
-    case 'rescore': {
-      const { name, flags } = splitRoundArgs(rest);
-      return cmdRescore(name, flags);
-    }
     case 'fit': {
-      const { name, flags } = splitRoundArgs(rest);
+      const { name, flags } = splitRoundArgs(args);
       return cmdFit(name, flags);
     }
     case 'scores': {
-      const { name, flags } = splitRoundArgs(rest);
+      const { name, flags } = splitRoundArgs(args);
       return cmdScores(name, flags);
     }
     case 'final': {
-      const { name, flags } = splitRoundArgs(rest);
+      const { name, flags } = splitRoundArgs(args);
       return cmdFinal(name, flags);
     }
     case 'run':
     case 'next': {
-      const { name, flags } = splitRoundArgs(rest);
+      const { name, flags } = splitRoundArgs(args);
       return cmdRun(name, flags);
     }
     case 'status': {
-      const { name } = splitRoundArgs(rest);
+      const { name } = splitRoundArgs(args);
       return name
         ? cmdStatusOne(resolveRoundName(name, listAllRoundIds(), 'round'))
         : cmdStatusAll();
@@ -989,7 +1037,10 @@ function main() {
     case '--help':
       return usage();
     default:
-      console.error(`Unknown command "${cmd}".\n`);
+      console.error(
+        `Unknown command "${cmd}".` +
+          (cmd.length <= 2 && !cmd.startsWith('-') ? `\n(Single-letter shortcut? Known: s = save-round, p = pick, r = rescore.)` : '')
+      );
       usage();
       process.exit(1);
   }

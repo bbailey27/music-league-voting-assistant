@@ -16,7 +16,7 @@ import {
   mergeFitJson,
   enrichProfileWithBudget,
 } from './score-core.mjs';
-import { matchFlag, matchRestFlag, warnUnknownShortFlags } from './cli-args.mjs';
+import { matchRepeatableFlag, matchRestFlag, warnUnknownShortFlags, expandShortFlags } from './cli-args.mjs';
 import { musicPaths, fitPaths, scoresPaths } from './paths.mjs';
 import {
   parsePins,
@@ -28,6 +28,7 @@ import {
   parseFavoriteBand,
   parseDownShape,
   buildGate,
+  resolveSongRefs,
 } from './parse/cli-flags.mjs';
 import {
   applyOptionPick,
@@ -118,7 +119,7 @@ function parseArgs(argv) {
       const parse =
         name === 'reason'
           ? (argv, idx, flagName, set) => matchRestFlag(argv, idx, flagName, set)
-          : matchFlag;
+          : (argv, idx, flagName, set) => matchRepeatableFlag(argv, idx, flagName, set);
       const next = parse(argv, i, name, setter);
       if (next != null) {
         i = next;
@@ -166,20 +167,20 @@ function songsFromPayload(data) {
 }
 
 /** Merge stored profile pins with any new `--pin` values (CLI wins on index clash). */
-function resolvePickPins(args, stored) {
+function resolvePickPins(args, stored, songs) {
   if (!args.pin.length) {
     return {
       overrides: stored?.overrides,
       downOverrides: stored?.downOverrides,
     };
   }
-  return mergePickPinOverrides(stored, parsePins(args.pin));
+  return mergePickPinOverrides(stored, parsePins(resolveSongRefs(args.pin, songs, '--pin')));
 }
 
-function buildProfile(args, stored, budget, mode) {
+function buildProfile(args, stored, budget, mode, songs) {
   const gate = buildGate(args) ?? stored?.gate;
   const weights = stored?.weights;
-  const { overrides, downOverrides } = resolvePickPins(args, stored);
+  const { overrides, downOverrides } = resolvePickPins(args, stored, songs);
   const tierCount = parseTierCount(args.tierCount) ?? stored?.tierCount;
   const bucketCount = parseBucketCount(args.bucketCount) ?? stored?.bucketCount;
   const optionCount = parseOptionCount(args.optionCount) ?? stored?.optionCount;
@@ -195,7 +196,7 @@ function buildProfile(args, stored, budget, mode) {
 }
 
 async function main() {
-  const argv = process.argv.slice(2);
+  const argv = expandShortFlags(process.argv.slice(2));
   warnUnknownShortFlags(argv);
   const args = parseArgs(argv);
   if (!args.roundId || args.option == null) {
@@ -228,7 +229,8 @@ async function main() {
   const budget = musicData.budget;
   const upCap = budget?.maxUpvotesPerSong ?? Infinity;
   const downCap = budget?.maxDownvotesPerSong ?? Infinity;
-  const profile = buildProfile(args, musicData.profile, budget, musicData.mode);
+  const roundSongs = songsFromPayload(musicData);
+  const profile = buildProfile(args, musicData.profile, budget, musicData.mode, roundSongs);
   const capErr = pinCapError(profile.overrides, profile.downOverrides, upCap, downCap);
   if (capErr) {
     console.error(capErr);
@@ -236,7 +238,7 @@ async function main() {
   }
 
   const pinErr = pinEligibilityError(
-    songsFromPayload(musicData),
+    roundSongs,
     profile.overrides,
     profile.downOverrides
   );

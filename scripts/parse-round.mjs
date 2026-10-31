@@ -20,7 +20,7 @@ import {
   MANUAL_FIT_WEIGHTS,
 } from './score-core.mjs';
 import { parseRoundText } from './parse-text.mjs';
-import { matchFlag, matchRestFlag, takePositional } from './cli-args.mjs';
+import { matchFlag, matchRepeatableFlag, matchRestFlag, takePositional, expandShortFlags } from './cli-args.mjs';
 import { roundIdFromInput, musicPaths } from './paths.mjs';
 import { ensureDateSlugForInput } from './maintain-rounds.mjs';
 import { upsertPlainLeague } from './leagues.mjs';
@@ -35,6 +35,7 @@ import {
   parseDownShape,
   parseWeights,
   buildGate,
+  resolveSongRefs,
 } from './parse/cli-flags.mjs';
 import { warnMissingScoresCli, warnMissingFitScoresCli } from './parse/cli-warn.mjs';
 import { parseRoundHtml, slimProfile } from './parse/pipeline.mjs';
@@ -85,9 +86,9 @@ export function applyManualFitScoring(profile, songs, { explicitRank = null, wei
   return combineWeights;
 }
 
-function resolveExplorePins(args) {
+function resolveExplorePins(args, songs) {
   if (!args.pin.length) return { overrides: undefined, downOverrides: undefined };
-  const pins = parsePins(args.pin);
+  const pins = parsePins(resolveSongRefs(args.pin, songs, '--pin'));
   return { overrides: pins?.overrides, downOverrides: pins?.downOverrides };
 }
 
@@ -167,8 +168,7 @@ function parseArgs(argv) {
       }],
       ['pin', (v) => {
         args.pin.push(v);
-      }],
-      ['tier-count', (v) => {
+      }],      ['tier-count', (v) => {
         args.tierCount = v;
       }],
       ['bucket-count', (v) => {
@@ -192,7 +192,9 @@ function parseArgs(argv) {
       const parse =
         name === 'reason'
           ? (argv, idx, flagName, set) => matchRestFlag(argv, idx, flagName, set)
-          : matchFlag;
+          : name === 'pin'
+            ? (argv, idx, flagName, set) => matchRepeatableFlag(argv, idx, flagName, set)
+            : matchFlag;
       const next = parse(argv, i, name, setter);
       if (next != null) {
         i = next;
@@ -207,7 +209,7 @@ function parseArgs(argv) {
 }
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2));
+  const args = parseArgs(expandShortFlags(process.argv.slice(2)));
   if (!args.file) {
     console.error(
       'Usage: node scripts/parse-round.mjs <round.html|round.txt> [--mode objective|subjective] [--no-json] [--lenient] [--fit [tier|gate]] [--shape ...] [--down-shape concentrated|flat|curved] [--tier-count <n>] [--bucket-count <n>] [--favorite-band <min>|--no-favorite-band] [--pin <i>:<v>]'
@@ -245,7 +247,7 @@ async function main() {
 
   const gate = buildGate(args);
   const weights = parseWeights(args.weights);
-  const { overrides, downOverrides } = resolveExplorePins(args);
+  const { overrides, downOverrides } = resolveExplorePins(args, parsed.songs);
   const upCap = parsed.budget?.maxUpvotesPerSong ?? Infinity;
   const downCap = parsed.budget?.maxDownvotesPerSong ?? Infinity;
   const capErr = pinCapError(overrides, downOverrides, upCap, downCap);

@@ -99,12 +99,63 @@ export function parseOptionCount(spec) {
 }
 
 // Manual raw-score overrides for `rescore --score` / `--fit-score`. Each spec is
-// `<rawOrderIndex>:<score>` where <score> may carry a modifier suffix: `+` / `-` nudge
-// a tie, `?` marks uncertainty, and `+?` / `-?` combine them (e.g. `5:74.5+`, `7:75?`,
-// `9:76-`). A bare number clears any modifier — and also clears a DQ that only
-// existed because the song had no score. `<i>:DQ` instead disqualifies the song
-// (kept score stays on the record; allocation ignores DQ songs). Returns a list of
-// `{ idx, score, plus, minus, uncertain, plusUncertain, minusUncertain, disqualified }`.
+// `<rawOrderIndex|title>:<score>` where the ref may be a rawOrderIndex or a title
+// fragment (resolveSongRefs maps the fragment to the index after the round's
+// songs are loaded). <score> may carry a modifier suffix: `+` / `-` nudge a tie,
+// `?` marks uncertainty, `+?` / `-?` combine them, and `play` / `play?` nudge the
+// playlist tiebreak — with or without a space ("76 play" ≡ "76play"). A bare `=`
+// is read as `+` (typo), the same word. Returns a list of
+// `{ idx, score, plus, minus, uncertain, plusUncertain, minusUncertain,
+//    playlistAdd, playlistUncertain, disqualified }`.
+export function parseScoreValue(valRaw, flag = '--score') {
+  const raw = String(valRaw ?? '').trim();
+  if (/^dq$/i.test(raw)) {
+    return {
+      score: null,
+      plus: false,
+      minus: false,
+      uncertain: false,
+      plusUncertain: false,
+      minusUncertain: false,
+      playlistAdd: false,
+      playlistUncertain: false,
+      disqualified: true,
+    };
+  }
+  // Compact modifier spacing so "76 play" and "76play" parse identically.
+  const m = raw.replace(/\s+/g, '').match(/^(\d+(?:\.\d+)?)([+\-=?]*)(play\??)?$/i);
+  if (!m) {
+    throw new Error(
+      `Invalid ${flag} "${raw}" — use <score> with +, -, ?, or play (e.g. 74.5+, 75?, 76play?), or DQ.`
+    );
+  }
+  const rawNum = m[1];
+  const dotIdx = rawNum.indexOf('.');
+  const intPart = dotIdx >= 0 ? rawNum.slice(0, dotIdx) : rawNum;
+  const decPart = dotIdx >= 0 ? rawNum.slice(dotIdx) : '';
+  const score = scaleScoreToken(intPart, decPart);
+  const mods = m[2] || '';
+  const playlist = /play/i.test(m[3] || '');
+  const plus = mods.includes('+') || mods.includes('=');
+  const minus = mods.includes('-');
+  const q = mods.includes('?');
+  if (plus && minus) {
+    throw new Error(`Invalid ${flag} "${raw}" — a score can't be both + and -.`);
+  }
+  return {
+    score,
+    plus,
+    minus,
+    uncertain: q && !plus && !minus,
+    plusUncertain: q && plus,
+    minusUncertain: q && minus,
+    // `?` may sit on the play modifier itself (76play?) rather than the mod run.
+    playlistAdd: playlist,
+    playlistUncertain: playlist && (q || /\?/.test(m[3] || '')),
+    disqualified: false,
+  };
+}
+
 export function parseScoreOverrides(specs, flag = '--score') {
   const list = (Array.isArray(specs) ? specs : [specs]).filter(Boolean);
   if (!list.length) return undefined;
@@ -121,47 +172,7 @@ export function parseScoreOverrides(specs, flag = '--score') {
       if (!Number.isInteger(idx) || idx < 0) {
         throw new Error(`Invalid ${flag} "${pair}" — rawOrderIndex must be a non-negative integer.`);
       }
-      if (/^dq$/i.test(valRaw)) {
-        out.push({
-          idx,
-          score: null,
-          plus: false,
-          minus: false,
-          uncertain: false,
-          plusUncertain: false,
-          minusUncertain: false,
-          disqualified: true,
-        });
-        continue;
-      }
-      const m = valRaw.match(/^(\d+(?:\.\d+)?)([+\-?]*)$/);
-      if (!m) {
-        throw new Error(
-          `Invalid ${flag} "${pair}" — use <score> optionally with +, -, or ? (e.g. 74.5+, 75?, 76-, or DQ).`
-        );
-      }
-      const rawNum = m[1];
-      const dotIdx = rawNum.indexOf('.');
-      const intPart = dotIdx >= 0 ? rawNum.slice(0, dotIdx) : rawNum;
-      const decPart = dotIdx >= 0 ? rawNum.slice(dotIdx) : '';
-      const score = scaleScoreToken(intPart, decPart);
-      const mods = m[2] || '';
-      const plus = mods.includes('+');
-      const minus = mods.includes('-');
-      const q = mods.includes('?');
-      if (plus && minus) {
-        throw new Error(`Invalid ${flag} "${pair}" — a score can't be both + and -.`);
-      }
-      out.push({
-        idx,
-        score,
-        plus,
-        minus,
-        uncertain: q && !plus && !minus,
-        plusUncertain: q && plus,
-        minusUncertain: q && minus,
-        disqualified: false,
-      });
+      out.push({ idx, ...parseScoreValue(valRaw, flag) });
     }
   }
   return out.length ? out : undefined;
@@ -170,11 +181,25 @@ export function parseScoreOverrides(specs, flag = '--score') {
 export function parseFavoriteBand(spec) {
   if (spec === false) return false;
   if (spec == null || spec === '') return undefined;
-  const n = Number(spec);
-  if (!Number.isFinite(n) || n <= 0) {
+  const value = parseScoreValue(spec, '--favorite-band');
+  if (
+    value.disqualified ||
+    value.plus ||
+    value.minus ||
+    value.uncertain ||
+    value.plusUncertain ||
+    value.minusUncertain ||
+    value.playlistAdd
+  ) {
+    throw new Error(`Invalid --favorite-band "${spec}" (use a plain score floor, e.g. 80, or --no-favorite-band)`);
+  }
+  if (value.score <= 0) {
     throw new Error(`Invalid --favorite-band "${spec}" (use a score floor, e.g. 80, or --no-favorite-band)`);
   }
-  return { min: n };
+  if (value.score > 100) {
+    throw new Error(`Invalid --favorite-band "${spec}" — needs to be ≤ 100.`);
+  }
+  return { min: value.score };
 }
 
 export function parseDownShape(spec) {
@@ -203,21 +228,102 @@ export function parseWeights(spec) {
 
 export const CUTOFF_AXES = ['fit', 'music', 'combined'];
 
+/** `--cutoff m:65` shorthand (full axis names always work; bare value = music). */
+const CUTOFF_AXIS_ALIASES = { m: 'music', f: 'fit', c: 'combined' };
+
 export function buildGate(args) {
   if (args.cutoff) {
-    const [rawAxis, min] = args.cutoff.split(':');
-    const axis = rawAxis || 'fit';
+    const raw = String(args.cutoff);
+    const ci = raw.indexOf(':');
+    // A bare value ("--cutoff 70") assumes the music axis (owner decision).
+    const axisTok = (ci < 0 ? '' : raw.slice(0, ci)).trim().toLowerCase() || 'music';
+    const minRaw = ci < 0 ? raw.trim() : raw.slice(ci + 1).trim();
+    const axis = CUTOFF_AXIS_ALIASES[axisTok] ?? axisTok;
     if (!CUTOFF_AXES.includes(axis)) {
       throw new Error(
-        `Invalid --cutoff axis "${axis}" (use ${CUTOFF_AXES.join(', ')}, e.g. fit:70, music:65, or combined:76)`
+        `Invalid --cutoff axis "${axisTok}" (use fit | music | combined — shorts f | m | c; ` +
+          `e.g. fit:70, music:65, combined:76; a bare value assumes music)`
       );
     }
-    const value = Number(min);
-    if (!Number.isFinite(value)) {
-      throw new Error(`Invalid --cutoff "${args.cutoff}" (use <axis>:<min>, e.g. fit:70)`);
+    if (!minRaw) {
+      throw new Error(`Invalid --cutoff "${raw}" (use <axis>:<min>, e.g. music:65)`);
     }
-    return { type: 'cutoff', axis, min: value };
+    const value = parseScoreValue(minRaw, '--cutoff');
+    if (
+      value.disqualified ||
+      value.plus ||
+      value.minus ||
+      value.uncertain ||
+      value.playlistAdd
+    ) {
+      throw new Error(
+        `Invalid --cutoff "${raw}" — modifiers and DQ are score-override-only; use a plain score floor (e.g. music:65)`
+      );
+    }
+    if (value.score > 100) {
+      throw new Error(`Invalid --cutoff "${raw}" — needs to be ≤ 100.`);
+    }
+    return { type: 'cutoff', axis, min: value.score };
   }
   if (args.gate === 'passFail' || args.gate === 'passFailMaybe') return { type: args.gate };
   return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Song references: `--score foxtrot:74` / `--pin "watch out":2`
+// resolve a title fragment to a rawOrderIndex using the same fuzzy ladder the
+// dispatcher uses for round names (exact → substring → subsequence,
+// case-insensitive). All-numeric heads stay indices — a song titled "3:5" is
+// addressed by its index, never by title.
+// ---------------------------------------------------------------------------
+function isSubsequenceRef(query, target) {
+  let i = 0;
+  for (let j = 0; j < target.length && i < query.length; j++) {
+    if (target[j] === query[i]) i++;
+  }
+  return i === query.length;
+}
+
+function fuzzySongMatches(q, songs) {
+  const needle = String(q).trim().toLowerCase();
+  if (!needle) return [];
+  const titled = songs.filter((s) => s.title != null);
+  const exact = titled.filter((s) => s.title.toLowerCase() === needle);
+  if (exact.length) return exact;
+  const substr = titled.filter((s) => s.title.toLowerCase().includes(needle));
+  if (substr.length) return substr;
+  return titled.filter((s) => isSubsequenceRef(needle, s.title.toLowerCase()));
+}
+
+/** Resolve any title-fragment refs in pin / score-overrides spec strings. */
+export function resolveSongRefs(specs, songs, flag = '--score') {
+  const list = (Array.isArray(specs) ? specs : [specs]).filter(Boolean);
+  if (!list.length || !songs || !songs.length) return specs;
+  const out = [];
+  for (const chunk of list) {
+    const segments = String(chunk).split(',');
+    const resolved = [];
+    for (const seg of segments) {
+      if (!seg.trim()) {
+        resolved.push(seg);
+        continue;
+      }
+      const ci = seg.indexOf(':');
+      if (ci < 0 || /^\d+$/.test(seg.slice(0, ci).trim())) {
+        resolved.push(seg);
+        continue;
+      }
+      const matches = fuzzySongMatches(seg.slice(0, ci), songs);
+      if (matches.length === 1) {
+        resolved.push(`${matches[0].rawOrderIndex}${seg.slice(ci)}`);
+      } else if (matches.length > 1) {
+        const names = matches.map((s) => `#${s.rawOrderIndex} ${s.title}`).join(', ');
+        throw new Error(`${flag} ref "${seg.slice(0, ci)}" matches multiple songs — be specific: ${names}`);
+      } else {
+        throw new Error(`${flag}: no song's title matches "${seg.slice(0, ci)}".`);
+      }
+    }
+    out.push(resolved.join(','));
+  }
+  return out;
 }

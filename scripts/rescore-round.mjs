@@ -18,7 +18,7 @@ import {
   enrichProfileWithBudget,
 } from './score-core.mjs';
 import { applyManualFitScoring } from './parse-round.mjs';
-import { matchFlag, warnUnknownShortFlags } from './cli-args.mjs';
+import { matchRepeatableFlag, warnUnknownShortFlags, expandShortFlags } from './cli-args.mjs';
 import { musicPaths, fitPaths } from './paths.mjs';
 import { slimProfile } from './parse/pipeline.mjs';
 import { exploreAllocate, finishExploreCli } from './round/explore.mjs';
@@ -33,6 +33,7 @@ import {
   parseWeights,
   buildGate,
   parseScoreOverrides,
+  resolveSongRefs,
 } from './parse/cli-flags.mjs';
 import { warnMissingScoresCli, warnMissingFitScoresCli } from './parse/cli-warn.mjs';
 
@@ -81,7 +82,7 @@ function parseArgs(argv) {
     ];
     let matched = false;
     for (const [name, setter] of flags) {
-      const next = matchFlag(argv, i, name, setter);
+      const next = matchRepeatableFlag(argv, i, name, setter);
       if (next != null) {
         i = next;
         matched = true;
@@ -108,7 +109,7 @@ function resolveExplorePins(args) {
 }
 
 function applyScoreOverrides(songs, overrides) {
-  if (!overrides) return false;
+  if (!overrides || !overrides.length) return false;
   const byIdx = new Map(songs.map((s) => [s.rawOrderIndex, s]));
   for (const ov of overrides) {
     const s = byIdx.get(ov.idx);
@@ -133,6 +134,8 @@ function applyScoreOverrides(songs, overrides) {
       s.uncertain = ov.uncertain;
       s.plusUncertain = ov.plusUncertain;
       s.minusUncertain = ov.minusUncertain;
+      s.playlistAdd = ov.playlistAdd;
+      s.playlistUncertain = ov.playlistUncertain;
       s.needsUserInput = false;
       s.isDisqualified = false;
       s.needsReview = false;
@@ -142,20 +145,41 @@ function applyScoreOverrides(songs, overrides) {
   return true;
 }
 
-function applyFitScoreOverrides(songs, overrides, where) {
-  if (!overrides) return false;
+// DQ is a song-level state, never a fit value — whichever flag carries it
+// (--score i:DQ or --fit-score <ref>:DQ) writes it to the music song record so
+// it holds in both music-only and merged rounds.
+function applySongDisqualifications(songs, disqualifications, flag) {
+  if (!disqualifications || !disqualifications.length) return false;
   const byIdx = new Map(songs.map((s) => [s.rawOrderIndex, s]));
-  for (const ov of overrides) {
+  for (const ov of disqualifications) {
     const s = byIdx.get(ov.idx);
     if (!s) {
-      console.error(`Invalid --fit-score ${ov.idx}:${ov.disqualified ? 'DQ' : ov.score} — no song with rawOrderIndex ${ov.idx} in ${where}.`);
+      console.error(`Invalid ${flag} ${ov.idx}:DQ — no song with rawOrderIndex ${ov.idx}.`);
       process.exit(1);
     }
-    if (ov.disqualified) {
-      console.error(`Invalid --fit-score ${ov.idx}:DQ — DQ is a music score override (--score <i>:DQ), not a fit-score value.`);
+    if (!s.isDisqualified) {
+      console.log(`Disqualified #${ov.idx} ${s.title || ''} — excluded from allocation (kept score, if any, stays on the record).`);
+    }
+    s.isDisqualified = true;
+    s.needsUserInput = false;
+    s.needsReview = false;
+  }
+  return true;
+}
+
+function applyFitScoreOverrides(songs, overrides, where) {
+  if (!overrides || !overrides.length) return false;
+  const byIdx = new Map(songs.map((s) => [s.rawOrderIndex, s]));
+  for (const ov of overrides) {
+    if (ov.disqualified) continue; // song-level state — applied via applySongDisqualifications
+    const s = byIdx.get(ov.idx);
+    if (!s) {
+      console.error(`Invalid --fit-score ${ov.idx}:${ov.score} — no song with rawOrderIndex ${ov.idx} in ${where}.`);
       process.exit(1);
     }
     s.fitScore = ov.score;
+    s.playlistAdd = ov.playlistAdd;
+    s.playlistUncertain = ov.playlistUncertain;
   }
   return true;
 }
@@ -193,7 +217,7 @@ function buildProfile(args, stored, budget, mode) {
 }
 
 async function main() {
-  const argv = process.argv.slice(2);
+  const argv = expandShortFlags(process.argv.slice(2));
   warnUnknownShortFlags(argv);
   const args = parseArgs(argv);
   if (!args.roundId) {
@@ -229,9 +253,20 @@ async function main() {
   }
 
   const songs = songsFromPayload(musicData);
-  const scoreOverrides = parseScoreOverrides(args.score);
-  const fitScoreOverrides = parseScoreOverrides(args.fitScore, '--fit-score');
-  let scoreDirty = applyScoreOverrides(songs, scoreOverrides);
+  const scoreOverrides = parseScoreOverrides(resolveSongRefs(args.score, songs, '--score'));
+  const fitScoreOverrides = parseScoreOverrides(
+    resolveSongRefs(args.fitScore, songs, '--fit-score'),
+    '--fit-score'
+  );
+  // DQ is song-level: a --fit-score <ref>:DQ lands on the music song record,
+  // the same place --score i:DQ writes — so it holds in either mode.
+  const fitDqOverrides = (fitScoreOverrides || []).filter((o) => o.disqualified);
+  const fitNumericOverrides = fitScoreOverrides?.some((o) => !o.disqualified)
+    ? fitScoreOverrides.filter((o) => !o.disqualified)
+    : undefined;
+  let scoreDirty =
+    applyScoreOverrides(songs, scoreOverrides) ||
+    applySongDisqualifications(songs, fitDqOverrides, '--fit-score');
 
   let fitData = null;
   let fitDirty = false;
@@ -244,8 +279,8 @@ async function main() {
       console.error(`Could not read ${fitJson}: ${err.message}. Complete fit research first.`);
       process.exit(1);
     }
-    fitDirty = applyFitScoreOverrides(fitData.songs || [], fitScoreOverrides, fitJson);
-  } else if (applyFitScoreOverrides(songs, fitScoreOverrides, musicJson)) {
+    fitDirty = applyFitScoreOverrides(fitData.songs || [], fitNumericOverrides, fitJson);
+  } else if (applyFitScoreOverrides(songs, fitNumericOverrides, musicJson)) {
     scoreDirty = true;
   }
 

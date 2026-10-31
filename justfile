@@ -111,3 +111,8 @@ smoke *args:
       cp tests/fixtures/sample-round/sample-round.html "$sandbox/rounds/sample-round.html"; \
     fi; \
     ML_DATA_DIR="$sandbox" node "$@"
+
+# Single-letter shortcuts (documented everywhere: same args as their targets)
+alias s := save-round
+alias p := pick
+alias r := rescore

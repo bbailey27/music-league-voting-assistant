@@ -20,7 +20,7 @@ import {
   pinCapError,
   pinEligibilityError,
 } from '../scripts/parse-round.mjs';
-import { parseOptionCount, parseScoreOverrides } from '../scripts/parse/cli-flags.mjs';
+import { parseOptionCount, parseScoreOverrides, parseScoreValue, parseFavoriteBand, buildGate, resolveSongRefs } from '../scripts/parse/cli-flags.mjs';
 import {
   applyOptionPick,
   applyPinsToMenuTradeoffs,
@@ -1609,32 +1609,32 @@ test('parseScoreOverrides parses idx:score with +/-/? modifiers', () => {
   assert.equal(parseScoreOverrides([]), undefined);
 
   assert.deepEqual(parseScoreOverrides('5:74.5+'), [
-    { idx: 5, score: 74.5, plus: true, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: false },
+    { idx: 5, score: 74.5, plus: true, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, playlistAdd: false, playlistUncertain: false, disqualified: false },
   ]);
   assert.deepEqual(parseScoreOverrides('7:75'), [
-    { idx: 7, score: 75, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: false },
+    { idx: 7, score: 75, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, playlistAdd: false, playlistUncertain: false, disqualified: false },
   ]);
   assert.deepEqual(parseScoreOverrides('2:76-'), [
-    { idx: 2, score: 76, plus: false, minus: true, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: false },
+    { idx: 2, score: 76, plus: false, minus: true, uncertain: false, plusUncertain: false, minusUncertain: false, playlistAdd: false, playlistUncertain: false, disqualified: false },
   ]);
   assert.deepEqual(parseScoreOverrides('3:75?'), [
-    { idx: 3, score: 75, plus: false, minus: false, uncertain: true, plusUncertain: false, minusUncertain: false, disqualified: false },
+    { idx: 3, score: 75, plus: false, minus: false, uncertain: true, plusUncertain: false, minusUncertain: false, playlistAdd: false, playlistUncertain: false, disqualified: false },
   ]);
   // `?` combined with a modifier marks that modifier uncertain.
   assert.deepEqual(parseScoreOverrides('4:74.5+?'), [
-    { idx: 4, score: 74.5, plus: true, minus: false, uncertain: false, plusUncertain: true, minusUncertain: false, disqualified: false },
+    { idx: 4, score: 74.5, plus: true, minus: false, uncertain: false, plusUncertain: true, minusUncertain: false, playlistAdd: false, playlistUncertain: false, disqualified: false },
   ]);
 
   // Single-digit scores scale ×10 (same as comment parsing: 9 → 90).
   assert.deepEqual(parseScoreOverrides('4:9'), [
-    { idx: 4, score: 90, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: false },
+    { idx: 4, score: 90, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, playlistAdd: false, playlistUncertain: false, disqualified: false },
   ]);
   assert.deepEqual(parseScoreOverrides('4:9+'), [
-    { idx: 4, score: 90, plus: true, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: false },
+    { idx: 4, score: 90, plus: true, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, playlistAdd: false, playlistUncertain: false, disqualified: false },
   ]);
   // Three-digit scores scale ÷10 (745 → 74.5).
   assert.deepEqual(parseScoreOverrides('4:745'), [
-    { idx: 4, score: 74.5, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: false },
+    { idx: 4, score: 74.5, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, playlistAdd: false, playlistUncertain: false, disqualified: false },
   ]);
 
   // Comma / repeated specs both fold into one list.
@@ -1644,21 +1644,95 @@ test('parseScoreOverrides parses idx:score with +/-/? modifiers', () => {
 
 test('parseScoreOverrides parses DQ as a disqualified override (any case)', () => {
   assert.deepEqual(parseScoreOverrides('7:DQ'), [
-    { idx: 7, score: null, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: true },
+    { idx: 7, score: null, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, playlistAdd: false, playlistUncertain: false, disqualified: true },
   ]);
   assert.deepEqual(parseScoreOverrides('7:dq'), [
-    { idx: 7, score: null, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: true },
+    { idx: 7, score: null, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, playlistAdd: false, playlistUncertain: false, disqualified: true },
   ]);
   // Numeric overrides carry disqualified: false (un-DQ then set the score).
   assert.deepEqual(parseScoreOverrides('5:75'), [
-    { idx: 5, score: 75, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, disqualified: false },
+    { idx: 5, score: 75, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, playlistAdd: false, playlistUncertain: false, disqualified: false },
   ]);
 });
 
 test('parseScoreOverrides keeps accepting modifiers for fit-score and default flags', () => {
   assert.deepEqual(parseScoreOverrides('3:75?', '--fit-score'), [
-    { idx: 3, score: 75, plus: false, minus: false, uncertain: true, plusUncertain: false, minusUncertain: false, disqualified: false },
+    { idx: 3, score: 75, plus: false, minus: false, uncertain: true, plusUncertain: false, minusUncertain: false, playlistAdd: false, playlistUncertain: false, disqualified: false },
   ]);
+});
+
+test('parseScoreValue accepts the full comment-value grammar on flags', () => {
+  // Literal digit scaling, exactly like comments (spec/score-parsing.md).
+  assert.equal(parseScoreValue('7').score, 70);
+  assert.equal(parseScoreValue('705').score, 70.5);
+  assert.equal(parseScoreValue('735').score, 73.5);
+  assert.equal(parseScoreValue('65').score, 65);
+  assert.equal(parseScoreValue('70.5').score, 70.5);
+  // `=` typo reads as `+` (73= → 73+).
+  assert.deepEqual(parseScoreValue('73='), { score: 73, plus: true, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, playlistAdd: false, playlistUncertain: false, disqualified: false });
+  // play / play? modifiers, attached or detached.
+  assert.equal(parseScoreValue('76play').playlistAdd, true);
+  assert.equal(parseScoreValue('76 play').playlistAdd, true);
+  assert.equal(parseScoreValue('76play?').playlistUncertain, true);
+  // DQ (any case) returns a disqualified record with a null score.
+  assert.equal(parseScoreValue('dq').disqualified, true);
+  assert.equal(parseScoreValue('DQ').disqualified, true);
+  assert.throws(() => parseScoreValue('abc'), /score/);
+  assert.throws(() => parseScoreValue('76+-'), /both \+ and -/);
+});
+
+test('--fit-score accepts DQ like --score (song-level state)', () => {
+  assert.deepEqual(parseScoreOverrides('7:DQ', '--fit-score'), [
+    { idx: 7, score: null, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, playlistAdd: false, playlistUncertain: false, disqualified: true },
+  ]);
+});
+
+test('buildGate: bare value assumes music, m/f/c are axis shorthands, values scale like comments', () => {
+  assert.deepEqual(buildGate({ cutoff: '70' }), { type: 'cutoff', axis: 'music', min: 70 });
+  assert.deepEqual(buildGate({ cutoff: 'm:65' }), { type: 'cutoff', axis: 'music', min: 65 });
+  assert.deepEqual(buildGate({ cutoff: 'f:7' }), { type: 'cutoff', axis: 'fit', min: 70 });
+  assert.deepEqual(buildGate({ cutoff: 'c:735' }), { type: 'cutoff', axis: 'combined', min: 73.5 });
+  assert.deepEqual(buildGate({ cutoff: 'music:70.5' }), { type: 'cutoff', axis: 'music', min: 70.5 });
+  // Full axis names keep working.
+  assert.deepEqual(buildGate({ cutoff: 'combined:76' }), { type: 'cutoff', axis: 'combined', min: 76 });
+  // Unknown axis and DQ/modifier values still rejected with usable errors.
+  assert.throws(() => buildGate({ cutoff: 'k:70' }), /axis/);
+  assert.throws(() => buildGate({ cutoff: 'music:' }), /--cutoff/);
+  assert.throws(() => buildGate({ cutoff: 'music:7+' }), /score-override-only/);
+  assert.throws(() => buildGate({ cutoff: 'music:2019' }), /≤ 100/);
+  assert.equal(buildGate({}), undefined);
+  assert.deepEqual(buildGate({ gate: 'passFail' }), { type: 'passFail' });
+});
+
+test('parseFavoriteBand scales a score floor like comments', () => {
+  assert.deepEqual(parseFavoriteBand('7'), { min: 70 });
+  assert.deepEqual(parseFavoriteBand('80'), { min: 80 });
+  assert.deepEqual(parseFavoriteBand('70.5'), { min: 70.5 });
+  assert.throws(() => parseFavoriteBand('2010'), /≤ 100/); // 4-digit scales to 201 → out of range like a year token
+  assert.throws(() => parseFavoriteBand('80+'), /plain score floor/);
+  assert.equal(parseFavoriteBand(false), false);
+  assert.equal(parseFavoriteBand(''), undefined);
+});
+
+test('resolveSongRefs maps title fragments to rawOrderIndex with the round-name fuzzy ladder', () => {
+  const songs = [
+    { rawOrderIndex: 3, title: 'Foxtrot Uniform' },
+    { rawOrderIndex: 5, title: 'Anything Goes' },
+    { rawOrderIndex: 7, title: 'foxtroted' },
+  ];
+  // Exact (case-insensitive).
+  assert.deepEqual(resolveSongRefs(['anything goes:74'], songs), ['5:74']);
+  // Substring.
+  assert.deepEqual(resolveSongRefs(['uniform:74'], songs, '--pin'), ['3:74']);
+  // Subsequence (fxrrm → Foxtrot Uniform).
+  assert.deepEqual(resolveSongRefs(['fxrrm:74'], songs), ['3:74']);
+  // Keeps comma segment structure; numeric heads untouched.
+  assert.deepEqual(resolveSongRefs(['2:1,anything goes:3'], songs), ['2:1,5:3']);
+  // Ambiguous fragment errors listing candidates, never auto-picks.
+  assert.throws(() => resolveSongRefs(['foxtrot:74'], songs, '--score'), /matches multiple songs/);
+  assert.throws(() => resolveSongRefs(['zzz:74'], songs, '--score'), /no song's title matches/);
+  // Bare numeric heads stay indices even when a song carries a numeric title.
+  assert.deepEqual(resolveSongRefs(['3:74'], [{ rawOrderIndex: 3, title: '3' }]), ['3:74']);
 });
 
 test('parseScoreOverrides rejects malformed specs', () => {

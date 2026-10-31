@@ -158,6 +158,9 @@ through to the underlying scripts. Run `just --list` or `just help` for the over
 | `just leagues [name]`        | active-first league + slug registry       | —           |
 | `just config`                | local CLI preferences                     | —           |
 
+Command shortcuts (both `just` and `ml <cmd>` forms work): `s` = save-round,
+`p` = pick, `r` = rescore — e.g. `just s <slug>`. Full names never change.
+
 `<name>` is optional after the first explicit use — the current round is stored in
 `data/.current-round` (e.g. `just pick B --reason "…"` continues the same round).
 
@@ -221,19 +224,24 @@ Full prose for each flag: `just help flags` or `just help <cmd>`. Summary:
 **Allocation / profile** (parse, merge, pick, rescore — explore on parse/merge; pick
 replays then records your letter; rescore re-blends/re-allocates from JSON):
 
-| Flag                 | Values                                                                      | Effect                                                                                                                                                                                                 |
-| -------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `--rank`             | `combined` \| `fit` \| `music`                                              | Ranking axis for tiers and tradeoff tables. Default: `combined` on merge and thematic pick; `music` on music-only parse/pick; parse auto-switches to `combined` when comments carry manual fit scores. |
-| `--weights`          | `<fit>:<music>` e.g. `3:2`                                                  | Blend ratio for combined ranking (normalized to sum 1). **Not on `pick`** — use `just rescore` to re-weight. Default: **7:3** merge/thematic, **5:5** parse w/ manual fit.                             |
-| `--gate`             | `passFail` \| `passFailMaybe`                                               | Thematic pass/maybe/fail gate model.                                                                                                                                                                   |
-| `--cutoff`           | `<axis>:<min>` e.g. `fit:70`                                                | Numeric cutoff gate on fit or music instead of word gate.                                                                                                                                              |
-| `--shape`            | `auto` \| `bell` \| `balanced` \| `top-heavy` \| `compressed` \| `relative` | Upvote curve preset (`auto` = default).                                                                                                                                                                |
-| `--down-shape`       | `concentrated` \| `flat` \| `curved`                                        | Downvote curve when downs are enabled. Pick also accepts positional `cv` / `fl` / `cc`.                                                                                                                |
-| `--tier-count`       | positive integer                                                            | Force exactly _n_ distinct upvote point tiers.                                                                                                                                                         |
-| `--bucket-count`     | positive integer                                                            | Force _n_ funded score-cluster tiers.                                                                                                                                                                  |
-| `--pin`              | `<index>:<votes>`                                                           | Pin a song's votes (`9:2` up, `6:-2` down). Comma-separate multiples. See `just help pin`.                                                                                                             |
-| `--favorite-band`    | score e.g. `80`                                                             | Merge raw music scores ≥ floor into one shared top tier.                                                                                                                                               |
-| `--no-favorite-band` | —                                                                           | Disable favorite-band merge.                                                                                                                                                                           |
+| Flag                 | Values                                                                      | Effect                                                                                                                                                                                                                |
+| -------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------                |
+| `--rank`             | `combined` \| `fit` \| `music`                                              | Ranking axis for tiers and tradeoff tables. Default: `combined` on merge and thematic pick; `music` on music-only parse/pick; parse auto-switches to `combined` when comments carry manual fit scores.                |
+| `--weights`          | `<fit>:<music>` e.g. `3:2`                                                  | Blend ratio for combined ranking (normalized to sum 1). **Not on `pick`** — use `just rescore` to re-weight. Default: **7:3** merge/thematic, **5:5** parse w/ manual fit.                                            |
+| `--gate`             | `passFail` \| `passFailMaybe`                                               | Thematic pass/maybe/fail gate model.                                                                                                                                                                                  |
+| `--cutoff`           | `[<f\|m\|c\|axis>:]<min>` e.g. `m:65`                                       | Numeric cutoff gate on fit or music instead of word gate. Axis shorthand `m`\|`f`\|`c`; a bare value assumes `music`; values scale like scoring comments (`-c 70`, `-c 735` → 73.5).                                  |
+| `--shape`            | `auto` \| `bell` \| `balanced` \| `top-heavy` \| `compressed` \| `relative` | Upvote curve preset (`auto` = default).                                                                                                                                                                               |
+| `--down-shape`       | `concentrated` \| `flat` \| `curved`                                        | Downvote curve when downs are enabled. Pick also accepts positional `cv` / `fl` / `cc`.                                                                                                                               |
+| `--tier-count`       | positive integer                                                            | Force exactly _n_ distinct upvote point tiers.                                                                                                                                                                        |
+| `--bucket-count`     | positive integer                                                            | Force _n_ funded score-cluster tiers.                                                                                                                                                                                 |
+| `--pin`              | `<index\|title>:<votes>`                                                    | Pin a song's votes (`9:2` up, `6:-2` down). Comma- or space-separate multiples (`--pin 9:2 12:1`); a title fragment may replace the index (`--pin fox:2`, ambiguous → error listing candidates). See `just help pin`. |
+| `--favorite-band`    | score e.g. `80`                                                             | Merge raw music scores ≥ floor into one shared top tier (floor scales like comments: `-fb 7` → 70).                                                                                                                   |
+| `--no-favorite-band` | —                                                                           | Disable favorite-band merge.                                                                                                                                                                                          |
+
+Single-dash aliases (same meaning; expand to the long form — long names still work,
+booleans keep long forms): `-w` weights · `-c` cutoff · `-p` pin · `-rk` rank ·
+`-sh` shape · `-ds` down-shape · `-tc` tier-count · `-bc` bucket-count ·
+`-fb` favorite-band · `-sc` score · `-fs` fit-score.
 
 **Parse only:**
 
@@ -263,9 +271,12 @@ draft; never reads HTML): takes the shared allocation/profile flags above (`--we
 
 | Flag | Values | Effect |
 | --- | --- | --- |
-| `--score` | `<index>:<value>` | Write a music score to `music.json` (modifiers `+`/`-`/`?`; `:DQ` disqualifies and reflows). Clears `needsUserInput`, and clears a DQ held only for lack of a score. No HTML re-parse. |
-| `--fit-score` | `<index>:<value>` | Write fit score to `fit.json` (thematic) or song record (music-only). |
+| `--score` | `<index\|title>:<value>` | Write a music score to `music.json` (modifiers `+`/`-`/`?`/`play`, `=` typo → `+`, digit scaling `7`→70 / `705`→70.5 — same literal grammar as comments; `:DQ` disqualifies and reflows). Clears `needsUserInput`, and clears a DQ held only for lack of a score. No HTML re-parse. |
+| `--fit-score` | `<index\|title>:<value>` | Write fit score to `fit.json` (thematic) or song record (music-only). Same value grammar; `:DQ` disqualifies the song like `--score <i>:DQ`. |
 | `--dry-run` | — | Preview re-score without writing files. |
+
+Repeatable spec flags (`--pin`, `--score`, `--fit-score`) accept comma-separated
+pairs or space-separated pairs: `--score 5:74 7:DQ`.
 
 See `just help rescore` for examples. Vote pins (`--pin`) and raw score overrides
 (`--score`) are different — use `--score` to fill a blank box and re-tier normally.
