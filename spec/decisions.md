@@ -11,6 +11,25 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-10-31 — Round-page sanity check matches `div.song` markers, not `<table>`
+
+**Change.** `save-round.mjs`'s "this may not be the round page" warning no longer
+tests the clipboard for a `<table>` element (it never fires on real exports and
+warned on every valid save); it now tests for the round-page markers actually
+used by extraction: `id="song-\d"` or `class="song"` (`div.song` nodes, attribute
+order varies). Warning wording updated to match.
+Output now groups into blank-line-separated blocks: sanity warning / naming
+resolution / save result / registration / next steps.
+
+**Why.** Music League vote-page exports are div-based — an audit of all 87 saved
+rounds (live + archive) found no `<table>` song markup in any of them and
+`div.song` nodes in every one, while a fully valid save still printed the stale
+warning.
+
+**Refs.** `working tree` · scripts/save-round.mjs (content sanity check).
+
+---
+
 ## 2026-10-31 — Pin lifecycle: additive persistent pins, rebuilt labels, `--reset`
 
 **Change.** `just rescore <round>` pin handling reworked:

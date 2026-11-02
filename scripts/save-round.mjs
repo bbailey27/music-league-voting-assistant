@@ -364,15 +364,24 @@ async function main() {
 
   // Content sanity check upfront: a copy that is not the round export (stray text
   // selection, transcript) still saves today and poisons the next `just run` with
-  // a confusing "No songs found". Announce it at save time instead.
-  if (!/<table[\s>]/i.test(html)) {
-    console.log('warning: clipboard content has no <table> — Music League round exports are');
-    console.log('HTML with a song table. This may not be the round page. Saved anyway;');
-    console.log('re-run after copying the export — same slug replaces the file.');
+  // a confusing "No songs found". Announce it at save time instead. Round pages
+  // carry `div.song` nodes (attribute order varies: `id="song-N"` may come before
+  // `class="song"`), so check for those markers rather than a literal `<table>` —
+  // current exports never contain one.
+  if (!/id="song-\d/.test(html) && !/class="song"/.test(html)) {
+    console.log('warning: clipboard content has no song nodes ("song" div markers) —');
+    console.log('Music League round exports are HTML with `div.song` nodes. This may');
+    console.log('not be the round page. Saved anyway; re-run after copying the export —');
+    console.log('same slug replaces the file.');
+    console.log('');
   }
 
   // Naming-consistency check BEFORE writing (see resolveWithNamingCheck).
   const { target, separate, addAlias, root } = await resolveWithNamingCheck(query, leagueNameFromHtml(html));
+
+  // Blank line: separate the naming-resolution chatter above from the save
+  // result and next steps below.
+  console.log('');
 
   const bytes = Buffer.byteLength(html, 'utf8');
   const outPath = join(ROUNDS_DIR, `${target.id}.html`);
@@ -398,6 +407,7 @@ async function main() {
       ? upsertPlainLeague({ roundId: target.id, leagueName: leagueNameFromHtml(html), forceFresh: true })
       : upsertPlainLeague({ roundId: target.id, leagueName: leagueNameFromHtml(html), addName: Boolean(addAlias) });
   if (upsert.added) {
+    console.log('');
     console.log(`Registered slug family: ${upsert.descriptor.slugFamily}`);
   }
 
