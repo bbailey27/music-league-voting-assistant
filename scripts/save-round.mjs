@@ -44,6 +44,30 @@ export function resolveSaveTarget(query, ids = listAllRoundIds(), now = new Date
   return { id: `${formatDateSlug(effectiveDate(now))}-${query}`, created: true };
 }
 
+/**
+ * A bare slug ending in a dash is a family root, not a finished round slug —
+ * save-round must stop for the missing tail instead of writing
+ * `<date>-<prefix>.html` (which poisons .current-round and drifts the family).
+ */
+export function isUnfinishedSlug(slug) {
+  return /-$/.test(String(slug || ''));
+}
+
+/**
+ * Next slug from a trailing-dash completion answer: the missing tail appends to
+ * the typed prefix (tails may contain dashes, e.g. "free-5"); an answer that
+ * starts with the typed prefix without its trailing dash is the remaining full
+ * slug as-is. Null = cancel ('', n).
+ */
+export function unfinishedSlugFollowup(slug, answer) {
+  const a = String(answer ?? '').trim().toLowerCase();
+  if (!a || a === 'n') return null;
+  const base = String(slug).replace(/-+$/, '');
+  return a === base.toLowerCase() || a.startsWith(`${base.toLowerCase()}-`)
+    ? String(slug.replace(/-+$/, '')) + a.slice(base.length)
+    : `${slug}${a}`;
+}
+
 /** Slug-recall lines: family digest across the registry, active recent slugs first. */
 export function familyDigestLines(roundId, { now = new Date() } = {}) {
   const ids = [...listAllRoundIds(), ...listArchivedRoundIds()];
@@ -147,6 +171,28 @@ function registeredNamesLines(league) {
 async function resolveWithNamingCheck(query, leagueName) {
   let slug = query;
   for (;;) {
+    // Trailing-dash bare slug = a family root, not a finished round slug. The
+    // old behavior wrote ids like <date>-5th-gen-.html that poisoned
+    // .current-round and drifted from the family — stop and finish the slug.
+    if (isUnfinishedSlug(slug)) {
+      const digest = familyDigestLines(`${formatDateSlug(effectiveDate(new Date()))}-${slug}`);
+      console.log(`"${slug}" ends with a dash — that's a family root, not a finished round slug.`);
+      for (const line of digest.lines) console.log(line);
+      console.log(`  Finish the slug: answer with just the missing tail ("4" saves as ${slug}4,`);
+      console.log(`  "free-5" saves as ${slug}free-5) — n cancels, nothing written (rerun with a`);
+      console.log(`  full slug for a different round name).`);
+      const answer = await confirmOnTty('[<missing tail> | n] ');
+      const next = unfinishedSlugFollowup(slug, answer ?? null);
+      if (next == null) {
+        console.log(answer == null
+          ? '(no interactive terminal — nothing written; rerun with the finished slug,'
+          : '(cancelled — nothing written; rerun with the finished slug,');
+        console.log(` e.g. just save-round ${slug}<word>`);
+        process.exit(1);
+      }
+      slug = next;
+      continue;
+    }
     const target = resolveSaveTarget(slug);
     if (target.error) {
       console.error(target.error);

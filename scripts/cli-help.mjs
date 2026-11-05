@@ -196,6 +196,10 @@ Vocabulary:
   family root  the prefix you stake so later rounds of a series auto-join it
 
 The family ladder, in order:
+0. Slug ends with a trailing dash (e.g. 5th-gen-) — that's a family root, not a
+   finished round slug. save-round refuses to write and shows that family's
+   recent concrete slugs instead; answer with just the missing tail (4, free-5)
+   or n to cancel and rerun with the full slug.
 1. Slug owned by a family and the round's league name is registered for it
    → saves silently. A nameless family fills its first name from parse.
 2. Slug owned but the league name is new → asked once:

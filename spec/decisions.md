@@ -11,6 +11,28 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-11-03 — save-round refuses trailing-dash (unfinished) round slugs
+
+**Change.** `just save-round <slug>` no longer saves a slug ending in a dash
+(a family root, not a finished round name) as `<date>-<prefix>.html`. It stops
+before writing, shows the family digest the prefix would join (recent concrete
+slugs), and asks for just the missing tail — `4` → `5th-gen-4`, `free-5` →
+`5th-gen-free-5` (tails may contain dashes; an answer starting with the typed
+prefix counts as the remaining full slug) — or `n`/Enter cancels with nothing
+written. Non-interactive runs (no /dev/tty) cancel with exit 1 instead of
+saving the mangled id, so `.current-round` never points at a half-slug again.
+
+**Why.** A real `just save-round 5th-gen-` invocation produced
+`2026-11-03-5th-gen-.html` and set `.current-round` to it, requiring a manual
+rename cleanup. The incomplete-slug stop is the cheap guard the naming ladder
+lacked.
+
+**Refs.** `working tree` — scripts/save-round.mjs (unfinished-slug guard),
+scripts/cli-help.mjs (ladder step 0), README.md, tests/save-round.test.mjs
+(`isUnfinishedSlug`/`unfinishedSlugFollowup`).
+
+---
+
 ## 2026-10-31 — Round-page sanity check matches `div.song` markers, not `<table>`
 
 **Change.** `save-round.mjs`'s "this may not be the round page" warning no longer
@@ -26,7 +48,7 @@ rounds (live + archive) found no `<table>` song markup in any of them and
 `div.song` nodes in every one, while a fully valid save still printed the stale
 warning.
 
-**Refs.** `working tree` · scripts/save-round.mjs (content sanity check).
+**Refs.** `1de3ff2` · scripts/save-round.mjs (content sanity check).
 
 ---
 
@@ -75,7 +97,7 @@ bucket-count carried from the unpinned enumeration after reflow).
 **Refs.** `9794371` (score-first companion entry in the same session) ·
 scripts/rescore-round.mjs · scripts/round/pick.mjs ·
 scripts/web-pick-core.mjs · scripts/ml.mjs (KNOWN flags) ·
-spec/point-allocation.md — working tree.
+spec/point-allocation.md — `e3891ab`.
 
 ---
 
@@ -114,8 +136,8 @@ prose-first parsing.
   unchanged.
 - **Single-dash flag aliases** — `expandShortFlags` in `scripts/cli-args.mjs`
   (`-w weights, -c cutoff, -p pin, -rk rank, -sh shape, -ds down-shape,
-  -tc tier-count, -bc bucket-count, -fb favorite-band, -sc score, -fs
-  fit-score`), expanded at entry in the dispatcher and at the top of
+-tc tier-count, -bc bucket-count, -fb favorite-band, -sc score, -fs
+fit-score`), expanded at entry in the dispatcher and at the top of
   parse/merge/pick/rescore so direct script runs behave identically. Booleans
   keep long forms.
 - **Shared literal score-value parser** (`parseScoreValue` in

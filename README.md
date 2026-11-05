@@ -166,8 +166,12 @@ Command shortcuts (both `just` and `ml <cmd>` forms work): `s` = save-round,
 
 save-round self-dates: it resolves the slug to the round's dated id when one already
 exists (an undated export never re-appears beside it), stamps today's date for a new
-round, and stamps the saved id as the current round. It warns when the clipboard has
-no HTML `<table>` — a stray copy (branch name, selected transcript) still saves and
+round, and stamps the saved id as the current round. A slug ending in a dash (a
+family root, not a finished round name) is rejected before writing: the matching
+family's recent slugs are shown and the missing tail is asked for — so a half-slug
+like `5th-gen-` never saves as `2026-11-03-5th-gen-.html` or poisons
+`data/.current-round`. It warns when the clipboard has
+no `div.song` nodes — a stray copy (branch name, selected transcript) still saves and
 poisons the next `just run` with "No songs found"; the same slug on re-run replaces
 the file with the proper export. Later commands accept either name;
 a bare slug snaps to its single dated sibling.
@@ -182,7 +186,7 @@ official league name from the export `<title>`, and runs the family check with i
   the first token (numbered). Answers: `m` = same league as the slug owner
   (official-name alias; once per new league iteration for series like the
   last.fm ones); `1..N` = merge into that numbered family instead; `root
-  <kpop-test->` = different league — stake the family root yourself (the round
+<kpop-test->` = different league — stake the family root yourself (the round
   saves under its slug but joins the root you type, e.g. `root kpop-test-` makes
   `kpop-test-run` the first round of a `kpop-test-<topic>` series);
   `y` = full round slug as its own 1-round family; `<round-slug>` = save under a
@@ -200,22 +204,22 @@ official league name from the export `<title>`, and runs the family check with i
 - `n`/Enter cancels without writing (the clipboard stays intact). Non-interactive
   runs never merge: a mismatch saves its own or the covered family unchanged, and
   the hint names the later `ml leagues <id> --set-prefixes …` link-up.
-Kept slugs auto-register their family in `data/ref/leagues.json` (plain leagues get
-no reminders — special rules stay optional); a parsed round whose official name
-matches an entry widens that entry's family automatically — the name is the proof.
-`just rename <new-slug>` re-aligns a saved round afterwards; family re-shaping for
-drift is `ml leagues <id> --set-family/--set-prefixes`. **Full ladder, including
-the `root <x-test->` answer: `just help save-round`.**
-saved round afterwards, keeping the date and cascading input/analysis/picks/registry.
-`just leagues` lists every family
-active-first (14-day recency window; archived rounds still count) and details one by
-id/name/prefix. When a league drifts to a new slug pattern, `just leagues <name>`
-accepts `--set-family`, `--set-prefixes`, and `--summary` to fix the descriptor by
-hand (auto-registration never revises a matched entry). Match rule: the longest
-matching `slugPrefixes` entry claims a round, equal-length ties go to the
-newest (last-listed) family. Prefixes are dash-explicit: `x-` is a token family,
-`x-y` without dash an exact-slug family — the 1-round shape for one-off leagues.
-Details: `just help leagues`.
+  Kept slugs auto-register their family in `data/ref/leagues.json` (plain leagues get
+  no reminders — special rules stay optional); a parsed round whose official name
+  matches an entry widens that entry's family automatically — the name is the proof.
+  `just rename <new-slug>` re-aligns a saved round afterwards; family re-shaping for
+  drift is `ml leagues <id> --set-family/--set-prefixes`. **Full ladder, including
+  the `root <x-test->` answer: `just help save-round`.**
+  saved round afterwards, keeping the date and cascading input/analysis/picks/registry.
+  `just leagues` lists every family
+  active-first (14-day recency window; archived rounds still count) and details one by
+  id/name/prefix. When a league drifts to a new slug pattern, `just leagues <name>`
+  accepts `--set-family`, `--set-prefixes`, and `--summary` to fix the descriptor by
+  hand (auto-registration never revises a matched entry). Match rule: the longest
+  matching `slugPrefixes` entry claims a round, equal-length ties go to the
+  newest (last-listed) family. Prefixes are dash-explicit: `x-` is a token family,
+  `x-y` without dash an exact-slug family — the 1-round shape for one-off leagues.
+  Details: `just help leagues`.
 
 ### CLI flags
 
@@ -225,7 +229,7 @@ Full prose for each flag: `just help flags` or `just help <cmd>`. Summary:
 replays then records your letter; rescore re-blends/re-allocates from JSON):
 
 | Flag                 | Values                                                                      | Effect                                                                                                                                                                                                                |
-| -------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------                |
+| -------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--rank`             | `combined` \| `fit` \| `music`                                              | Ranking axis for tiers and tradeoff tables. Default: `combined` on merge and thematic pick; `music` on music-only parse/pick; parse auto-switches to `combined` when comments carry manual fit scores.                |
 | `--weights`          | `<fit>:<music>` e.g. `3:2`                                                  | Blend ratio for combined ranking (normalized to sum 1). **Not on `pick`** — use `just rescore` to re-weight. Default: **7:3** merge/thematic, **5:5** parse w/ manual fit.                                            |
 | `--gate`             | `passFail` \| `passFailMaybe`                                               | Thematic pass/maybe/fail gate model.                                                                                                                                                                                  |
@@ -269,12 +273,12 @@ draft; never reads HTML): takes the shared allocation/profile flags above (`--we
 `--shape`, `--rank`, `--gate`, `--down-shape`, `--tier-count`, `--bucket-count`,
 `--pin`, `--favorite-band`) plus:
 
-| Flag | Values | Effect |
-| --- | --- | --- |
-| `--score` | `<index\|title>:<value>` | Write a music score to `music.json` (modifiers `+`/`-`/`?`/`play`, `=` typo → `+`, digit scaling `7`→70 / `705`→70.5 — same literal grammar as comments; `:DQ` disqualifies and reflows). Clears `needsUserInput`, and clears a DQ held only for lack of a score. No HTML re-parse. |
-| `--fit-score` | `<index\|title>:<value>` | Write fit score to `fit.json` (thematic) or song record (music-only). Same value grammar; `:DQ` disqualifies the song like `--score <i>:DQ`. |
-| `--reset` | — | Clear stored knobs (weights/shapes/gate/tier counts/favorite band) and stored pins; manual `--score` edits stay. A full reset is `just parse <round>`. |
-| `--dry-run` | — | Preview re-score without writing files. |
+| Flag          | Values                   | Effect                                                                                                                                                                                                                                                                              |
+| ------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--score`     | `<index\|title>:<value>` | Write a music score to `music.json` (modifiers `+`/`-`/`?`/`play`, `=` typo → `+`, digit scaling `7`→70 / `705`→70.5 — same literal grammar as comments; `:DQ` disqualifies and reflows). Clears `needsUserInput`, and clears a DQ held only for lack of a score. No HTML re-parse. |
+| `--fit-score` | `<index\|title>:<value>` | Write fit score to `fit.json` (thematic) or song record (music-only). Same value grammar; `:DQ` disqualifies the song like `--score <i>:DQ`.                                                                                                                                        |
+| `--reset`     | —                        | Clear stored knobs (weights/shapes/gate/tier counts/favorite band) and stored pins; manual `--score` edits stay. A full reset is `just parse <round>`.                                                                                                                              |
+| `--dry-run`   | —                        | Preview re-score without writing files.                                                                                                                                                                                                                                             |
 
 `--pin` on rescore is **additive**: pins persist in `music.json` between rescore runs,
 each new `--pin` merges on top (same song → new value wins), and `--reset` clears them.
