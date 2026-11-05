@@ -8,12 +8,19 @@ function printMissingScoresBanner(missing) {
   const n = missing.length;
   console.error('');
   console.error('══════════════════════════════════════════════════════════');
-  console.error(`  ⚠  ${n} SONG${n === 1 ? '' : 'S'} STILL NEED A SCORE — fix before pick/finalize`);
+  console.error(`  ⚠  ${n} SONG${n === 1 ? '' : 'S'} NEED${n === 1 ? 'S' : ''} A SCORE`);
   console.error('══════════════════════════════════════════════════════════');
+  console.error('');
   for (const s of missing) {
     console.error(`  • #${s.rawOrderIndex} ${s.title}${s.artist ? ` — ${s.artist}` : ''}`);
   }
-  console.error('  Re-export HTML after autosave + reload, then re-parse.');
+  console.error('');
+  console.error('  → Set the score directly:');
+  console.error('');
+  console.error('      $ just r <round> -sc <i>:<v>            # short form');
+  console.error('      $ just rescore <round> --score <i>:<v>  # long form');
+  console.error('');
+  console.error('  → Or re-export HTML after autosave + reload, then re-parse.');
   console.error('');
 }
 
@@ -34,10 +41,12 @@ export function warnMissingFitScoresCli(songs) {
   console.error('══════════════════════════════════════════════════════════');
   console.error(`  ⚠  ${n} SONG${n === 1 ? '' : 'S'} MISSING A FIT SIGNAL — most of this round is fit-graded`);
   console.error('══════════════════════════════════════════════════════════');
+  console.error('');
   for (const s of missing) {
     console.error(`  • #${s.rawOrderIndex} ${s.title}${s.artist ? ` — ${s.artist}` : ''}`);
   }
-  console.error('  Add a fit score, tier word, or gate word to each, then re-parse.');
+  console.error('');
+  console.error('  → Add a fit score, tier word, or gate word to each, then re-parse.');
   console.error('');
   return n;
 }

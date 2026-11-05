@@ -130,10 +130,11 @@ Thematic:
 Re-parse only when you replace the HTML export. Pick is always a separate step.
 
 Commands:
-  ml parse | merge | pick | rescore | fit | scores | final | run | status | tidy | leagues | config | help
-Command shortcuts: s = save-round, p = pick, r = rescore (just s <slug>, ml r …).
+  just parse | merge | pick | rescore | fit | scores | final | run | status | tidy | leagues | config | help
+Command shortcuts: just s <slug> = save-round, just p = pick, just r = rescore.
 Short flags: -w weights · -c cutoff · -p pin · -rk rank · -sh shape · -ds down-shape ·
   -tc tier-count · -bc bucket-count · -fb favorite-band · -sc score · -fs fit-score.
+(No just installed? 'npm run ml -- parse' runs the same dispatcher.)
 
 Re-weight/re-shape a parsed round from JSON (no HTML re-read): just rescore <name> -w 5:5.
 Set a missing or wrong raw score: just rescore <name> -sc <i>:<v> (see just help rescore).
@@ -542,7 +543,8 @@ Single-dash aliases (same meaning, expand to the long form):
   -tc tier-count  -bc bucket-count  -fb favorite-band  -sc score  -fs fit-score
   Booleans keep long forms (--dry-run, --no-json, …).
 
-Command shortcuts (dispatcher + justfile): s = save-round, p = pick, r = rescore.
+Command shortcuts: just s <slug> = save-round, just p = pick, just r = rescore.
+(No just installed? 'npm run ml -- <cmd>' runs the same dispatcher.)
 
 Other commands:
   just tidy     --dry-run | --no-name | --no-archive | --age <days>

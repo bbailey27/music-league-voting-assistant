@@ -389,9 +389,16 @@ export function buildMarkdown({ round, budget, songs, totalSongs, ownSkipped, mo
 
   // Flag lists
   if (needsInput.length) {
-    L.push('## ⚠ Needs my score (blank boxes) — fix before pick/finalize');
+    L.push('## ⚠ Needs my score (blank boxes)');
     L.push('');
     for (const s of needsInput) L.push(`- **#${s.rawOrderIndex}** ${cell(s.title)} — ${cell(s.artist)}`);
+    L.push('');
+    L.push('Set the score directly:');
+    L.push('');
+    L.push('- `just rescore <round> --score <i>:<v>` (long form)');
+    L.push('- `just r <round> -sc <i>:<v>` (short form)');
+    L.push('');
+    L.push('Re-export HTML after autosave + reload, then re-parse, also works.');
     L.push('');
   }
   if (disqualified.length) {

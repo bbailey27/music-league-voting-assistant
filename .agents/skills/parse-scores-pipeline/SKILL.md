@@ -135,11 +135,11 @@ Regression prose cases in `tests/regressions/00N.md` document score-parsing edge
 
 ## Common failures
 
-| Symptom                     | Fix                                             |
-| --------------------------- | ----------------------------------------------- |
-| Many `needsUserInput`       | Re-export HTML after autosave + reload          |
-| No songs found              | Wrong file type or empty paste                  |
-| Ambiguous `just parse 2026` | Use a more specific fuzzy name                  |
-| Budget mismatch in report   | Rebalance manually or adjust allocation profile |
+| Symptom                     | Fix                                                                                       |
+| --------------------------- | ----------------------------------------------------------------------------------------- |
+| Many `needsUserInput`       | Set scores: `just rescore --score <i>:<v>` (short: `just r -sc`), or re-export + re-parse |
+| No songs found              | Wrong file type or empty paste                                                            |
+| Ambiguous `just parse 2026` | Use a more specific fuzzy name                                                            |
+| Budget mismatch in report   | Rebalance manually or adjust allocation profile                                           |
 
 See **round-artifacts** for capture conventions and **point-allocation** for profile semantics.
