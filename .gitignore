@@ -15,6 +15,9 @@ node_modules/
 # Local CLI preferences (per clone / user)
 .ml-config.json
 
+# Agent scratch space — throwaway files without /tmp access prompts (backups, one-off probes)
+/.tmp/
+
 # Editor / IDE
 .idea/
 *.swp

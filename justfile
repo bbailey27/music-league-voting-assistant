@@ -76,7 +76,7 @@ leagues *args:
 test-regression *args:
     node scripts/regression-snapshot.mjs "$@"
 
-# Lint JS (eslint) + Markdown (markdownlint) without changing files.
+# Lint JS (eslint) + Markdown (prettier check + markdownlint) without changing files.
 # Also fails if AGENTS.md is stale (rules changed without `just agents`).
 lint:
     npm run --silent lint
@@ -86,7 +86,7 @@ lint:
 agents:
     node scripts/sync-agents-md.mjs
 
-# Auto-fix JS (eslint --fix) + Markdown (markdownlint --fix)
+# Auto-fix JS (eslint --fix) + format Markdown (prettier, then markdownlint --fix)
 fix:
     npm run --silent fix
 
@@ -99,12 +99,13 @@ save-round slug:
 rename *args:
     node scripts/rename-round.mjs "$@"
 
-# Smoke-run a script against a throwaway sandbox (fresh /tmp sandbox seeded with
-# the sample fixture; never touches live data/). stdin passes through:
+# Smoke-run a script against a throwaway sandbox (fresh /.tmp/smoke sandbox
+# seeded with the sample fixture; never touches live data/). stdin passes through:
 #     echo '<html>…</html>' | just smoke scripts/save-round.mjs <slug>
 # Iterate inside the same sandbox: ML_SMOKE_KEEP=1 just smoke …
+# Override location with ML_SMOKE_DIR=<path>.
 smoke *args:
-    @sandbox="${ML_SMOKE_DIR:-/tmp/ml-smoke}"; \
+    @sandbox="${ML_SMOKE_DIR:-.tmp/smoke}"; \
     if [ -z "${ML_SMOKE_KEEP:-}" ]; then rm -rf "$sandbox"; fi; \
     mkdir -p "$sandbox/rounds"; \
     if [ ! -f "$sandbox/rounds/sample-round.html" ]; then \

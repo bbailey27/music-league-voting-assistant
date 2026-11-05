@@ -1,0 +1,6 @@
+# Mirror .markdownlint-cli2.jsonc ignores — generated and fixture files
+node_modules/
+data/
+.cursor/
+tests/
+AGENTS.md
