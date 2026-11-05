@@ -50,6 +50,7 @@ Check `analysis/<name>/music.json` for songs flagged `needsResearch` (thematic m
    ```
 
    Resolve any printed tradeoffs (see **point-allocation**). Allocation must spend both vote banks exactly and never mix up+down on one song.
+
 8. **Render:**
 
    ```bash

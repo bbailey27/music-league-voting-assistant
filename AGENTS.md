@@ -14,7 +14,7 @@ Orientation:
 - Durable specs live in [spec/](./spec); decision history in [spec/decisions.md](./spec/decisions.md).
 - After editing or adding any [.cursor/rules/](./.cursor/rules) rule, run `just agents` to regenerate this file before finishing.
 
-## Always-applied rules (21)
+## Always-applied rules (22)
 
 ### avoidable-mistakes.mdc
 
@@ -620,6 +620,32 @@ Keep equal scores in the same tier whenever practical.
 This preference applies primarily to music-score ranking and does not override meaningful fit differences.
 
 
+### read-failure-output.mdc
+
+*When lint/fix/test exits non-zero, read the error before anything else — no tail-truncating, no moving on*
+
+# Read failure output — never skip past a non-zero exit
+
+When `just lint`, `just fix`, `npm test`, or any build/verify command exits
+non-zero, the failing step's error output is the task. Read it before doing
+anything else — do not trim it away, do not start a different fix, do not
+continue down the checklist.
+
+- `tail` on failing output is what burned a session here: `just fix | tail -3`
+  hid the one eslint error that meant "the CLI is broken"; the rest of the run
+  went chasing unrelated prettier warnings instead.
+- Keep enough lines to capture the error message, or don't pipe failing output
+  at all. Restarting the loop on a different failure is a sign the first error
+  was never read.
+- An error in something you just edited is top priority over unrelated findings
+  (style noise, warning lists) in the same log.
+
+Companion guard: shared loaded-by-every-command modules (e.g.
+`scripts/cli-help.mjs`) carry a module-load smoke test
+(`tests/cli-help-load.test.mjs`) so a syntax slip fails `npm test` immediately,
+not at `just run` time.
+
+
 ### release-dates-no-spotify.mdc
 
 *Release-date lookups use cache/MusicBrainz/Wikipedia only — do not suggest Spotify API credentials (not implemented, not planned)*
@@ -759,6 +785,13 @@ and reports the sandbox path. Keep the same sandbox across invocations while
 iterating (seed once, tweak instructions, re-run):
 
     ML_SMOKE_KEEP=1 just smoke scripts/save-round.mjs <slug>
+
+## Scratch files stay in the repo
+
+For throwaway files (script backups before an experiment, one-off probe output,
+temporary fixtures), use the gitignored `/.tmp/` directory inside the repo — not
+`/tmp` or other OS temp paths. Everything under `/.tmp/` is pre-approved for
+tools, so files can be written without triggering per-session permission grants.
 
 ## When a change needs the real thing
 

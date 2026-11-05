@@ -83,18 +83,6 @@ function voteKeyFromPerSong(perSong) {
   return runs.map((r) => `${r.count}:${r.level}`).join('|');
 }
 
-function patchLabelShape(label, shape) {
-  if (!label) return shape;
-  const sep = ' — ';
-  const idx = label.indexOf(sep);
-  if (idx < 0) return label;
-  const prefix = label.slice(0, idx + sep.length);
-  const suffix = label.slice(idx + sep.length);
-  const noteIdx = suffix.indexOf(' · ');
-  const notes = noteIdx >= 0 ? suffix.slice(noteIdx) : '';
-  return prefix + shape + notes;
-}
-
 function applyReconciledVotes(perSong, reconciled) {
   const byIdx = new Map((perSong || []).map((p) => [p.rawOrderIndex, p]));
   const order = (perSong || []).map((p) => p.rawOrderIndex);
@@ -123,11 +111,15 @@ function reflowMenuOption(opt, reconciled, budget) {
   const total = Object.values(reconciled).reduce((a, v) => a + v, 0);
   const perSong = applyReconciledVotes(opt.perSong, reconciled);
   const shape = summarizeVoteShape(perSong);
+  const tiers = shape.split(' / ').length;
   return {
     ...opt,
     perSong,
     shape,
-    label: patchLabelShape(opt.label, shape),
+    tierCount: tiers,
+    // The pinned curve no longer reproduces from the original bucket count, so the
+    // label rebuilds from the reflowed votes and names what it is instead.
+    label: `${tiers} tier${tiers > 1 ? 's' : ''} — ${shape} · pins applied`,
     _budgetMismatch: total !== budget,
   };
 }

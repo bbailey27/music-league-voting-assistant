@@ -7,7 +7,7 @@ Cutoff failures, disqualified songs, and blanks do not shape the curve.
 Below-cutoff songs still receive a `combinedScore` (z-scored against contender stats)
 for display, but the allocator gives them **0 votes** via the gate.
 
-A **`combined`-axis cutoff is the exception**: it never leaves the curve (it *is* the
+A **`combined`-axis cutoff is the exception**: it never leaves the curve (it _is_ the
 curve output, so filtering by it would be circular). It gates allocation only, leaving
 every `combinedScore` unchanged. Only raw-axis (`fit` / `music`) cutoffs shrink the pool.
 

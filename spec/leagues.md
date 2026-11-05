@@ -81,9 +81,9 @@ Unknown rounds resolve to `null` and surface no banner.
      separate prompt (`m`/`1..N` merge, `y` separate, `<round-slug>` rename).
   4. nothing matches (slug, token, name) → fully new league: auto-saves its own
      1-round family, no question.
-  A parsed round whose official name matches an entry widens it on parse
-  (covered-by-name) — the name is the same-league proof. `just rename <slug>`
-  re-aligns a saved round afterwards, cascading input/analysis/picks/registry.
+     A parsed round whose official name matches an entry widens it on parse
+     (covered-by-name) — the name is the same-league proof. `just rename <slug>`
+     re-aligns a saved round afterwards, cascading input/analysis/picks/registry.
 
 ## Adding or editing a league
 

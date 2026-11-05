@@ -36,6 +36,13 @@ iterating (seed once, tweak instructions, re-run):
 
     ML_SMOKE_KEEP=1 just smoke scripts/save-round.mjs <slug>
 
+## Scratch files stay in the repo
+
+For throwaway files (script backups before an experiment, one-off probe output,
+temporary fixtures), use the gitignored `/.tmp/` directory inside the repo — not
+`/tmp` or other OS temp paths. Everything under `/.tmp/` is pre-approved for
+tools, so files can be written without triggering per-session permission grants.
+
 ## When a change needs the real thing
 
 If a fix can only be verified against a real committed round, say so explicitly,

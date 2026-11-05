@@ -29,72 +29,72 @@ Phrasing that corrects a specific past mistake rather than stating a general pri
 
 Signals:
 
-| Signal | Example | Suggested fix |
-| --- | --- | --- |
-| Negative guard that restates what positive guidance already covers | "Do not assume forms live in GridEditModal — search by reference instead" | Keep only the positive: "Search by endpoint function reference to find callers" |
-| "Not exhaustive" / "not always" disclaimers on things that are obviously variable | "This list is not exhaustive" after a clearly illustrative list | Remove the disclaimer |
-| Bold/italic emphasis on instructions that are already unambiguous | "**Always** search by reference" when the sentence is already imperative | Remove the emphasis |
-| Extended justification for a straightforward rule | Two sentences explaining *why* a one-line rule is correct | Keep the rule, drop the justification |
-| "Do not do X" where "Do Y" is sufficient and clearer | "Do not paper over the mismatch with coercion. Align the declarations." | "Align the declarations" |
+| Signal                                                                            | Example                                                                   | Suggested fix                                                                   |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Negative guard that restates what positive guidance already covers                | "Do not assume forms live in GridEditModal — search by reference instead" | Keep only the positive: "Search by endpoint function reference to find callers" |
+| "Not exhaustive" / "not always" disclaimers on things that are obviously variable | "This list is not exhaustive" after a clearly illustrative list           | Remove the disclaimer                                                           |
+| Bold/italic emphasis on instructions that are already unambiguous                 | "**Always** search by reference" when the sentence is already imperative  | Remove the emphasis                                                             |
+| Extended justification for a straightforward rule                                 | Two sentences explaining _why_ a one-line rule is correct                 | Keep the rule, drop the justification                                           |
+| "Do not do X" where "Do Y" is sufficient and clearer                              | "Do not paper over the mismatch with coercion. Align the declarations."   | "Align the declarations"                                                        |
 
 ### 2. Redundant repetition
 
 The same concept explained in multiple places within a file, or across files in the changeset.
 
-| Signal | Example | Suggested fix |
-| --- | --- | --- |
-| A later step re-explains what an earlier step already covered | Step 4 re-explains how to look up grid names after Step 1 already did | Step 4: "Using the grid names from Step 1, ..." |
-| A quick-reference section copies details verbatim from the full procedure | Quick check list repeats full-procedure bullet points word for word | Quick reference should summarize or cross-reference |
-| Adjacent code comments say the same thing | `// Convert to camelCase` above a function named `convertToCamelCase` | Remove the comment |
-| Cross-file: identical guidance in a rule file and a skill file | Same instruction in `.cursor/rules/foo.mdc` and `.cursor/skills/bar/SKILL.md` | Pick one source of truth, reference it from the other |
+| Signal                                                                    | Example                                                                       | Suggested fix                                         |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------- |
+| A later step re-explains what an earlier step already covered             | Step 4 re-explains how to look up grid names after Step 1 already did         | Step 4: "Using the grid names from Step 1, ..."       |
+| A quick-reference section copies details verbatim from the full procedure | Quick check list repeats full-procedure bullet points word for word           | Quick reference should summarize or cross-reference   |
+| Adjacent code comments say the same thing                                 | `// Convert to camelCase` above a function named `convertToCamelCase`         | Remove the comment                                    |
+| Cross-file: identical guidance in a rule file and a skill file            | Same instruction in `.cursor/rules/foo.mdc` and `.cursor/skills/bar/SKILL.md` | Pick one source of truth, reference it from the other |
 
 ### 3. Verbose wording
 
 Sentences or structures that could be shorter without losing actionable information.
 
-| Signal | Example | Suggested fix |
-| --- | --- | --- |
-| Multi-sentence explanation where one suffices | "The backend sends colDefs. These colDefs define columns. Columns appear in the grid." | "The backend sends colDefs that define grid columns." |
-| Bullet list where a single sentence would do | Three bullets that each add one word of nuance | Merge into one sentence |
-| Qualifying clauses that add nothing actionable | "It is worth noting that, in general, ..." | Delete the qualifier, state the point directly |
+| Signal                                         | Example                                                                                | Suggested fix                                         |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Multi-sentence explanation where one suffices  | "The backend sends colDefs. These colDefs define columns. Columns appear in the grid." | "The backend sends colDefs that define grid columns." |
+| Bullet list where a single sentence would do   | Three bullets that each add one word of nuance                                         | Merge into one sentence                               |
+| Qualifying clauses that add nothing actionable | "It is worth noting that, in general, ..."                                             | Delete the qualifier, state the point directly        |
 
 ### 4. Structural inconsistencies
 
 Formatting issues introduced by incremental edits.
 
-| Signal | Example | Suggested fix |
-| --- | --- | --- |
-| Heading level mismatch | `##` sibling next to `###` siblings under the same parent | Fix the heading level |
-| Inconsistent list style | Numbered list mixed with bullet list in the same sequence | Pick one style |
-| Orphaned cross-references | "See Step 5" after steps were renumbered, now pointing to the wrong step | Update the reference |
-| Inconsistent terminology | Same concept called "grid name" in one place and "GridNames entry" in another | Pick one term and use it throughout |
+| Signal                    | Example                                                                       | Suggested fix                       |
+| ------------------------- | ----------------------------------------------------------------------------- | ----------------------------------- |
+| Heading level mismatch    | `##` sibling next to `###` siblings under the same parent                     | Fix the heading level               |
+| Inconsistent list style   | Numbered list mixed with bullet list in the same sequence                     | Pick one style                      |
+| Orphaned cross-references | "See Step 5" after steps were renumbered, now pointing to the wrong step      | Update the reference                |
+| Inconsistent terminology  | Same concept called "grid name" in one place and "GridNames entry" in another | Pick one term and use it throughout |
 
 ### 5. Stale references
 
 References to things that no longer exist or have been renamed.
 
-| Signal | Example | Suggested fix |
-| --- | --- | --- |
-| Comment references a removed variable or parameter | `// Uses the old fiscalPeriod format` after the field was renamed | Update or remove the comment |
-| Instruction references a file path that moved | "Check `utils/helpers.ts`" but the file is now `lib/helpers.ts` | Update the path |
-| Example uses old field/interface names | Example shows `IStaffRate` but the interface is now `IStaffLaborRate` | Update the example |
+| Signal                                             | Example                                                               | Suggested fix                |
+| -------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------- |
+| Comment references a removed variable or parameter | `// Uses the old fiscalPeriod format` after the field was renamed     | Update or remove the comment |
+| Instruction references a file path that moved      | "Check `utils/helpers.ts`" but the file is now `lib/helpers.ts`       | Update the path              |
+| Example uses old field/interface names             | Example shows `IStaffRate` but the interface is now `IStaffLaborRate` | Update the example           |
 
 ### 6. Non-American spelling
 
 The project standard is American English. Flag British or other non-American spellings in prose, comments, and documentation.
 
-| Signal | Example | Suggested fix |
-| --- | --- | --- |
+| Signal                   | Example                                           | Suggested fix                                                 |
+| ------------------------ | ------------------------------------------------- | ------------------------------------------------------------- |
 | British spelling variant | "Behaviour", "synchronise", "colour", "cancelled" | American form: "Behavior", "synchronize", "color", "canceled" |
 
 ## File-Type Adaptations
 
-| File type | Categories to apply | Focus |
-| --- | --- | --- |
-| Skill files (`.md` in `.cursor/skills/`) | All 6 | Prose clarity, structural consistency, procedure accuracy |
-| Rule files (`.mdc` in `.cursor/rules/`) | 1, 2, 3, 4, 6 | Conciseness — rules are injected into every conversation, so brevity matters |
-| Plan files (`.plan.md`) | 1, 2, 3, 4, 6 | Actionability — plans should be scannable checklists, not essays |
-| Code files (`.ts`, `.tsx`, `.py`, etc.) | 2, 3, 5, 6 | Comments and docstrings only — do not touch code logic (use `cleanup-code` for that). Flag comments that narrate what the code does rather than explaining non-obvious intent |
+| File type                                | Categories to apply | Focus                                                                                                                                                                         |
+| ---------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Skill files (`.md` in `.cursor/skills/`) | All 6               | Prose clarity, structural consistency, procedure accuracy                                                                                                                     |
+| Rule files (`.mdc` in `.cursor/rules/`)  | 1, 2, 3, 4, 6       | Conciseness — rules are injected into every conversation, so brevity matters                                                                                                  |
+| Plan files (`.plan.md`)                  | 1, 2, 3, 4, 6       | Actionability — plans should be scannable checklists, not essays                                                                                                              |
+| Code files (`.ts`, `.tsx`, `.py`, etc.)  | 2, 3, 5, 6          | Comments and docstrings only — do not touch code logic (use `cleanup-code` for that). Flag comments that narrate what the code does rather than explaining non-obvious intent |
 
 ## Procedure
 

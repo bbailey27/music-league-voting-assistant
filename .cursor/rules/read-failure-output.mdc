@@ -1,0 +1,25 @@
+---
+description: When lint/fix/test exits non-zero, read the error before anything else — no tail-truncating, no moving on
+alwaysApply: true
+---
+
+# Read failure output — never skip past a non-zero exit
+
+When `just lint`, `just fix`, `npm test`, or any build/verify command exits
+non-zero, the failing step's error output is the task. Read it before doing
+anything else — do not trim it away, do not start a different fix, do not
+continue down the checklist.
+
+- `tail` on failing output is what burned a session here: `just fix | tail -3`
+  hid the one eslint error that meant "the CLI is broken"; the rest of the run
+  went chasing unrelated prettier warnings instead.
+- Keep enough lines to capture the error message, or don't pipe failing output
+  at all. Restarting the loop on a different failure is a sign the first error
+  was never read.
+- An error in something you just edited is top priority over unrelated findings
+  (style noise, warning lists) in the same log.
+
+Companion guard: shared loaded-by-every-command modules (e.g.
+`scripts/cli-help.mjs`) carry a module-load smoke test
+(`tests/cli-help-load.test.mjs`) so a syntax slip fails `npm test` immediately,
+not at `just run` time.

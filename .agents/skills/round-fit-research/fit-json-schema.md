@@ -45,7 +45,7 @@ After merge (`parse-round.mjs --fit`), the file also carries:
   forks etc.), written back so the report can render the comparison table.
 - top-level `pick` is the durable record written when an option is chosen via
   `--option` (`{ chosen, chosenIndex, tierCount, shape, reason, pickedAt, tweaks,
-  options }`): the chosen fork, every option that was presented (slimmed `perSong`
+options }`): the chosen fork, every option that was presented (slimmed `perSong`
   with `score` + `votes`), an optional `--reason` string, and auto-diffed manual
   `tweaks`. The report renders the focused pick + a collapsed options comparison; a
   copy is also appended to the global `analysis/picks.jsonl` training log.

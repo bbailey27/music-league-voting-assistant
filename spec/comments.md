@@ -2,9 +2,9 @@
 
 ## User vs submitter (scoring contract)
 
-| Field | Role |
-| --- | --- |
-| **User comment** (`userComment`) | **Sole scoring source** — music/fit numbers, gates, modifiers |
+| Field                                      | Role                                                                  |
+| ------------------------------------------ | --------------------------------------------------------------------- |
+| **User comment** (`userComment`)           | **Sole scoring source** — music/fit numbers, gates, modifiers         |
 | **Submitter comment** (`submitterComment`) | Context only — why they submitted; never changes scores or allocation |
 
 Do not infer scores from the submitter quote. Preserve both strings verbatim in

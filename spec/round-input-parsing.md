@@ -11,15 +11,15 @@ rules.
 
 Every parser path emits the same fields per song:
 
-| Field | Source | Scoring? |
-| --- | --- | --- |
-| `rawOrderIndex` | `#` from export order (`song-N` id or text position) | join key |
-| `title`, `artist`, `album` | metadata block | display only |
-| `userComment` | your comment box (`data-comment` or recovered text) | **sole scoring input** |
-| `submitterComment` | submitter quote (when shown) | **never** — context only |
-| `userAllocatedVotes` | `data-weight` pre-allocation (HTML) | floor hint |
-| `spotifyUri` | hidden `input[name="uri"]` (HTML) | enrichment only |
-| `isOwn` | your submission (`mine: true` / own marker) | skipped entirely |
+| Field                      | Source                                               | Scoring?                 |
+| -------------------------- | ---------------------------------------------------- | ------------------------ |
+| `rawOrderIndex`            | `#` from export order (`song-N` id or text position) | join key                 |
+| `title`, `artist`, `album` | metadata block                                       | display only             |
+| `userComment`              | your comment box (`data-comment` or recovered text)  | **sole scoring input**   |
+| `submitterComment`         | submitter quote (when shown)                         | **never** — context only |
+| `userAllocatedVotes`       | `data-weight` pre-allocation (HTML)                  | floor hint               |
+| `spotifyUri`               | hidden `input[name="uri"]` (HTML)                    | enrichment only          |
+| `isOwn`                    | your submission (`mine: true` / own marker)          | skipped entirely         |
 
 After `scoreComment`, each song also carries parsed signals (`score`, modifiers,
 `fitScore`/`fitTier`/`gate`, flags). See [score-parsing.md](score-parsing.md).
@@ -46,11 +46,11 @@ flowchart LR
   lenient --> text --> canon
 ```
 
-| Path | Module | When |
-| --- | --- | --- |
-| HTML | `scripts/extract-html.mjs` | Saved round page (preferred) |
-| Text strict | `scripts/parse-text.mjs` | Copy/paste with `Album art` blocks + `N/1000` footers |
-| Text lenient | `scripts/parse-text.mjs` | Live Text / OCR paste (footers present, other anchors missing) |
+| Path         | Module                     | When                                                           |
+| ------------ | -------------------------- | -------------------------------------------------------------- |
+| HTML         | `scripts/extract-html.mjs` | Saved round page (preferred)                                   |
+| Text strict  | `scripts/parse-text.mjs`   | Copy/paste with `Album art` blocks + `N/1000` footers          |
+| Text lenient | `scripts/parse-text.mjs`   | Live Text / OCR paste (footers present, other anchors missing) |
 
 `parse-round.mjs` chooses HTML when both `.html` and `.txt` exist under
 `data/rounds/`. Pass `--lenient` to force the lenient text path.
@@ -62,21 +62,21 @@ Both extractors are **environment-agnostic** (native `DOMParser` in browser,
 
 ### Selectors (confirmed)
 
-| Data | Selector / attribute |
-| --- | --- |
-| Song nodes | `div.song[id^="song-"]` |
-| Index | `id="song-N"` → `rawOrderIndex = N` |
-| Title | `h6` text |
-| Artist | `span.d-block.text-truncate` |
-| Album | `span.text-body-secondary` |
-| Own song | `x-data` contains `mine: true` → skip scoring, record in `ownSongs` |
-| User comment | `data-comment` attribute |
-| Pre-allocation | `data-weight` → `userAllocatedVotes` (null if absent) |
-| Spotify URI | `input[name="uri"]` value |
-| Submitter quote | `p` with `i.bi-quote`, only when `x-show="true"` |
-| Budget | nearest ancestor `[x-data]` matching `upvoteBankSize` |
-| Round prompt | `h5.card-title`, else `<title>` after `Music League \|` |
-| Description | `p.card-text[data-description]` |
+| Data            | Selector / attribute                                                |
+| --------------- | ------------------------------------------------------------------- |
+| Song nodes      | `div.song[id^="song-"]`                                             |
+| Index           | `id="song-N"` → `rawOrderIndex = N`                                 |
+| Title           | `h6` text                                                           |
+| Artist          | `span.d-block.text-truncate`                                        |
+| Album           | `span.text-body-secondary`                                          |
+| Own song        | `x-data` contains `mine: true` → skip scoring, record in `ownSongs` |
+| User comment    | `data-comment` attribute                                            |
+| Pre-allocation  | `data-weight` → `userAllocatedVotes` (null if absent)               |
+| Spotify URI     | `input[name="uri"]` value                                           |
+| Submitter quote | `p` with `i.bi-quote`, only when `x-show="true"`                    |
+| Budget          | nearest ancestor `[x-data]` matching `upvoteBankSize`               |
+| Round prompt    | `h5.card-title`, else `<title>` after `Music League \|`             |
+| Description     | `p.card-text[data-description]`                                     |
 
 ### Budget encoding
 
@@ -125,11 +125,11 @@ Empty placeholder → `needsUserInput`. Regression fixture:
 
 Passed to `scoreComment` as the second argument:
 
-| Mode | CLI | Effect on words-only comments |
-| --- | --- | --- |
-| `objective` | default | disqualified |
-| `subjective` | `--mode subjective` | `needsReview` |
-| `thematic` | not CLI-exposed yet | `needsResearch` when music known, fit unknown |
+| Mode         | CLI                 | Effect on words-only comments                 |
+| ------------ | ------------------- | --------------------------------------------- |
+| `objective`  | default             | disqualified                                  |
+| `subjective` | `--mode subjective` | `needsReview`                                 |
+| `thematic`   | not CLI-exposed yet | `needsResearch` when music known, fit unknown |
 
 Fit tier/gate vocabulary in comments requires `--fit-words` (or `{ fitWords: true }`
 in library callers).
@@ -167,8 +167,8 @@ votes. Prefer saving the full `.html` export on desktop when possible.
 
 ## Tests
 
-| File | Covers |
-| --- | --- |
-| `tests/extract-html.test.mjs` | HTML selectors, own-skip, budget |
-| `tests/parse-text.test.mjs` | Lenient footer anchor, placeholder, year scores |
-| `tests/regressions/livetext-kpop-group.txt` | Live Text K-pop fixture |
+| File                                        | Covers                                          |
+| ------------------------------------------- | ----------------------------------------------- |
+| `tests/extract-html.test.mjs`               | HTML selectors, own-skip, budget                |
+| `tests/parse-text.test.mjs`                 | Lenient footer anchor, placeholder, year scores |
+| `tests/regressions/livetext-kpop-group.txt` | Live Text K-pop fixture                         |

@@ -88,10 +88,10 @@ folds an undated input into an existing dated folder only when their bare slugs 
 league's established slug family — otherwise the pre-round research folder and the later
 parsed round land in two `analysis/<date>-<slug>/` folders that never merge.
 
-| Field       | Example                        |
-| ------------| ------------------------------ |
-| `slugFamily`| `<family>-<topic>`             |
-| Concrete id | `2026-06-09-<family>-<topic>`  |
+| Field        | Example                       |
+| ------------ | ----------------------------- |
+| `slugFamily` | `<family>-<topic>`            |
+| Concrete id  | `2026-06-09-<family>-<topic>` |
 
 **Before creating a new round input or analysis folder**, let `just save-round <slug>` or
 `just leagues` name the family from the **private** registry (active and `archive/`
