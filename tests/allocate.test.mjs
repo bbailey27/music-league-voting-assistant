@@ -1668,6 +1668,10 @@ test('parseScoreOverrides parses idx:score with +/-/? modifiers', () => {
   assert.deepEqual(parseScoreOverrides('4:9+'), [
     { idx: 4, score: 90, plus: true, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, playlistAdd: false, playlistUncertain: false, disqualified: false },
   ]);
+  // 10 is never 10 — an out-of-ten top grade: 10 → 100 (covers 05 → 50 too).
+  assert.deepEqual(parseScoreOverrides('4:10'), [
+    { idx: 4, score: 100, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, playlistAdd: false, playlistUncertain: false, disqualified: false },
+  ]);
   // Three-digit scores scale ÷10 (745 → 74.5).
   assert.deepEqual(parseScoreOverrides('4:745'), [
     { idx: 4, score: 74.5, plus: false, minus: false, uncertain: false, plusUncertain: false, minusUncertain: false, playlistAdd: false, playlistUncertain: false, disqualified: false },

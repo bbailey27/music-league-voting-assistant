@@ -11,6 +11,27 @@ See [`.cursor/rules/decision-log.mdc`](../.cursor/rules/decision-log.mdc) for fo
 
 ---
 
+## 2026-11-06 — `10` never means 10: out-of-ten grades scale to 100
+
+**Change.** `scaleScoreToken` (scripts/score/comment.mjs) treats every numeric
+scoring token ≤ 10 as a grade out of ten and scales ×10: `10` → **100** (was 10),
+`05` → 50 (was 5), `7` → 70 unchanged. Two digits 11–99 stay exact (`73` = 73);
+three digits still divide by 10 (`705` → 70.5); decimals stay exact values
+(`74.5` = 74.5). The rule applies everywhere the comment grammar is used — music
+comments, explicit `N fit` numbers, `applyNumericFitAutoDetect` candidates, and
+`--score` / `--fit-score` / `--cutoff` / `--favorite-band` values.
+
+**Why.** Owner restated the scale intent: "10 is never 10. Scores 10 and under
+should be scaled up; 10 always equals 100." A real round parsed fit comments of
+`10` (meaning full marks) as fit 10 — a zero-ish score that sank otherwise fine
+songs (Eternally, I GOT A BOY, 8-BIT HEART in 2026-11-03-5th-gen-free-4).
+
+**Refs.** `working tree` — scripts/score/comment.mjs (`scaleScoreToken`),
+tests/comment-parse.test.mjs, tests/allocate.test.mjs (`parseScoreOverrides`),
+spec/scoring-comments.md, spec/score-parsing.md, cli-help SCORE_OVERRIDE.
+
+---
+
 ## 2026-11-03 — save-round refuses trailing-dash (unfinished) round slugs
 
 **Change.** `just save-round <slug>` no longer saves a slug ending in a dash
@@ -27,7 +48,7 @@ saving the mangled id, so `.current-round` never points at a half-slug again.
 rename cleanup. The incomplete-slug stop is the cheap guard the naming ladder
 lacked.
 
-**Refs.** `working tree` — scripts/save-round.mjs (unfinished-slug guard),
+**Refs.** `66aeaa8` — scripts/save-round.mjs (unfinished-slug guard),
 scripts/cli-help.mjs (ladder step 0), README.md, tests/save-round.test.mjs
 (`isUnfinishedSlug`/`unfinishedSlugFollowup`).
 

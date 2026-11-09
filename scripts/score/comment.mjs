@@ -326,9 +326,13 @@ function matchGate(text) {
 
 export function scaleScoreToken(intPart, decPart) {
   if (decPart) return parseFloat(intPart + decPart);
-  if (intPart.length === 1) return Number(intPart) * 10;
-  if (intPart.length === 2) return Number(intPart);
-  return Number(intPart) / 10;
+  const n = Number(intPart);
+  // 10 is never 10: a grade of ten out of ten is 100. Any unscaled token ≤ 10
+  // is an out-of-ten grade (7 → 70, 10 → 100, 05 → 50); 11–99 stays as-is;
+  // three digits divide by 10 (705 → 70.5).
+  if (n <= 10) return n * 10;
+  if (intPart.length === 2) return n;
+  return n / 10;
 }
 
 export function formatMusicModifierFlags(s) {

@@ -39,7 +39,7 @@ const SCORE_OVERRIDE = `  --score <index|title>:<value>
                           Index = raw submission order (a title fragment may
                           stand in, e.g. --score bohemian:74). Value uses the same
                           grammar as scoring comments: literal digits scale
-                          (7 → 70, 705 → 70.5), \`=\` reads as \`+\` (73= → 73+),
+                          (7 → 70, 10 → 100, 705 → 70.5), \`=\` reads as \`+\` (73= → 73+),
                           and modifiers attach: 74.5+, 76-, 75?, 74.5+?,
                           76play / 76 play / 76play?, or plain DQ to disqualify
                           the song (kept score stays on the record; allocation

@@ -98,7 +98,8 @@ Only line 1 is parsed for scores. Words on line 2 never affect allocation.
 | You wrote      | Score | Notes                           |
 | -------------- | ----- | ------------------------------- |
 | `7`            | 70    | one digit → ×10                 |
-| `73`           | 73    | two digits → as-is              |
+| `10`           | 100   | out-of-ten grade → ×10          |
+| `73`           | 73    | two digits (11–99) → as-is      |
 | `755`          | 75.5  | three digits → ÷10              |
 | `73+` or `73=` | 73    | `+` nudge (tiebreak)            |
 | `73-`          | 73    | `-` nudge                       |

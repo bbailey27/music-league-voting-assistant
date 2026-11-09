@@ -53,6 +53,14 @@ test('comment parse: peel-first music (fitWords off)', () => {
   assert.equal(tail.gate, null);
 });
 
+test('10 is never 10: an out-of-ten grade scales (10 → 100, 05 → 50)', () => {
+  assert.equal(parse('10').score, 100);
+  assert.equal(parse('10. 10 fit').fitScore, 100);
+  assert.equal(parse('05').score, 50);
+  // 11–99 two digits stay exact.
+  assert.equal(parse('11').score, 11);
+});
+
 test('comment parse: peel-first + remainder fit (fitWords on)', () => {
   const opts = { fitWords: true };
 

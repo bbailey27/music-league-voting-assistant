@@ -388,7 +388,7 @@ a specific field calls for it.
     axis, independent of `rankBy`. Unknown axes are rejected by `buildGate`.
     CLI value grammar: `--cutoff [f|m|c|<axis>]:<min>` (shorthand `m`/`f`/`c`) —
     a **bare value assumes the music axis** (`--cutoff 70` = `music:70`), and the
-    numeric part scales like scoring comments (`7` → 70, `735` → 73.5).
+    numeric part scales like scoring comments (`7` → 70, `10` → 100, `735` → 73.5).
   - `{ type: 'passFail' }` — binary; `fail` → 0, allocate among passes.
   - `{ type: 'passFailMaybe', leniency }` — three-state. `fail` → 0. **Passes are
     shaped first, always**, and the governing rule is `max(maybe) ≤ min(funded

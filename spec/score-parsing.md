@@ -99,7 +99,8 @@ There is no fit-only notation; music is always the first number you write.
 ### Fit channels (remainder unless noted)
 
 - **Explicit fit number:** `N fit` / `fit N` in the remainder — same digit-scaling
-  as music (`8`→80). Not matched when part of a shorthand phrase (`fit bonus`). Always on.
+  as music (`8`→80, and `10`→100 — a number ≤ 10 is an out-of-ten grade, never
+  left unscaled). Not matched when part of a shorthand phrase (`fit bonus`). Always on.
 - **Second number (auto-detected):** a bare 2nd # in the remainder is always surfaced as
   `fitNumberCandidate`. **No flag.** `applyNumericFitAutoDetect` scans the whole round: when
   ≥ **75%** (`NUMERIC_FIT_MIN_RATIO`) of scored songs carry a 2nd number, it commits that
